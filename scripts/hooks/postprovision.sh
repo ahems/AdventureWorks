@@ -129,52 +129,41 @@ echo "Preparing the seed-job image and template in the background..."
 prepare_seed_job >"$SEED_SETUP_LOG" 2>&1 &
 SEED_SETUP_PID=$!
 
-# Grant current user Contributor role on Container Apps Environment for Aspire Dashboard access
+# Check effective Aspire Dashboard permissions without creating a role assignment
 CONTAINER_APP_ENV_NAME=$(azd env get-value 'CONTAINER_APP_ENVIRONMENT_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 if [ -n "$CONTAINER_APP_ENV_NAME" ] && [ "$CONTAINER_APP_ENV_NAME" != "ERROR: key 'CONTAINER_APP_ENVIRONMENT_NAME' not found in the environment values" ]; then
     echo ""
     echo "Configuring Aspire Dashboard access..."
-    
-    # Get current user's object ID
-    CURRENT_USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
-    
-    if [ -n "$CURRENT_USER_OBJECT_ID" ] && [ -n "$RESOURCE_GROUP" ]; then
-        # Assign Contributor role to the current user on the Container Apps Environment
-        # Use --scope to target the specific Container Apps Environment resource
-        ENV_RESOURCE_ID="/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.App/managedEnvironments/$CONTAINER_APP_ENV_NAME"
-        
-        # Check if role assignment already exists (idempotent)
-        EXISTING_ASSIGNMENT=$(az role assignment list \
-            --scope "$ENV_RESOURCE_ID" \
-            --assignee "$CURRENT_USER_OBJECT_ID" \
-            --role "Contributor" \
-            --query "[].id" -o tsv 2>/dev/null || echo "")
-        
-        if [ -z "$EXISTING_ASSIGNMENT" ]; then
-            az role assignment create \
-                --scope "$ENV_RESOURCE_ID" \
-                --assignee "$CURRENT_USER_OBJECT_ID" \
-                --role "Contributor" \
-                --output none
-            echo "  Aspire Dashboard access configured successfully"
-        else
-            echo "  Aspire Dashboard access already configured"
-        fi
+    SUBSCRIPTION_ID=$(az account show --query id -o tsv 2>/dev/null || true)
 
-        # Do not continue if the exact user assignment is not visible yet.
-        VERIFIED_ASSIGNMENT=$(az role assignment list \
-            --scope "$ENV_RESOURCE_ID" \
-            --assignee "$CURRENT_USER_OBJECT_ID" \
-            --role "Contributor" \
-            --query "[?principalId=='$CURRENT_USER_OBJECT_ID'].id" -o tsv)
-        if [ -z "$VERIFIED_ASSIGNMENT" ]; then
-            echo "ERROR: Could not verify the explicit Contributor assignment required by the Aspire Dashboard."
-            exit 1
+    if [ -n "$SUBSCRIPTION_ID" ] && [ -n "$RESOURCE_GROUP" ] && command -v jq >/dev/null 2>&1; then
+        ENV_RESOURCE_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.App/managedEnvironments/$CONTAINER_APP_ENV_NAME"
+        PERMISSIONS_URL="https://management.azure.com${ENV_RESOURCE_ID}/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
+
+        if PERMISSIONS=$(az rest --method get --url "$PERMISSIONS_URL" 2>/dev/null); then
+            if printf '%s' "$PERMISSIONS" | jq -e '
+                def action_matches($pattern; $action):
+                    ($pattern | ascii_downcase) as $p
+                    | ($action | ascii_downcase) as $a
+                    | ($p == "*" or $p == $a or (($p | endswith("*")) and ($a | startswith($p[0:-1]))));
+                any(.value[]?;
+                    any(.actions[]?; action_matches(.; "Microsoft.App/managedEnvironments/write"))
+                    and all(.notActions[]?; (action_matches(.; "Microsoft.App/managedEnvironments/write") | not))
+                )
+            ' >/dev/null; then
+                echo "  Effective write access found; Aspire Dashboard access is available."
+            else
+                echo "  WARNING: Could not confirm Microsoft.App/managedEnvironments/write at this scope."
+                echo "  Aspire Dashboard access may be unavailable; continuing deployment."
+            fi
+        else
+            echo "  WARNING: Could not query effective permissions for the Container Apps Environment."
+            echo "  Aspire Dashboard access was not verified; continuing deployment."
         fi
-        echo "  Verified explicit Contributor assignment for the signed-in user"
     else
-        echo "  WARNING: Could not determine current user or resource group. Skipping Aspire Dashboard role assignment."
+        echo "  WARNING: Could not determine the subscription/resource group or jq is unavailable."
+        echo "  Aspire Dashboard access was not verified; continuing deployment."
     fi
 else
     echo "  WARNING: CONTAINER_APP_ENVIRONMENT_NAME not found in environment. Skipping Aspire Dashboard configuration."
@@ -736,28 +725,10 @@ if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$_USER_OID" ]]; 
     exit 1
   fi
 
-  # The runtime UAMI role is assigned in Bicep; do not reassign it through this name lookup.
-  # Resolve only the source-declared Bicep role for the deployer; similarly named roles are not interchangeable.
-  _CUSTOM_ROLE_NAMES=$(az role definition list \
-    --scope "/subscriptions/${_SUBSCRIPTION}/resourceGroups/${_RG}" \
-    --custom-role-only true --query "[].roleName" -o tsv 2>/dev/null || true)
-  _CUSTOM_ROLE_NAME=""
-  while IFS= read -r _ROLE_NAME; do
-    if [[ "$_ROLE_NAME" =~ ^AdventureWorks\ Foundry\ Agents\ [a-z0-9]{13}$ ]]; then
-      if [[ -n "$_CUSTOM_ROLE_NAME" ]]; then
-        echo "ERROR: Multiple source-shaped Foundry Agents roles exist in the Azure resource group." >&2
-        exit 1
-      fi
-      _CUSTOM_ROLE_NAME="$_ROLE_NAME"
-    fi
-  done <<< "$_CUSTOM_ROLE_NAMES"
-  if [[ -n "$_CUSTOM_ROLE_NAME" ]]; then
-    ensure_project_role "$_USER_OID" User "$_CUSTOM_ROLE_NAME" || exit 1
-    echo "Azure AI permissions configured."
-  else
-    echo "ERROR: The Foundry Agents custom role was not found in the Azure resource group." >&2
-    exit 1
-  fi
+  # This built-in data role is broader than the former custom role; Bicep gives
+  # it only at the Foundry project scope. Ensure the deployer's assignment too.
+  ensure_project_role "$_USER_OID" User "19c28022-e58e-450d-a464-0b2a53034789" || exit 1
+  echo "Azure AI permissions configured."
 
   # Allow time for RBAC propagation before agent creation
   echo "  Waiting for Azure AI permissions to propagate..."

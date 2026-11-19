@@ -1,0 +1,22 @@
+{
+  "description": "Built-in role definitions assigned by azd provisioning and its hooks. Use these IDs as the allowlist on the deployer's Microsoft.Authorization/roleAssignments/write and delete role-assignment condition. Do not add a role without reviewing its permissions.",
+  "roleDefinitionIds": {
+    "Communication and Email Service Owner": "09976791-48a7-449e-bb21-39d1a415f350",
+    "Storage Table Data Contributor": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
+    "Storage File Data SMB Share Contributor": "0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb",
+    "Web PubSub Service Owner": "12cf5a90-567b-43ae-8102-96cf46c7d9b4",
+    "Cognitive Services Data Contributor (Preview)": "19c28022-e58e-450d-a464-0b2a53034789",
+    "Key Vault Secrets User": "4633458b-17de-408a-b874-0445c86b69e6",
+    "Cognitive Services OpenAI User": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+    "Azure AI Developer": "64702f94-c441-49e6-a78b-ef80e0188fee",
+    "AcrPull": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
+    "Storage Queue Data Contributor": "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
+    "Cognitive Services OpenAI Contributor": "a001fd3d-188f-4b5d-821b-7da978bf7442",
+    "Storage File Data SMB MI Admin": "a235d3ee-5935-4cfb-8cc5-a3303ad5995e",
+    "Key Vault Certificates Officer": "a4417e6f-fecd-4de8-b567-7b0420556985",
+    "Reader": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+    "Storage Blob Data Owner": "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
+    "Storage File Data Privileged Reader": "b8eda974-7b85-4f76-af95-65846b26df6d",
+    "Storage Blob Data Contributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
+  }
+}

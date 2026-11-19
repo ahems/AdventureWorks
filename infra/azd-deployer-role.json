@@ -1,0 +1,15 @@
+{
+  "Name": "AdventureWorks Demo azd Deployer",
+  "IsCustom": true,
+  "Description": "Manages AdventureWorks Demo role assignments for the demo AI App at [https://github.com/3cloud-sandbox/AdventureWorks](https://github.com/3cloud-sandbox/AdventureWorks)",
+  "Actions": [
+    "Microsoft.Authorization/roleAssignments/write",
+    "Microsoft.Authorization/roleAssignments/delete"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/00000000-0000-0000-0000-000000000000"
+  ]
+}

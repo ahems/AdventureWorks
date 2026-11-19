@@ -148,20 +148,46 @@
   ],
   "unreviewedAnonymousDabOperations": {},
   "runtimeEmailRole": {
-    "roleNamePrefix": "AdventureWorks Email Sender ",
-    "actions": [
-      "Microsoft.Communication/communicationServices/read",
-      "Microsoft.Communication/communicationServices/write"
-    ],
-    "justification": "ACS email authorization requires Communication service write. Only this exact custom role at the selected single Communication resource is reviewed; no wildcard, keys, deletion, role administration or broader scope is permitted."
+    "roleDefinitionId": "09976791-48a7-449e-bb21-39d1a415f350",
+    "roleName": "Communication and Email Service Owner",
+    "allowedActionPrefixes": ["Microsoft.Communication/"],
+    "justification": "Built-in role used because deployment users cannot safely receive roleDefinitions/write. This is broader than the former custom role: at the selected Communication resource it permits resource and email-service management, deletion, and key retrieval/regeneration. Keep the assignment resource-scoped and review changes to the built-in role."
   },
   "runtimeWebPubSubRole": {
-    "roleNamePrefix": "AdventureWorks Web PubSub Runtime ",
-    "dataActions": [
-      "Microsoft.SignalRService/WebPubSub/clientConnection/generateToken/action",
-      "Microsoft.SignalRService/WebPubSub/clientConnection/write",
-      "Microsoft.SignalRService/WebPubSub/group/send/action",
-      "Microsoft.SignalRService/WebPubSub/group/read"
-    ]
+    "roleDefinitionId": "12cf5a90-567b-43ae-8102-96cf46c7d9b4",
+    "roleName": "Web PubSub Service Owner",
+    "dataActions": ["Microsoft.SignalRService/WebPubSub/*"],
+    "justification": "Built-in role used because deployment users cannot safely receive roleDefinitions/write. It grants all Web PubSub data actions (including closing connections and managing group/user permissions) instead of the former four-action custom role. It has no management actions, so it cannot read keys or re-enable local auth. Group grants remain server-selected from signed token scopes."
+  },
+  "runtimeFoundryDataRole": {
+    "roleDefinitionId": "19c28022-e58e-450d-a464-0b2a53034789",
+    "roleName": "Cognitive Services Data Contributor (Preview)",
+    "dataActions": ["Microsoft.CognitiveServices/*"],
+    "justification": "Built-in preview role used because deployment users cannot safely receive roleDefinitions/write. It grants all Cognitive Services data actions at the Foundry project scope, broader than the former AIServices/* custom role, but no management actions, so no key retrieval or account changes. Agent business access remains bounded by OAuth-delegated MCP/API tokens and tool policies."
+  },
+  "azdRoleAssignmentAllowlist": [
+    "09976791-48a7-449e-bb21-39d1a415f350",
+    "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
+    "0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb",
+    "12cf5a90-567b-43ae-8102-96cf46c7d9b4",
+    "19c28022-e58e-450d-a464-0b2a53034789",
+    "4633458b-17de-408a-b874-0445c86b69e6",
+    "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+    "64702f94-c441-49e6-a78b-ef80e0188fee",
+    "7f951dda-4ed3-4680-a7ca-43fe172d538d",
+    "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
+    "a001fd3d-188f-4b5d-821b-7da978bf7442",
+    "a235d3ee-5935-4cfb-8cc5-a3303ad5995e",
+    "a4417e6f-fecd-4de8-b567-7b0420556985",
+    "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+    "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
+    "b8eda974-7b85-4f76-af95-65846b26df6d",
+    "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
+  ],
+  "azdPrivilegedRoleDefinitionIds": {
+    "Owner": "8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+    "User Access Administrator": "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9",
+    "Role Based Access Control Administrator": "f58310d9-a9f6-439a-9e8d-f62e7b41a168",
+    "Contributor": "b24988ac-6180-42a0-ab88-20f7382dd24c"
   }
 }

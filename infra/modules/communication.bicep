@@ -1,6 +1,5 @@
 param communicationServiceName string = 'av-comms-${uniqueString(resourceGroup().id)}'
 param identityName string
-param aadAdminObjectId string
 param dataLocation string = 'United States' // Email service data location
 param workspaceName string
 
@@ -22,47 +21,14 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
   }
 }
 
-resource emailSenderRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
-  name: guid(resourceGroup().id, 'AdventureWorks Email Sender')
-  properties: {
-    roleName: 'AdventureWorks Email Sender ${uniqueString(resourceGroup().id)}'
-    description: 'Runtime email authorization without resource deletion, access keys or role assignment permissions.'
-    type: 'customRole'
-    permissions: [
-      {
-        actions: [
-          'Microsoft.Communication/communicationServices/read'
-          'Microsoft.Communication/communicationServices/write'
-        ]
-        notActions: []
-        dataActions: []
-        notDataActions: []
-      }
-    ]
-    assignableScopes: [
-      communicationService.id
-    ]
-  }
-}
-
 resource communicationServiceRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(communicationService.id, identity.id, 'AdventureWorks Email Sender')
+  name: guid(communicationService.id, identity.id, '09976791-48a7-449e-bb21-39d1a415f350')
   scope: communicationService
   properties: {
-    roleDefinitionId: emailSenderRole.id
+    // Built-in Communication and Email Service Owner; broader than the former custom role.
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '09976791-48a7-449e-bb21-39d1a415f350')
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
-  }
-}
-
-// Grant admin Contributor role for Communication Service access
-resource communicationServiceAdminRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(communicationService.id, aadAdminObjectId, 'Contributor')
-  scope: communicationService
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c') // Contributor
-    principalId: aadAdminObjectId
-    principalType: 'User'
   }
 }
 

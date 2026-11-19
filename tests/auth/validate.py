@@ -397,22 +397,74 @@ def sensitive_management_grants(definition, scope=None):
     return sorted(granted)
 
 
-def reviewed_email_sender(definition, assignment, communication_scope, principal):
-    rule = json.loads(CONTRACTS.read_text())["runtimeEmailRole"]
+def builtin_role_shape_matches(definition, rule):
+    """Detect drift if Microsoft widens a reviewed built-in beyond its accepted permission shape."""
     permissions = definition.get("permissions")
-    if not isinstance(permissions, list) or len(permissions) != 1 or not isinstance(permissions[0], dict):
+    if (not isinstance(permissions, list) or len(permissions) != 1 or
+            not isinstance(permissions[0], dict)):
         return False
     block = permissions[0]
-    actions = block.get("actions")
-    scopes = definition.get("assignableScopes")
-    return (isinstance(actions, list) and all(isinstance(item, str) for item in actions) and
-            {item.lower() for item in actions} == {item.lower() for item in rule["actions"]} and
-            not any(block.get(key) for key in ["dataActions", "notActions", "notDataActions"]) and
-            definition.get("roleName", "").startswith(rule["roleNamePrefix"]) and
-            isinstance(scopes, list) and len(scopes) == 1 and
-            scopes[0].lower() == communication_scope.lower() and
-            assignment.get("scope", "").lower() == communication_scope.lower() and
-            assignment.get("principalId", "").lower() == principal.lower() and
+    values = {key: block.get(key, []) for key in ["actions", "notActions", "dataActions", "notDataActions"]}
+    if any(not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+           for value in values.values()):
+        return False
+    if block.get("condition") or block.get("conditionVersion"):
+        return False
+    if "dataActions" in rule:
+        return (not values["actions"] and
+                {item.lower() for item in values["dataActions"]} ==
+                {item.lower() for item in rule["dataActions"]})
+    prefixes = [prefix.lower() for prefix in rule["allowedActionPrefixes"]]
+    return (bool(values["actions"]) and not values["dataActions"] and
+            all(any(item.lower().startswith(prefix) for prefix in prefixes) for item in values["actions"]))
+
+
+def azd_role_assignment_violations(assignments, group_scope, principals, allowlist):
+    """Return azd-principal assignments inside the selected group whose role is not allowlisted."""
+    group = group_scope.lower().rstrip("/")
+    owners = {principal.lower() for principal in principals if principal}
+    allowed = {item.lower() for item in allowlist}
+    violations = []
+    for item in assignments:
+        if not isinstance(item, dict):
+            raise EvidenceError("Role assignment has invalid shape")
+        scope = str(item.get("scope", "")).lower()
+        if str(item.get("principalId", "")).lower() not in owners:
+            continue
+        if scope != group and not scope.startswith(group + "/"):
+            continue
+        if str(item.get("roleDefinitionId", "")).rsplit("/", 1)[-1].lower() not in allowed:
+            violations.append(str(item.get("roleDefinitionName")) + " at " +
+                              (item.get("scope", "")[len(group):] or "resource group"))
+    return sorted(violations)
+
+
+def demo_custom_role_definitions(definitions, group_scope):
+    """Custom role definitions assignable only within the selected group indicate template-created roles."""
+    group = group_scope.lower().rstrip("/")
+    found = []
+    for definition in definitions:
+        if not isinstance(definition, dict) or definition.get("roleType") != "CustomRole":
+            continue
+        scopes = [str(scope).lower().rstrip("/") for scope in definition.get("assignableScopes") or []]
+        if scopes and all(scope == group or scope.startswith(group + "/") for scope in scopes):
+            found.append(str(definition.get("roleName")))
+    return sorted(found)
+
+
+def reviewed_email_sender(definition, assignment, communication_scope, principal):
+    rule = json.loads(CONTRACTS.read_text())["runtimeEmailRole"]
+    role_id = rule["roleDefinitionId"].lower()
+    definition_id = str(definition.get("name", "")).rsplit("/", 1)[-1].lower()
+    assignment_id = str(assignment.get("roleDefinitionId", "")).rsplit("/", 1)[-1].lower()
+    return (definition_id == role_id and assignment_id == role_id and
+            builtin_role_shape_matches(definition, rule) and
+            definition.get("roleName") == rule["roleName"] and
+            assignment.get("roleDefinitionName") == rule["roleName"] and
+            isinstance(assignment.get("scope"), str) and
+            assignment["scope"].lower() == communication_scope.lower() and
+            isinstance(assignment.get("principalId"), str) and
+            assignment["principalId"].lower() == principal.lower() and
             not assignment.get("condition") and not assignment.get("conditionVersion"))
 
 
@@ -423,19 +475,18 @@ def reviewed_webpubsub_runtime(definition, assignment, webpubsub_scope, principa
         return False
     block = permissions[0]
     actions = block.get("dataActions")
-    scopes = definition.get("assignableScopes")
     assignment_scope = assignment.get("scope")
     assignment_principal = assignment.get("principalId")
-    return (isinstance(actions, list) and all(isinstance(item, str) for item in actions) and
-            len(actions) == len(rule["dataActions"]) and
+    role_id = rule["roleDefinitionId"].lower()
+    definition_id = str(definition.get("name", "")).rsplit("/", 1)[-1].lower()
+    assignment_id = str(assignment.get("roleDefinitionId", "")).rsplit("/", 1)[-1].lower()
+    return (definition_id == role_id and assignment_id == role_id and
+            definition.get("roleName") == rule["roleName"] and
+            assignment.get("roleDefinitionName") == rule["roleName"] and
+            isinstance(actions, list) and all(isinstance(item, str) for item in actions) and
             {item.lower() for item in actions} == {item.lower() for item in rule["dataActions"]} and
             all(block.get(key) == [] for key in ["actions", "notActions", "notDataActions"]) and
             not block.get("condition") and not block.get("conditionVersion") and
-            definition.get("roleType") == "CustomRole" and
-            isinstance(definition.get("roleName"), str) and
-            definition["roleName"].startswith(rule["roleNamePrefix"]) and
-            isinstance(scopes, list) and len(scopes) == 1 and
-            isinstance(scopes[0], str) and scopes[0].lower() == webpubsub_scope.lower() and
             isinstance(assignment_scope, str) and assignment_scope.lower() == webpubsub_scope.lower() and
             isinstance(assignment_principal, str) and assignment_principal.lower() == principal.lower() and
             not assignment.get("condition") and not assignment.get("conditionVersion"))
@@ -618,19 +669,24 @@ def seed_sql_admin_matches(properties, identity, tenant_id):
             str(properties.get("tenantId", "")).lower() == str(tenant_id).lower())
 
 
-def foundry_custom_role_assignment_matches_source(assignments, project_scope):
-    prefix = "AdventureWorks Foundry Agents "
+def foundry_data_role_assignment_matches_source(assignments, project_scope):
+    rule = json.loads(CONTRACTS.read_text())["runtimeFoundryDataRole"]
+    role_id = rule["roleDefinitionId"].lower()
     if not isinstance(assignments, list):
         return False
+    legacy_roles = [item for item in assignments if isinstance(item, dict) and
+                    isinstance(item.get("roleDefinitionName"), str) and
+                    item["roleDefinitionName"].startswith("AdventureWorks Foundry Agents ")]
+    if legacy_roles:
+        return False
     foundry_roles = [item for item in assignments if isinstance(item, dict) and
-                     isinstance(item.get("roleDefinitionName"), str) and
-                     item["roleDefinitionName"].startswith(prefix)]
+                     item.get("roleDefinitionName") == rule["roleName"]]
     if len(foundry_roles) != 1:
         return False
-    role_name, scope = (foundry_roles[0].get("roleDefinitionName"),
-                        foundry_roles[0].get("scope"))
-    return (re.fullmatch(re.escape(prefix) + r"[a-z0-9]{13}", role_name) is not None and
-            isinstance(scope, str) and scope.lower() == project_scope.lower())
+    assignment = foundry_roles[0]
+    assignment_id = str(assignment.get("roleDefinitionId", "")).rsplit("/", 1)[-1].lower()
+    scope = assignment.get("scope")
+    return assignment_id == role_id and isinstance(scope, str) and scope.lower() == project_scope.lower()
 
 
 def foundry_builtin_role_assignments_match_source(assignments, account_scope, project_scope):
@@ -640,11 +696,13 @@ def foundry_builtin_role_assignments_match_source(assignments, account_scope, pr
         ("Cognitive Services OpenAI User", account_scope.lower()),
         ("Azure AI Developer", account_scope.lower()),
         ("Azure AI Developer", project_scope.lower()),
+        ("Cognitive Services Data Contributor (Preview)", project_scope.lower()),
     ]
     actual = []
     for item in assignments:
         if not isinstance(item, dict) or item.get("roleDefinitionName") not in {
-                "Cognitive Services OpenAI User", "Cognitive Services OpenAI Contributor", "Azure AI Developer"}:
+                "Cognitive Services OpenAI User", "Cognitive Services OpenAI Contributor", "Azure AI Developer",
+                "Cognitive Services Data Contributor (Preview)"}:
             continue
         scope = item.get("scope")
         if not isinstance(scope, str):
@@ -3481,19 +3539,20 @@ def infra(report, deployment):
                 "condition": assignment.get("condition"), "conditionVersion": assignment.get("conditionVersion"),
                 "sensitiveManagementGrants": sensitive,
             })
-            if reviewed_email and sensitive == ["Microsoft.Communication/communicationServices/write"]:
+            if reviewed_email:
                 report.add("infra:runtime-sensitive-management:" + str(index), "infra", "ACCEPTED_EXCEPTION",
-                           json.loads(CONTRACTS.read_text())["runtimeEmailRole"]["justification"])
+                           json.loads(CONTRACTS.read_text())["runtimeEmailRole"]["justification"] +
+                           (" Detected grants: " + ", ".join(sensitive) if sensitive else ""))
             else:
                 report.check("infra:runtime-sensitive-management:" + str(index), "infra", not sensitive,
                              "Potential management/key-retrieval grants require explicit review: " +
                              assignment["roleDefinitionName"] + ("; " + ", ".join(sensitive) if sensitive else
                              "; none of the enumerated sensitive operations. This is not complete effective-access proof."))
         report.check("infra:runtime-email-role", "infra", len(email_replacements) == 1,
-                     "Exactly one reviewed single-resource email role with exact permissions must be assigned")
+                     "Exactly one reviewed Communication and Email Service Owner must be assigned at the Communication resource")
         report.check("infra:runtime-webpubsub-role", "infra",
                      len(webpubsub_replacements) == 1 and not webpubsub_unreviewed,
-                     "Exactly one scoped Web PubSub runtime role and no other overlapping Web PubSub data grants; "
+                     "Exactly one scoped Web PubSub Service Owner and no other overlapping Web PubSub data grants; "
                      "effective access and push delivery require separate tests")
         account_scope = (f"/subscriptions/{d.subscription}/resourceGroups/{d.group}"
                          "/providers/Microsoft.CognitiveServices/accounts/" +
@@ -3506,9 +3565,50 @@ def infra(report, deployment):
                          assignments, account_scope, project_scope),
                      "Foundry built-in roles match the source-declared account/project assignments")
         report.check("infra:runtime-foundry-role-source", "infra",
-                     foundry_custom_role_assignment_matches_source(assignments, project_scope),
-                     "Runtime Foundry custom-role bindings must match the single project-scoped Bicep role")
+                     foundry_data_role_assignment_matches_source(assignments, project_scope),
+                     "Cognitive Services Data Contributor (Preview) must match the project-scoped Bicep assignment")
+        contracts = json.loads(CONTRACTS.read_text())
+        for key, label, present in [
+                ("runtimeWebPubSubRole", "webpubsub", bool(webpubsub_replacements)),
+                ("runtimeFoundryDataRole", "foundry-data",
+                 foundry_data_role_assignment_matches_source(assignments, project_scope))]:
+            rule = contracts[key]
+            definition = by_id.get(rule["roleDefinitionId"].lower(), {})
+            shape = builtin_role_shape_matches(definition, rule)
+            report.check("infra:runtime-builtin-shape:" + label, "infra", shape,
+                         rule["roleName"] + " live definition must keep the reviewed permission shape " +
+                         json.dumps(rule["dataActions"]) + "; built-in drift requires review")
+            if present and shape:
+                report.add("infra:runtime-broad-builtin:" + label, "infra", "ACCEPTED_EXCEPTION",
+                           rule["justification"])
     report.guarded("infra:runtime-roles", "infra", roles)
+    def azd_role_assignments():
+        group_scope = f"/subscriptions/{d.subscription}/resourceGroups/{d.group}"
+        principals = [d.azure("identity", "show", "-g", d.group, "-n", d.required(key))["principalId"]
+                      for key in ["USER_MANAGED_IDENTITY_NAME", "SEED_MANAGED_IDENTITY_NAME"]]
+        principals.append(d.required("OBJECT_ID"))
+        assignments = d.azure("role", "assignment", "list", "--all")
+        if not isinstance(assignments, list):
+            raise EvidenceError("Role assignments could not be enumerated")
+        contracts = json.loads(CONTRACTS.read_text())
+        violations = azd_role_assignment_violations(
+            assignments, group_scope, principals, contracts["azdRoleAssignmentAllowlist"])
+        report.check("infra:azd-role-assignments-allowlisted", "infra", not violations,
+                     "Runtime, seed and deployer assignments inside the selected resource group use only "
+                     "the conditioned deployer allowlist" + ("; outside allowlist: " + "; ".join(violations)
+                                                             if violations else ""))
+        privileged = {item.lower() for item in contracts["azdPrivilegedRoleDefinitionIds"].values()}
+        report.check("infra:azd-allowlist-excludes-privileged", "infra",
+                     not privileged & {item.lower() for item in contracts["azdRoleAssignmentAllowlist"]},
+                     "Owner, User Access Administrator, RBAC Administrator and Contributor are never assignable "
+                     "by the deployer")
+        custom = demo_custom_role_definitions(
+            d.azure("role", "definition", "list", "--custom-role-only", "true", "--scope", group_scope),
+            group_scope)
+        report.check("infra:no-template-custom-roles", "infra", not custom,
+                     "Deployment must not create resource-group-scoped custom role definitions" +
+                     ("; found: " + ", ".join(custom) if custom else ""))
+    report.guarded("infra:azd-role-assignments", "infra", azd_role_assignments)
     def agents():
         deployed = fetch_agents(d)
         expected = set(report.inventory.get("agentProvisionerTools", {})) | {"manufacturing-agent"}

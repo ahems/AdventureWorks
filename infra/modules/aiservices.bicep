@@ -330,49 +330,23 @@ resource openAiUserLocalProjectRoleAssignment 'Microsoft.Authorization/roleAssig
   }
 }
 
-// ── Custom role: AIServices data-plane access ────────────────────────────────
-// The built-in "Azure AI Developer" role does NOT include the AIServices/* data actions
-// needed for agent creation, invocation, and memory store operations.
-// This custom role grants the broad AIServices/* data action at the subscription level.
-resource foundryAgentsRoleDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
-  name: guid(subscription().id, resourceGroup().id, 'foundry-agents-data-role')
-  properties: {
-    roleName: 'AdventureWorks Foundry Agents ${uniqueString(resourceGroup().id)}'
-    description: 'Grants full AIServices data-plane access for Azure AI Foundry agents, memory stores, and related operations.'
-    type: 'CustomRole'
-    permissions: [
-      {
-        actions: []
-        notActions: []
-        dataActions: [
-          'Microsoft.CognitiveServices/accounts/AIServices/*'
-        ]
-        notDataActions: []
-      }
-    ]
-    assignableScopes: [
-      subscriptionResourceId('Microsoft.Resources/resourceGroups', resourceGroup().name)
-    ]
-  }
-}
-
-// Assign the custom AIServices role to the managed identity at project scope
+// This preview built-in is broader than the former project-scoped AIServices/* custom role.
 resource foundryAgentsProjectMiRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
-  name: guid(aiProject.id, azidentity.id, 'foundry-agents-data-role')
+  name: guid(aiProject.id, azidentity.id, '19c28022-e58e-450d-a464-0b2a53034789')
   scope: aiProject
   properties: {
-    roleDefinitionId: foundryAgentsRoleDefinition.id
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '19c28022-e58e-450d-a464-0b2a53034789') // Cognitive Services Data Contributor (Preview)
     principalId: azidentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
-// Assign the custom AIServices role to the local dev user at project scope
+// Grant the same project-scoped built-in data role to the local dev user.
 resource foundryAgentsProjectUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
-  name: guid(aiProject.id, aadAdminObjectId, 'foundry-agents-data-role')
+  name: guid(aiProject.id, aadAdminObjectId, '19c28022-e58e-450d-a464-0b2a53034789')
   scope: aiProject
   properties: {
-    roleDefinitionId: foundryAgentsRoleDefinition.id
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '19c28022-e58e-450d-a464-0b2a53034789') // Cognitive Services Data Contributor (Preview)
     principalId: aadAdminObjectId
     principalType: 'User'
   }

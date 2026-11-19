@@ -204,6 +204,14 @@ The integrated offline host profile recorded **81 PASS, 20 accepted exceptions,
 These deterministic checks do not replace deployed ownership or side-effect
 evidence.
 
+The latest consolidated deployed run (below) predates the built-in role
+compromise described in
+[Deployer permissions and the built-in role compromise](#deployer-permissions-and-the-built-in-role-compromise).
+A clean `azd up` is required before those role checks have live evidence.
+The next full run is expected to add two accepted exceptions
+(`infra:runtime-broad-builtin:*`) and five new infrastructure checks. The email
+exception is recorded under its existing ID.
+
 The latest consolidated deployed run used
 `--all --functions-host --order-cancellation-canary`. It recorded **4,201 PASS,
 23 accepted exceptions, 283 BLOCKED and zero FAIL**. Every `required:` obligation
@@ -1228,36 +1236,46 @@ the earlier documentation-only decision. All four exact runtime bindings have
 now been removed from the selected deployment and their declarations removed or
 replaced in Bicep. No administrator binding was removed.
 
+The table below records evidence from that deployment; it predates the current
+source change. The templates now replace the custom Communication and Web PubSub
+roles and the Foundry data role with built-in roles so deployment no longer
+requires custom-role-definition writes. Those built-ins grant broader runtime
+permissions, as detailed in [infra/README.md](../../../infra/README.md), and
+the table is not evidence that the updated roles have been deployed or tested.
+
 | Runtime assignment | Verified scope and permissions | Source and disposition |
 | --- | --- | --- |
 | Managed Identity Operator | Selected resource group; built-in definition includes `Microsoft.Resources/deployments/*` | Removed. [Identity module](../../../infra/modules/identity.bicep) now creates only the identity. Deployment remains the responsibility of the deployer, not the application runtime. |
 | Deployment-script custom role | Selected resource group; Storage, Container Instances, deployments and deployment-script wildcards | Binding removed. No deployed ARM deployment-script resource was found. The old custom definition may remain inert/unassigned in an upgraded environment; Bicep no longer creates it. No Storage key or deployment wildcard remains assigned to this runtime identity. |
 | ACR Contributor | Selected registry; registry write/delete and credential retrieval | Removed. Existing registry-scoped AcrPull and separate seed-identity AcrPull remain. The actual runtime UAMI successfully exchanged an ACR token and fetched its deployed image manifest; its ARM registry metadata request returned 403. |
-| Communication Services Contributor | Selected Communication resource; write/delete and key retrieval/regeneration | Replaced by the exact custom role below. The separate administrator Contributor binding remains unchanged. |
+| Communication Services Contributor | Selected Communication resource; write/delete and key retrieval/regeneration | Replaced at the time by a read/write custom role; current source uses the built-in role described below. The separate administrator Contributor binding remains unchanged. |
 
-**Bounded platform permission, not a send-only role:** `AdventureWorks Email Sender`
-allows exactly `Microsoft.Communication/communicationServices/read` and
-`Microsoft.Communication/communicationServices/write`, with both assignment and
-assignable scope restricted to the selected single Communication resource.
-It grants no wildcard, key retrieval/regeneration, deletion, Email Service write,
-or role administration. The retained service write action can modify that resource's
-properties; it is an explicit exception to the data-plane-only target.
-That write permission can also change the Communication Service's authentication
-setting, so disabling access-key authentication is not an immutable boundary against
-the runtime identity.
-The [contract](../../../tests/auth/contracts.json) accepts only this exact role
-shape, scope, principal and unconditional assignment, not similarly named roles
-or arbitrary Communication permissions.
+**Accepted broad built-in, not a send-only role:** the runtime UAMI now holds the
+built-in **Communication and Email Service Owner** at the selected Communication
+resource only. The former two-action `AdventureWorks Email Sender` custom role
+was removed because deployers no longer receive `roleDefinitions/write` (see
+[Deployer permissions and the built-in role compromise](#deployer-permissions-and-the-built-in-role-compromise)).
+The built-in adds Communication resource delete, `ListKeys`/`RegenerateKey`,
+and Email Service/domain management at that scope. The runtime identity can
+therefore re-enable access-key authentication and retrieve keys; the
+`disableLocalAuth` infrastructure check detects but cannot prevent that drift.
+The [contract](../../../tests/auth/contracts.json) accepts only the exact
+built-in role ID and name, the single resource scope, the runtime principal and
+an unconditional assignment. It also fails if the live definition gains any
+non-`Microsoft.Communication/` action or any data action. The report records
+the detected sensitive grants under `infra:runtime-sensitive-management:*` as an
+`ACCEPTED_EXCEPTION`.
 
-An actual ACA runtime probe first tried read-only email authorization: the send
+Historical evidence from the custom-role deployment: an actual ACA runtime probe
+first tried read-only email authorization: the send
 returned 401. Adding only Communication service write resulted in 202 and the
 email operation reached `Succeeded`, after Contributor had been removed.
 This proves the tested REST send/poll path, not independently observed mailbox
 delivery or every application email path. Controlled test emails were separately
 authorized; recipients are supplied only in process environment, never evidence.
 Microsoft's [SMTP role guidance](https://learn.microsoft.com/azure/communication-services/quickstarts/email/send-email-smtp/smtp-authentication)
-also discusses management actions, but its additional Email Service write
-permission was not required by the tested REST path and is not granted here.
+also discusses management actions. The tested REST path did not require its
+additional Email Service write permission, but the current built-in role grants it.
 
 Incremental ARM deployment does not delete assignments removed from a template.
 The [postprovision hook](../../../scripts/hooks/postprovision.sh) therefore invokes
@@ -1268,6 +1286,9 @@ and records exact removal IDs in an ignored evidence ledger. A second apply foun
 zero targets and confirmed preservation. Fresh deployments also verify replacements
 without requiring obsolete bindings to exist. An unexpected role definition or
 missing replacement fails explicitly; no bulk principal/resource-group cleanup occurs.
+Under the conditioned deployer role, deleting a legacy Managed Identity Operator
+or custom-role binding is outside the allowlist and would be denied; only upgraded
+environments could contain such bindings, and the demo policy is to recreate them.
 
 Reproduce the read-only inspection using
 `bash tests/scripts/validate-auth.sh --environment <environment> --infra`.
@@ -1314,6 +1335,43 @@ Functions/file-data readiness and the normal seed-log reader passed after the
 readiness probe was corrected to read directory data rather than share-level
 properties. No new Storage management role was introduced. These results retire
 the four IAM findings but do not complete the remaining 120 obligations.
+
+### Deployer permissions and the built-in role compromise
+
+Deploying users hold **Contributor** plus a conditioned role-assignment role,
+not Role Based Access Control Administrator or any `roleDefinitions/write`
+permission. The custom role [azd-deployer-role.json](../../../infra/azd-deployer-role.json)
+adds only `roleAssignments/write` and `roleAssignments/delete`, and its ABAC
+condition permits only the built-in role IDs in
+[azd-role-assignment-allowlist.json](../../../infra/azd-role-assignment-allowlist.json).
+The administrator justification and grant commands are in
+[Deployer Permissions: Why Contributor Is Not Enough](../../AZD_DEPLOYER_PERMISSIONS.md).
+
+Consequently, the templates no longer create custom role definitions. The three
+former least-privilege custom roles were replaced by broader built-ins on the
+shared runtime UAMI. These are **accepted exceptions** to the least-privilege
+target, not to the RBAC-only target: no keys or connection secrets are used.
+
+| Former custom role | Built-in replacement and scope | Additional runtime privilege |
+| --- | --- | --- |
+| AdventureWorks Email Sender (Communication read/write) | Communication and Email Service Owner, Communication resource | Resource delete, `ListKeys`/`RegenerateKey`, Email Service, domain and sender management; can re-enable local auth |
+| AdventureWorks Web PubSub Runtime (four data actions) | Web PubSub Service Owner, Web PubSub resource | All Web PubSub data actions, including user/connection management and permission grants; no management actions |
+| AdventureWorks Foundry Agents (`AIServices/*` data) | Cognitive Services Data Contributor (Preview), Foundry project | All Cognitive Services data actions at the project; no management actions |
+
+Executable coverage:
+
+| Check | Kind | What it proves |
+| --- | --- | --- |
+| `test_deployer_role_allowlist_matches_infrastructure_role_assignments` | Offline source | No Bicep file declares a role definition; no hook creates or updates one; every Bicep role reference (GUID literal, GUID variable or AVM role name) and every hook `--role`/project-role GUID resolves to the allowlist; every allowlisted role is used; Owner, User Access Administrator, RBAC Administrator and Contributor are excluded; the deployer role has exactly the two assignment actions |
+| `infra:azd-role-assignments-allowlisted` | Live, read-only | Runtime UAMI, seed UAMI and deployer (`OBJECT_ID`) assignments inside the selected resource group use only allowlisted role IDs |
+| `infra:no-template-custom-roles` | Live, read-only | No custom role definition is assignable only within the selected resource group |
+| `infra:azd-allowlist-excludes-privileged` | Live contract | The contract allowlist excludes the three role-administration roles |
+| `infra:runtime-builtin-shape:{webpubsub,foundry-data}` | Live, read-only | The live built-in definition still has the reviewed data-action-only shape; Microsoft-side widening fails and needs review |
+| `infra:runtime-broad-builtin:{webpubsub,foundry-data}` and `infra:runtime-sensitive-management:*` (email) | `ACCEPTED_EXCEPTION` | Records each broad built-in with its contract justification and detected sensitive grants |
+
+The condition limits which roles the deployer can assign, not who receives them
+or where in the subscription. That residual deployer risk is documented in the
+administrator guide.
 
 ### Seed log mount: approved SMB managed identity migration
 
@@ -1444,13 +1502,14 @@ profile fails if any of these non-Entra paths is enabled. Selected workload and
 seed image-pull configurations use managed identities; the runtime manifest read
 also passed. These checks do not prove every future image build and pull.
 
-**Web PubSub authentication:** the refreshed deployment disables local keys,
-preserves Entra authentication and replaces `Web PubSub Service Owner` with the
-resource-scoped role for client-token generation, client connection, group send
-and group read. The required client-connection permission also permits closing
-connections; group send can broadcast to any group, and the identity is shared
-with other workloads. These residual privileges are not per-workload or per-group
-isolation. Negotiation, socket upgrades, a shared-UAMI marker and one actual
+**Web PubSub authentication:** deployments disable local keys and preserve Entra
+authentication. The current source assigns the built-in `Web PubSub Service Owner`
+(`Microsoft.SignalRService/WebPubSub/*` data actions, no management actions) at
+the Web PubSub resource, replacing the former four-action custom role. It can
+generate tokens, send to any group or user, and close or manage any connection,
+and the identity is shared with other workloads. These residual privileges are
+not per-workload or per-group isolation; group authorization for browsers is
+still selected server-side from signed token scopes. Negotiation, socket upgrades, a shared-UAMI marker and one actual
 Functions callback passed. Other publishers and groups remain separate.
 
 **Communication Services authentication:** the refreshed ARM configuration
@@ -1813,6 +1872,12 @@ Exceptions are not wildcard bypasses. An accepted exception must have an exact
 operation/resource, rationale, exposure boundary, compensating control, provenance
 and executable assertions. Expansion requires review.
 
+The following live checks are point-in-time evidence for the deployment version
+they describe. The current Bicep source uses broader built-in Communication,
+Web PubSub, and Foundry roles instead of the former custom roles; those
+assignments require a fresh demo deployment and new verification before the
+previous role-specific evidence applies.
+
 | ID / category | Boundary and provenance | Assurance treatment |
 | --- | --- | --- |
 | Public catalog/status/discovery | Existing Functions Public tier and route matrix; storefront browsing and DAB read catalog | Exact Functions names and DAB read entities are pinned in the contract; expansion fails. Source excludes product cost/replenishment fields and inventory shelf/bin, and removes public Location access; refreshed live field/select/filter/order checks passed. ProductInventory still exposes per-location IDs and quantities because the storefront sums them client-side; the MCP `get_categories_with_products` tool also exposes aggregate numeric stock to `products.read` holders. Both are documented demo exposures, not boolean-only availability. |
@@ -1825,8 +1890,8 @@ and executable assertions. Expansion requires review.
 | Azure Files SMB managed-identity mount | Existing ACA environment UAMI; SMB OAuth; Storage File Data SMB MI Admin at account scope | **Approved preview/platform privilege**: preserves seed file logging without account keys. Shared Key is disabled. Live cross-execution write/read/cleanup and existing log reader pass, including after runtime management-binding retirement. Required account-wide file-administrator access is broader than per-share ACLs. |
 | ACR shared admin user | Refreshed deployment disables the shared user, anonymous pull and enabled repository tokens | No local-credential exception. Selected Container App and seed pull configurations use managed identities; a runtime image-manifest read also passed. Complete future build and pull paths remain separate evidence. |
 | Web PubSub local access keys | Refreshed deployment disables local authentication and enables Entra | No access-key exception. Capability negotiation, socket connections, a shared-UAMI send and one real Functions publisher were verified; other publishers and groups remain separate obligations. |
-| Web PubSub runtime data role | Four service-scoped data actions replace `Web PubSub Service Owner` on the refreshed deployment | The selected role has no overlapping Web PubSub data grants. The client-connection action can close connections, group send is not restricted to individual groups, and the UAMI is shared; these are residual privilege boundaries, not per-service or per-group isolation. |
-| Communication Services local access keys | Refreshed deployment disables local authentication; Functions targets the selected service | No access-key exception. An actual Entra email send remains **BLOCKED** without an explicitly approved recipient. The required, bounded runtime service-write role can change the setting. |
+| Web PubSub runtime data role (`infra:runtime-broad-builtin:webpubsub`) | Built-in `Web PubSub Service Owner` (`WebPubSub/*` data actions) at the single Web PubSub resource; replaces the former four-action custom role because deployers cannot create role definitions | **Accepted broad built-in.** Checks require exactly one such assignment, no other overlapping Web PubSub data grants, and the reviewed live definition shape (`infra:runtime-builtin-shape:webpubsub`). The UAMI can close connections and send to any group or user; this is not per-service or per-group isolation. |
+| Communication Services local access keys | Deployment disables local authentication; Functions targets the selected service | No access-key exception. An actual Entra email send remains **BLOCKED** without an explicitly approved recipient. The runtime's built-in Communication and Email Service Owner can re-enable local auth and list keys; the `disableLocalAuth` check detects that drift but cannot prevent it. |
 | Application Insights telemetry ingestion | All three browsers use the JavaScript SDK with a browser-visible connection string. DAB, Functions and MCP also configure the same Application Insights resource, whose source explicitly leaves local authentication enabled. | **Unresolved shared-ingestion exception**, not proof of workload RBAC. The connection string is not a security token or read credential, but local ingestion can be abused to inject telemetry. The [JavaScript SDK guidance](https://learn.microsoft.com/azure/azure-monitor/app/javascript-sdk) recommends separating browser telemetry if server ingestion must require Entra. Verify each producer and redesign before disabling local authentication. |
 | Container Apps platform logging | The environment's Log Analytics configuration receives the workspace shared key from deployment, not from application code. | **Unresolved platform credential exception.** The key is a credential, unlike the Application Insights connection string. An [Azure Monitor diagnostic-settings destination](https://learn.microsoft.com/azure/container-apps/log-options) may avoid that key, but changes log tables and portal access; preserve and verify log delivery before replacing the current setup. |
 | Static Web App deployment | Provisioning exposes a Static Web App deployment token for service deployment; application users do not authenticate with it. | Deployment-only credential exception, not evidence that application APIs use RBAC. Keep it out of reports and verify its scope and consumers separately. |
@@ -1834,8 +1899,8 @@ and executable assertions. Expansion requires review.
 | DAB sales-order ownership | Source keeps `SalesOrderHeader` reads owner-scoped and removes consumer/authenticated header writes and direct `SalesOrderDetail` reads/creates. Functions binds the signed customer/person and both owned address links for header creation, checks the signed customer for detail writes, and checks each order in batch reads. | The refreshed deployment includes these restrictions. The opt-in order canary (below) proved a real checkout by a bound disposable customer, owner-only header/line reads, foreign-customer line-write and read denials, anonymous denials, consumer and manufacturing DAB cancel denials, and admin Status 6 cancellation. Client-computed price integrity remains open; AI, simulator, agent and MCP order paths remain blocked pending full P9 controls. |
 | DAB Customer creation | Source allows consumers to create a Customer only with `PersonID` and `TerritoryID`, with a signed-person database policy; direct updates/deletes and client-supplied `StoreID` are unavailable. Existing Customer rows can legitimately link both a person and store. | The refreshed private run denied cross-owner, anonymous, forged and wrong-audience REST/GraphQL creates with independent unchanged-state SQL evidence; four owner-bound controls passed. Client-supplied `StoreID: null` was denied for both roles, protocols and owners with SQL-confirmed absence. Other extra fields and successful first-customer checkout remain unverified. |
 | Public reviews, protected mutations | Anonymous users may read reviews; creating or liking requires authentication, as confirmed by the user | Consumer/authenticated creation binds UserID to the signed business_entity_id; update permits only HelpfulVotes. Refreshed live checks confirm reviewer email is excluded from public-role reads and create responses while author IDs remain available. Public UserIDs remain a privacy exposure, client-supplied review email is not independently bound to the identity, and voting integrity is not server-enforced. |
-| Communication email authorization | Exact resource-scoped read/write custom role on the single Communication service | **Bounded platform permission**: write is required for the tested managed-identity email path and also permits resource-property updates. Exact scope/actions/principal are checked; keys, delete, wildcards and role administration are not granted. The four former runtime management bindings are removed. |
-| Foundry model/agent access | Runtime account-scoped Cognitive Services OpenAI Contributor was replaced by OpenAI User; Azure AI Developer account/project bindings and the custom project `AIServices/*` role remain | After user recreation, the read-only infrastructure report confirms the source-declared built-in and custom bindings and rejects the previous extra binding. Deployer/user Contributor bindings are unchanged. Remaining Developer/custom data privileges and actual runtime data paths are **not certified as least privilege**. |
+| Communication email authorization (`infra:runtime-sensitive-management:*`) | Built-in Communication and Email Service Owner at the single Communication resource; replaces the former read/write custom role | **Accepted broad built-in.** Includes resource delete, key list/regenerate and Email Service/domain management at that resource. Exact role ID/name, scope, principal and unconditional assignment are checked; the live definition must contain only `Microsoft.Communication/` actions and no data actions. No role administration. The four former runtime management bindings stay removed. |
+| Foundry model/agent access (`infra:runtime-broad-builtin:foundry-data`) | Runtime account-scoped OpenAI User; Azure AI Developer at account and project; built-in Cognitive Services Data Contributor (Preview) at the project, replacing the former `AIServices/*` custom role | **Accepted broad built-in.** The preview role grants all `Microsoft.CognitiveServices/*` data actions (except fine-tune deployment writes) at the project, but no management actions. Checks require the exact source-declared account/project set, one project-scoped data role and the reviewed live definition shape (`infra:runtime-builtin-shape:foundry-data`). Agent business access remains bounded by OAuth-delegated MCP/API tokens and tool policies, not by Foundry RBAC. **Not certified as least privilege.** |
 
 Microsoft Learn's [database-policy guidance](https://learn.microsoft.com/en-us/azure/data-api-builder/concept/security/database-policies#supported-actions)
 currently says `create` policies are unsupported, whereas the released
@@ -1846,7 +1911,7 @@ cross-owner denial and independent unchanged-state checks for Customer and
 review creates, but the documentation/runtime discrepancy and future image drift
 still require review and repeat deployed evidence.
 
-### Earlier Foundry role finding, rechecked after recreation
+### Prior deployment's Foundry role finding (historical)
 
 The previous deployment's runtime UAMI had two project-scoped custom roles whose
 names start with `AdventureWorks Foundry Agents`: the one source-declared role
@@ -1854,16 +1919,13 @@ and an additional `AdventureWorks Foundry Agents Reader` assignment. The latter
 is not declared anywhere in the repository; its live role definition grants the
 same broad `Microsoft.CognitiveServices/accounts/AIServices/*` data action.
 This was not an accepted exception. The exact source-role closure check failed;
-no deployed role was changed in place. The
-provisioning hook contained an ambiguous Foundry custom-role name lookup and
-redundantly assigned its result to the runtime UAMI, although Bicep already
-assigns the source-declared role. The hook now selects only the source-shaped
-role for the deployer and no longer makes a runtime custom-role assignment.
-This is a plausible source of the extra assignment, but the origin of the live
-`Reader` assignment has not been independently established. After user-owned
-recreation, the current read-only infrastructure report passes the built-in and
-single-custom-role source checks. This is assignment evidence, not proof of
-every Foundry operation or effective permission.
+no deployed role was changed in place. At that time, the provisioning hook used
+a Foundry custom-role name lookup for the deployer; its origin as a runtime
+assignment was not established. The current source removes that lookup and uses
+Cognitive Services Data Contributor (Preview) on the Foundry project for the
+runtime identity and deployer. This built-in is broader than the former custom
+role. The prior report is historical assignment evidence, not proof of every
+Foundry operation or effective permission.
 
 The runner deliberately does not convert an existing permissive DAB configuration
 into an accepted exception. Guest carts use capability-checked Functions rather

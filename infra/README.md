@@ -29,6 +29,61 @@ Legacy public-enabled SQL servers retain the temporary single-IP setup path in `
 
 After successful deployment, direct SQL clients outside the VNet (including local data-management scripts) cannot connect. Run those tools from a VNet-connected host or temporarily arrange approved access; do not restore the broad `AllowAll` rule.
 
+## Azure role assignments and deployer limits
+
+The templates no longer create custom role definitions. They use built-in roles
+for the Communication, Web PubSub, and Foundry runtime identities; these grants
+are broader than the former resource-scoped custom roles. In particular,
+Communication and Email Service Owner permits key retrieval and resource
+deletion, Web PubSub Service Owner permits all Web PubSub data actions, and
+Cognitive Services Data Contributor (Preview) permits broad Cognitive Services
+data actions. The assignments remain scoped to their respective Communication
+resource, Web PubSub resource, and Foundry project.
+
+The complete set of built-in role IDs used by Bicep and deployment hooks is
+maintained in [azd-role-assignment-allowlist.json](./azd-role-assignment-allowlist.json).
+The subscription-specific [deployer role definition](./azd-deployer-role.json)
+supplements Contributor with only `Microsoft.Authorization/roleAssignments/write`
+and `Microsoft.Authorization/roleAssignments/delete`. It deliberately omits
+`roleDefinitions/write` and `roleDefinitions/delete`. For an administrator-facing
+justification, impact of omitting it, residual risk and grant commands, see
+[Deployer Permissions: Why Contributor Is Not Enough](../docs/AZD_DEPLOYER_PERMISSIONS.md).
+
+Contributor is intentionally not in the assignment allowlist. The deployer
+already has Contributor on the subscription, so explicit Contributor grants on
+the Communication Services resource and Container Apps environment were
+redundant. Aspire Dashboard access uses the deployer's effective inherited
+permissions; the post-provision hook checks for the environment's write action
+and warns without blocking deployment if it cannot verify access.
+
+Create and assign the role with an Azure RBAC condition restricting both create
+and delete to the IDs in the allowlist. The condition is attached to the role
+assignment, not embedded in the role definition. For condition version `2.0`, it should
+require `@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId]`
+to match an allowed GUID for `roleAssignments/write`, and
+`@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId]` to match
+an allowed GUID for `roleAssignments/delete`. This prevents assigning Owner or other roles outside the allowlist, including an
+unconditioned copy of the deployer role through this assignment. The role-ID
+condition does not restrict the target scope or assignee for allowed roles and
+does not constrain other grants; it is not proof against indirect escalation or
+a complete scope/principal boundary.
+Update and review the allowlist whenever Bicep or deployment hooks add a role
+assignment. This condition is configured on the deployer's Azure role
+assignment, not by the Bicep resource being deployed.
+
+The corresponding condition expression is:
+
+```text
+((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR
+ (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {<allowlisted GUIDs>}))
+AND
+((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR
+ (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {<allowlisted GUIDs>}))
+```
+
+Use the same comma-separated GUID set from the JSON file in both clauses. Do
+not add the deployer role's own ID to the allowlist.
+
 ## Private Azure Storage connectivity
 
 `modules/storage.bicep` creates private endpoints for the shared account's blob, queue, table, and file services in the private-endpoint subnet provided by `modules/sql-private-network.bicep`. Each service has a corresponding `privatelink.<service>.core.windows.net` private DNS zone linked to the VNet. Existing storage endpoint URLs continue to work: clients within the integrated network resolve them to private endpoint addresses without changing application URLs.
@@ -240,7 +295,7 @@ The Foundry storage connection is registered in `aiservices.bicep`, but no curre
 - **Purpose**: Provisions **Azure Web PubSub (Free tier)** for real-time push notifications to all frontend apps.
 - **Typical responsibilities**:
   - Web PubSub resource (`Microsoft.SignalRService/webPubSub`) with `Free_F1` SKU.
-  - Disables local-key authentication and assigns the runtime identity a custom role scoped to this resource: client-token generation, client connection, group send and group read.
+  - Disables local-key authentication and assigns the runtime identity built-in Web PubSub Service Owner at this resource scope. This grants all Web PubSub data actions and is broader than the former custom role.
   - The required client-connection permission also permits closing connections; verify negotiation and push delivery after provisioning.
   - Outputs `webPubSubHostName` consumed by Functions and frontend Container Apps.
 

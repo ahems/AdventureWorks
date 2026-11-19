@@ -30,6 +30,7 @@ docs/
 _Production reference architecture showing all Azure components with enterprise networking (VNet, private endpoints, WAF, Firewall). Based on the [Baseline Microsoft Foundry Chat Reference Architecture](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat)._
 
 - [AdventureWorks-Reference-Architecture.svg](AdventureWorks-Reference-Architecture.svg) - Full Azure architecture diagram (ideal production state)
+- [AZD_DEPLOYER_PERMISSIONS.md](AZD_DEPLOYER_PERMISSIONS.md) - Administrator justification for the conditioned role-assignment role required alongside Contributor
 - [DAB_NAMING_CONVENTIONS.md](architecture/DAB_NAMING_CONVENTIONS.md) - Data API Builder naming patterns and GraphQL schema generation
 
 ## ✨ Features

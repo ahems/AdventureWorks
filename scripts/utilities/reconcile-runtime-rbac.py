@@ -11,12 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRIBUTOR = "b24988ac-6180-42a0-ab88-20f7382dd24c"
 IDENTITY_OPERATOR = "f1a07417-d97a-45cb-824c-7a7467783830"
 ACR_PULL = "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+COMMUNICATION_EMAIL_OWNER = "09976791-48a7-449e-bb21-39d1a415f350"
 LEGACY_ACTIONS = {
     "microsoft.storage/storageaccounts/*", "microsoft.containerinstance/containergroups/*",
     "microsoft.resources/deployments/*", "microsoft.resources/deploymentscripts/*",
 }
-EMAIL_ACTIONS = {"microsoft.communication/communicationservices/read",
-                 "microsoft.communication/communicationservices/write"}
 
 
 class ReconciliationError(Exception):
@@ -56,14 +55,11 @@ def retirement_plan(assignments, definitions, principal, group, acr, communicati
     if not any(role_id(item) == ACR_PULL and item.get("scope", "").lower() == normalized["acr"] and
                not item.get("condition") for item in own):
         raise ReconciliationError("Exact unconditional runtime AcrPull replacement is missing")
-    email = [item for item in own if item.get("scope", "").lower() == normalized["communication"] and
-             not item.get("condition") and
-             by_id.get(role_id(item), {}).get("roleName", "").startswith("AdventureWorks Email Sender ") and
-             exact_permissions(by_id[role_id(item)], EMAIL_ACTIONS) and
-             {scope.lower() for scope in by_id[role_id(item)].get("assignableScopes", [])} ==
-             {normalized["communication"]}]
+    email = [item for item in own if role_id(item) == COMMUNICATION_EMAIL_OWNER and
+             item.get("scope", "").lower() == normalized["communication"] and
+             not item.get("condition") and not item.get("conditionVersion")]
     if len(email) != 1:
-        raise ReconciliationError("One exact resource-scoped email replacement with expected permissions is required")
+        raise ReconciliationError("One unconditional resource-scoped Communication and Email Service Owner is required")
     targets = []
     for item in own:
         scope, identifier = item.get("scope", "").lower(), role_id(item)

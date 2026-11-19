@@ -716,12 +716,11 @@ class RuntimeRoleTests(unittest.TestCase):
                     "permissions": [{"actions": list(actions), "dataActions": [], "notActions": [], "notDataActions": []}]}
 
         definitions = [
-            definition("email", "AdventureWorks Email Sender demo", [communication], rbac.EMAIL_ACTIONS),
             definition("legacy", "av-deployment-script-role-demo", [group], rbac.LEGACY_ACTIONS),
         ]
         assignments = [
             assignment(rbac.ACR_PULL, acr),
-            assignment("email", communication),
+            assignment(rbac.COMMUNICATION_EMAIL_OWNER, communication),
             assignment(rbac.CONTRIBUTOR, acr),
             assignment(rbac.CONTRIBUTOR, communication),
             assignment(rbac.IDENTITY_OPERATOR, group),
@@ -746,7 +745,7 @@ class RuntimeRoleTests(unittest.TestCase):
             self.assertEqual(rbac.retirement_plan(*changed), [])
 
     def test_replacements_must_exist_with_exact_scope_permissions_and_principal(self):
-        for mutation in ["no-pull", "no-email", "broad-email", "wrong-principal", "conditional-email", "extra-action"]:
+        for mutation in ["no-pull", "no-email", "broad-email", "wrong-principal", "conditional-email", "wrong-role"]:
             with self.subTest(mutation=mutation):
                 assignments, definitions, *args = copy.deepcopy(self.fixtures())
                 if mutation == "no-pull":
@@ -754,13 +753,13 @@ class RuntimeRoleTests(unittest.TestCase):
                 elif mutation == "no-email":
                     assignments.pop(1)
                 elif mutation == "broad-email":
-                    definitions[0]["assignableScopes"] = [args[1]]
+                    assignments[1]["scope"] = args[1]
                 elif mutation == "wrong-principal":
                     assignments[1]["principalId"] = "other"
                 elif mutation == "conditional-email":
                     assignments[1]["condition"] = "unreviewed"
                 else:
-                    definitions[0]["permissions"][0]["actions"].append("Microsoft.Communication/*")
+                    assignments[1]["roleDefinitionId"] = "/roles/" + rbac.CONTRIBUTOR
                 with self.assertRaises(rbac.ReconciliationError):
                     rbac.retirement_plan(assignments, definitions, *args)
 
@@ -768,7 +767,7 @@ class RuntimeRoleTests(unittest.TestCase):
         for key in ["actions", "dataActions", "notActions"]:
             with self.subTest(key=key):
                 values = copy.deepcopy(self.fixtures())
-                values[1][1]["permissions"][0][key].append("unexpected")
+                values[1][0]["permissions"][0][key].append("unexpected")
                 with self.assertRaises(rbac.ReconciliationError):
                     rbac.retirement_plan(*values)
 
@@ -780,21 +779,30 @@ class RuntimeRoleTests(unittest.TestCase):
         self.assertNotIn("roleDefinitions", identity)
         self.assertNotIn("roleAssignments", acr)
         self.assertNotIn("'Contributor'", acr)
-        self.assertIn("resource communicationServiceAdminRoleAssignment", communication)
-        self.assertIn("principalId: aadAdminObjectId", communication)
-        self.assertIn("roleDefinitionId: emailSenderRole.id", communication)
+        self.assertNotIn("communicationServiceAdminRoleAssignment", communication)
+        self.assertNotIn("aadAdminObjectId", communication)
+        self.assertIn("09976791-48a7-449e-bb21-39d1a415f350", communication)
+        self.assertNotIn("resource emailSenderRole", communication)
         self.assertNotIn("principalId: identity.properties.principalId\n    principalType: 'ServicePrincipal'\n    roleDefinitionId:",
                          communication)
         self.assertIn("resource acrPullAssignment", (ROOT / "infra/modules/aca.bicep").read_text())
         hook = (ROOT / "scripts/hooks/postprovision.sh").read_text()
         self.assertIn('utilities/reconcile-runtime-rbac.py" --apply', hook)
         self.assertLess(hook.index('utilities/reconcile-runtime-rbac.py" --apply'), hook.index("Preparing the MCP"))
-        self.assertIn('ensure_project_role "$_USER_OID" User "$_CUSTOM_ROLE_NAME"', hook)
-        self.assertNotIn('ensure_project_role "$_MI_PRINCIPAL" ServicePrincipal "$_CUSTOM_ROLE_NAME"', hook)
-        self.assertIn(r"^AdventureWorks\ Foundry\ Agents\ [a-z0-9]{13}$", hook)
-        self.assertNotIn("contains(roleName", hook)
+        self.assertIn('ensure_project_role "$_USER_OID" User "19c28022-e58e-450d-a464-0b2a53034789"', hook)
+        dashboard = hook.split("# Check effective Aspire Dashboard permissions", 1)[1].split(
+            'echo "Preparing the MCP OAuth signing certificate..."', 1)[0]
+        self.assertIn("Microsoft.Authorization/permissions?api-version=2022-04-01", dashboard)
+        self.assertIn("Microsoft.App/managedEnvironments/write", dashboard)
+        self.assertNotIn("az role assignment create", dashboard)
+        self.assertNotIn('--role "Contributor"', dashboard)
+        self.assertNotIn("_CUSTOM_ROLE_NAME", hook)
+        webpubsub = (ROOT / "infra/modules/webpubsub.bicep").read_text()
+        aiservices = (ROOT / "infra/modules/aiservices.bicep").read_text()
+        self.assertNotIn("resource webPubSubRuntimeRole", webpubsub)
+        self.assertNotIn("resource foundryAgentsRoleDefinition", aiservices)
         self.assertIn("resource foundryAgentsProjectMiRoleAssignment",
-                      (ROOT / "infra/modules/aiservices.bicep").read_text())
+                      aiservices)
 
     def test_seed_readiness_checks_file_data_not_management_share_properties(self):
         source = (ROOT / "api-functions/Services/DependencyHealthService.cs").read_text()

@@ -83,7 +83,6 @@ module communication 'modules/communication.bicep' = {
   params: {
     communicationServiceName: 'av-comms-${resourceToken}'
     identityName: identityName
-    aadAdminObjectId: aadAdminObjectId
     dataLocation: 'United States'
     workspaceName: workspaceName
   }

@@ -82,6 +82,13 @@ azd env set imageModelFormat "OpenAI"
 
 ## 4. Provision and Deploy with `azd up`
 
+The deploying account needs Contributor plus the scoped role-assignment
+permissions documented in [infra/README.md](infra/README.md). The subscription-
+specific custom role definition is [azd-deployer-role.json](infra/azd-deployer-role.json);
+assign it only with the allowlist condition described there. If your subscription
+administrator needs a justification and grant commands, share
+[Deployer Permissions: Why Contributor Is Not Enough](docs/AZD_DEPLOYER_PERMISSIONS.md).
+
 From the repo root inside the Codespace:
 
 ```bash
@@ -239,7 +246,9 @@ Key responsibilities:
     added by this run, including on failure. Existing client rules are preserved.
     IP discovery can be overridden with `KEY_VAULT_CLIENT_IP` (or `SQL_CLIENT_IP`).
     The vault's default-deny firewall remains enabled throughout.
-- Configures Aspire Dashboard access by assigning Contributor role to the current user on the Container Apps Environment.
+- Checks whether the deployer has effective write access to the Container Apps
+  environment for Aspire Dashboard use. Existing Contributor access is used;
+  the hook does not create an additional role assignment.
 - Ensures the user‑assigned managed identity has the correct database permissions:
   - Connects to Azure SQL using the current user's Azure CLI credentials.
   - Executes `seed-job/sql/assign-database-roles.sql` to grant db_datareader, db_datawriter, and db_ddladmin roles to the managed identity.

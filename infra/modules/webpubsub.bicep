@@ -26,36 +26,12 @@ resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' = {
   }
 }
 
-resource webPubSubRuntimeRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
-  name: guid(resourceGroup().id, 'AdventureWorks Web PubSub Runtime')
-  properties: {
-    roleName: 'AdventureWorks Web PubSub Runtime ${uniqueString(resourceGroup().id)}'
-    description: 'Issue client capabilities and publish or inspect groups for the selected Web PubSub resource.'
-    type: 'customRole'
-    permissions: [
-      {
-        actions: []
-        notActions: []
-        dataActions: [
-          'Microsoft.SignalRService/WebPubSub/clientConnection/generateToken/action'
-          'Microsoft.SignalRService/WebPubSub/clientConnection/write'
-          'Microsoft.SignalRService/WebPubSub/group/send/action'
-          'Microsoft.SignalRService/WebPubSub/group/read'
-        ]
-        notDataActions: []
-      }
-    ]
-    assignableScopes: [
-      webPubSub.id
-    ]
-  }
-}
-
 resource webPubSubRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(webPubSub.id, identity.id, 'AdventureWorks Web PubSub Runtime')
+  name: guid(webPubSub.id, identity.id, '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
   scope: webPubSub
   properties: {
-    roleDefinitionId: webPubSubRuntimeRole.id
+    // Built-in Service Owner grants all Web PubSub data actions at this resource.
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
   }

@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -3043,49 +3044,151 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(auth.EvidenceError):
                 auth.assertion_evidence(auth.Report(root))
 
-    def test_email_management_exception_is_exact_not_a_name_only_allowlist(self):
+    def test_email_role_requires_the_exact_builtin_at_the_communication_resource(self):
         scope = "/subscriptions/test/resourceGroups/demo/providers/Microsoft.Communication/communicationServices/comms"
-        definition = {"roleName": "AdventureWorks Email Sender demo", "assignableScopes": [scope],
-                      "permissions": [{"actions": ["Microsoft.Communication/communicationServices/read",
-                                                   "Microsoft.Communication/communicationServices/write"],
-                                       "dataActions": [], "notActions": [], "notDataActions": []}]}
-        assignment = {"scope": scope, "principalId": "runtime"}
+        rule = json.loads(auth.CONTRACTS.read_text())["runtimeEmailRole"]
+        block = {"actions": ["Microsoft.Communication/CommunicationServices/write",
+                             "Microsoft.Communication/CommunicationServices/ListKeys/action"],
+                 "notActions": [], "dataActions": [], "notDataActions": []}
+        definition = {"name": rule["roleDefinitionId"], "roleName": rule["roleName"], "permissions": [block]}
+        assignment = {"roleDefinitionId": "/roles/" + rule["roleDefinitionId"],
+                      "roleDefinitionName": rule["roleName"], "scope": scope, "principalId": "runtime"}
         self.assertTrue(auth.reviewed_email_sender(definition, assignment, scope, "runtime"))
+        for drift in [{**block, "actions": block["actions"] + ["Microsoft.Authorization/roleAssignments/write"]},
+                      {**block, "actions": ["*"]}, {**block, "dataActions": ["Microsoft.Communication/*"]},
+                      {**block, "actions": []}]:
+            with self.subTest(drift=drift):
+                self.assertFalse(auth.reviewed_email_sender(
+                    {**definition, "permissions": [drift]}, assignment, scope, "runtime"))
         for key, value in [("scope", scope.rsplit("/providers/", 1)[0]), ("principalId", "other"),
-                           ("condition", "unknown"), ("conditionVersion", "2.0")]:
+                           ("condition", "unknown"), ("conditionVersion", "2.0"),
+                           ("roleDefinitionId", "/roles/owner"),
+                           ("roleDefinitionName", "Owner")]:
             with self.subTest(key=key):
                 self.assertFalse(auth.reviewed_email_sender(definition, {**assignment, key: value}, scope, "runtime"))
-        for block in [{"actions": ["Microsoft.Communication/*"]},
-                      {"actions": definition["permissions"][0]["actions"] + ["Microsoft.Communication/communicationServices/listKeys/action"]},
-                      {**definition["permissions"][0], "dataActions": ["*"]},
-                      {**definition["permissions"][0], "notActions": ["*/delete"]},
-                      {"actions": "*"}]:
-            with self.subTest(block=block):
-                self.assertFalse(auth.reviewed_email_sender({**definition, "permissions": [block]}, assignment, scope, "runtime"))
-        self.assertFalse(auth.reviewed_email_sender({**definition, "assignableScopes": [scope, "/subscriptions/test"]},
-                                                   assignment, scope, "runtime"))
+        for key, value in [("name", "owner"), ("roleName", "Owner")]:
+            with self.subTest(key=key):
+                self.assertFalse(auth.reviewed_email_sender({**definition, key: value}, assignment, scope, "runtime"))
 
-    def test_webpubsub_runtime_role_requires_exact_resource_principal_and_permissions(self):
+    def test_deployer_role_allowlist_matches_infrastructure_role_assignments(self):
+        contracts = json.loads(auth.CONTRACTS.read_text())
+        allowlist_path = auth.ROOT / "infra/azd-role-assignment-allowlist.json"
+        allowlist = json.loads(allowlist_path.read_text())["roleDefinitionIds"]
+        self.assertCountEqual(contracts["azdRoleAssignmentAllowlist"], allowlist.values())
+
+        allowed_ids = {value.lower() for value in allowlist.values()}
+        privileged = {value.lower() for value in contracts["azdPrivilegedRoleDefinitionIds"].values()}
+        self.assertFalse(allowed_ids & privileged)
+
+        deployer = json.loads((auth.ROOT / "infra/azd-deployer-role.json").read_text())
+        self.assertCountEqual(deployer["Actions"], [
+            "Microsoft.Authorization/roleAssignments/write", "Microsoft.Authorization/roleAssignments/delete"])
+        self.assertEqual([deployer[key] for key in ["NotActions", "DataActions", "NotDataActions"]], [[], [], []])
+
+        guid = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+        referenced = set()
+        bicep_files = list((auth.ROOT / "infra").rglob("*.bicep"))
+        self.assertTrue(bicep_files)
+        for path in bicep_files:
+            text = path.read_text()
+            with self.subTest(bicep=path.name):
+                self.assertNotRegex(text, r"'Microsoft\.Authorization/roleDefinitions@")
+                variables = dict(re.findall(r"var\s+(\w+)\s*=\s*'(" + guid + ")'", text, re.IGNORECASE))
+                references = re.findall(r"roleDefinitionId(?:OrName)?:\s*(.+)", text)
+                for reference in references:
+                    literal = re.search(r"'(" + guid + ")'", reference, re.IGNORECASE)
+                    variable = re.search(r"roleDefinitions',\s*(\w+)\)", reference)
+                    name = re.fullmatch(r"'([^']+)'\s*", reference)
+                    if literal:
+                        referenced.add(literal.group(1).lower())
+                    elif variable and variable.group(1) in variables:
+                        referenced.add(variables[variable.group(1)].lower())
+                    elif name and name.group(1) in allowlist:
+                        referenced.add(allowlist[name.group(1)].lower())
+                    else:
+                        self.fail(f"Unresolved or unallowlisted role reference in {path.name}: {reference}")
+
+        hooks = list((auth.ROOT / "scripts/hooks").glob("*.sh"))
+        for path in hooks:
+            text = path.read_text()
+            with self.subTest(hook=path.name):
+                self.assertNotRegex(text, r"az\s+role\s+definition\s+(create|update)")
+                for role in re.findall(r"--role\s+\"([^\"$]+)\"", text):
+                    referenced.add(allowlist[role].lower() if role in allowlist else role.lower())
+                for role in re.findall(r"ensure_project_role\s+\"\$\w+\"\s+\w+\s+\"(" + guid + ")\"", text,
+                                       re.IGNORECASE):
+                    referenced.add(role.lower())
+                for loop in re.findall(r"for\s+_\w*role\w*\s+in\s+([^;]+);", text):
+                    referenced.update(item.lower() for item in re.findall(guid, loop, re.IGNORECASE))
+        self.assertTrue(referenced)
+        self.assertLessEqual(referenced, allowed_ids)
+        self.assertEqual(allowed_ids - referenced, set(), "Remove allowlisted roles that nothing assigns")
+
+    def test_reviewed_builtin_data_roles_fail_on_permission_drift(self):
+        contracts = json.loads(auth.CONTRACTS.read_text())
+        for key in ["runtimeWebPubSubRole", "runtimeFoundryDataRole"]:
+            rule = contracts[key]
+            block = {"actions": [], "notActions": [], "dataActions": list(rule["dataActions"]), "notDataActions": []}
+            with self.subTest(role=key):
+                self.assertTrue(auth.builtin_role_shape_matches({"permissions": [block]}, rule))
+                for drift in [{**block, "actions": ["Microsoft.CognitiveServices/accounts/listKeys/action"]},
+                              {**block, "dataActions": block["dataActions"] + ["*"]},
+                              {**block, "condition": "x"}]:
+                    self.assertFalse(auth.builtin_role_shape_matches({"permissions": [drift]}, rule))
+                self.assertFalse(auth.builtin_role_shape_matches({"permissions": [block, block]}, rule))
+                self.assertFalse(auth.builtin_role_shape_matches({}, rule))
+
+    def test_azd_principal_assignments_must_use_the_deployer_allowlist(self):
+        group = "/subscriptions/s/resourceGroups/rg"
+        allow = ["acdd72a7-3385-48ef-bd42-f606fba81ae7"]
+
+        def item(principal, role, scope, name="Role"):
+            return {"principalId": principal, "roleDefinitionId": "/roles/" + role,
+                    "roleDefinitionName": name, "scope": scope}
+
+        clean = [item("runtime", allow[0], group + "/providers/x/y/z"),
+                 item("deployer", allow[0].upper(), group),
+                 item("other", "8e3af657-a8ff-443c-a75c-2fe8c4bcb635", group),
+                 item("runtime", "8e3af657-a8ff-443c-a75c-2fe8c4bcb635", "/subscriptions/s"),
+                 item("runtime", "8e3af657-a8ff-443c-a75c-2fe8c4bcb635", group + "-other")]
+        self.assertEqual(auth.azd_role_assignment_violations(clean, group, ["RUNTIME", "deployer"], allow), [])
+        bad = clean + [item("deployer", "8e3af657-a8ff-443c-a75c-2fe8c4bcb635", group + "/providers/a/b/c", "Owner")]
+        self.assertEqual(auth.azd_role_assignment_violations(bad, group, ["runtime", "deployer"], allow),
+                         ["Owner at /providers/a/b/c"])
+        with self.assertRaises(auth.EvidenceError):
+            auth.azd_role_assignment_violations(["bad"], group, ["runtime"], allow)
+
+    def test_template_custom_roles_are_detected_only_when_scoped_to_the_selected_group(self):
+        group = "/subscriptions/s/resourceGroups/rg"
+        definitions = [
+            {"roleType": "CustomRole", "roleName": "tenant", "assignableScopes": ["/subscriptions/s"]},
+            {"roleType": "CustomRole", "roleName": "mixed", "assignableScopes": [group, "/subscriptions/s"]},
+            {"roleType": "BuiltInRole", "roleName": "Reader", "assignableScopes": [group]},
+            {"roleType": "CustomRole", "roleName": "sibling", "assignableScopes": [group + "2"]},
+            {"roleType": "CustomRole", "roleName": "demo", "assignableScopes": [group + "/providers/a/b/c"]},
+        ]
+        self.assertEqual(auth.demo_custom_role_definitions(definitions, group), ["demo"])
+
+    def test_webpubsub_role_requires_exact_builtin_at_the_webpubsub_resource(self):
         scope = "/subscriptions/test/resourceGroups/demo/providers/Microsoft.SignalRService/webPubSub/pubsub"
-        actions = json.loads(auth.CONTRACTS.read_text())["runtimeWebPubSubRole"]["dataActions"]
+        rule = json.loads(auth.CONTRACTS.read_text())["runtimeWebPubSubRole"]
+        actions = rule["dataActions"]
         block = {"actions": [], "notActions": [], "dataActions": actions, "notDataActions": []}
-        definition = {"roleName": "AdventureWorks Web PubSub Runtime demo", "roleType": "CustomRole",
-                      "assignableScopes": [scope], "permissions": [block]}
-        assignment = {"scope": scope, "principalId": "runtime"}
+        definition = {"name": rule["roleDefinitionId"], "roleName": rule["roleName"],
+                      "permissions": [block]}
+        assignment = {"roleDefinitionId": "/roles/" + rule["roleDefinitionId"],
+                      "roleDefinitionName": rule["roleName"], "scope": scope, "principalId": "runtime"}
         self.assertTrue(auth.reviewed_webpubsub_runtime(definition, assignment, scope, "runtime"))
         self.assertTrue(auth.reviewed_webpubsub_runtime(
             {**definition, "permissions": [{**block, "dataActions": [action.lower() for action in actions]}]},
             {**assignment, "scope": scope.upper(), "principalId": "RUNTIME"}, scope, "runtime"))
         for variant in [
-                {**definition, "roleType": "BuiltInRole"},
-                {**definition, "roleName": "Web PubSub Service Owner"},
-                {**definition, "assignableScopes": [scope, "/subscriptions/test"]},
+                {**definition, "name": "owner"},
+                {**definition, "roleName": "Owner"},
                 {**definition, "permissions": [block, block]},
                 {**definition, "permissions": [{**block, "actions": ["*"]}]},
                 {**definition, "permissions": [{**block, "actions": None}]},
-                {**definition, "permissions": [{**block, "dataActions": actions[:-1]}]},
-                {**definition, "permissions": [{**block, "dataActions": actions + ["*"]}]},
-                {**definition, "permissions": [{**block, "dataActions": actions[:-1] + [actions[0]]}]},
+                {**definition, "permissions": [{**block, "dataActions": []}]},
                 {**definition, "permissions": [{**block, "notDataActions": ["*/delete"]}]},
                 {**definition, "permissions": [{**block, "condition": "unknown"}]},
         ]:
@@ -3094,6 +3197,8 @@ class ContractTests(unittest.TestCase):
         for variant in [{**assignment, "scope": "/subscriptions/test"},
                         {**assignment, "principalId": "other"},
                         {**assignment, "principalId": None},
+                        {**assignment, "roleDefinitionId": "/roles/owner"},
+                        {**assignment, "roleDefinitionName": "Owner"},
                         {**assignment, "condition": "unknown"},
                         {**assignment, "conditionVersion": "2.0"}]:
             with self.subTest(assignment=variant):
@@ -3110,7 +3215,9 @@ class ContractTests(unittest.TestCase):
             with self.subTest(action=action):
                 definition = {"permissions": [{"dataActions": [action], "notDataActions": []}]}
                 self.assertEqual(auth.unreviewed_webpubsub_data_grants(definition), [action])
-                self.assertEqual(auth.unreviewed_webpubsub_data_grants(definition, reviewed_role=True), [action])
+                expected_reviewed = [] if action in allowed else [action]
+                self.assertEqual(
+                    auth.unreviewed_webpubsub_data_grants(definition, reviewed_role=True), expected_reviewed)
         definition = {"permissions": [{"dataActions": ["Microsoft.CognitiveServices/*",
                                                        "Microsoft.SignalRService/SignalR/*"],
                                        "notDataActions": []}]}
@@ -3132,7 +3239,7 @@ class ContractTests(unittest.TestCase):
                 auth.role_scope_overlaps(scope, target)
 
     @unittest.skipUnless(shutil.which("az"), "Azure CLI is required to compile Bicep")
-    def test_webpubsub_bicep_assigns_the_exact_reviewed_role(self):
+    def test_webpubsub_bicep_assigns_builtin_service_owner_without_custom_role_definition(self):
         version = subprocess.run(["az", "bicep", "version"], capture_output=True, text=True, timeout=30)
         if version.returncode:
             self.skipTest("An installed Bicep compiler is required")
@@ -3145,19 +3252,11 @@ class ContractTests(unittest.TestCase):
         service = resources["Microsoft.SignalRService/webPubSub"]["properties"]
         self.assertTrue(service["disableLocalAuth"])
         self.assertFalse(service["disableAadAuth"])
-        role = resources["Microsoft.Authorization/roleDefinitions"]
         assignment = resources["Microsoft.Authorization/roleAssignments"]
-        self.assertEqual(role["properties"]["type"], "customRole")
-        self.assertEqual(role["properties"]["assignableScopes"], [assignment["scope"]])
+        self.assertNotIn("Microsoft.Authorization/roleDefinitions", resources)
         self.assertIn("Microsoft.SignalRService/webPubSub", assignment["scope"])
-        self.assertIn(role["name"].strip("[]"), assignment["properties"]["roleDefinitionId"])
-        block = role["properties"]["permissions"][0]
-        self.assertEqual(len(role["properties"]["permissions"]), 1)
-        self.assertEqual(block["actions"], [])
-        self.assertEqual(block["notActions"], [])
-        self.assertEqual(block["notDataActions"], [])
-        self.assertCountEqual(
-            block["dataActions"], json.loads(auth.CONTRACTS.read_text())["runtimeWebPubSubRole"]["dataActions"])
+        role_id = json.loads(auth.CONTRACTS.read_text())["runtimeWebPubSubRole"]["roleDefinitionId"]
+        self.assertIn(role_id, assignment["properties"]["roleDefinitionId"])
 
     def test_role_permissions_detect_custom_wildcards_and_case_insensitive_key_access(self):
         grants = auth.sensitive_management_grants({"permissions": [{
@@ -7308,19 +7407,21 @@ trigger:
                 self.assertFalse(auth.seed_sql_admin_matches(
                     {**sql_admin, key: value}, identity, "tenant-id"))
 
-    def test_foundry_custom_role_must_be_unique_source_named_and_project_scoped(self):
+    def test_foundry_data_role_must_be_the_approved_builtin_at_project_scope(self):
         project = ("/subscriptions/test/resourceGroups/demo/providers/Microsoft.CognitiveServices/"
                    "accounts/ai/projects/project")
-        role = {"roleDefinitionName": "AdventureWorks Foundry Agents abc123def4567",
-                "scope": project}
-        self.assertTrue(auth.foundry_custom_role_assignment_matches_source([role], project))
+        rule = json.loads(auth.CONTRACTS.read_text())["runtimeFoundryDataRole"]
+        role = {"roleDefinitionName": rule["roleName"],
+                "roleDefinitionId": "/roles/" + rule["roleDefinitionId"], "scope": project}
+        self.assertTrue(auth.foundry_data_role_assignment_matches_source([role], project))
         for assignments in [
-                [role, {**role, "roleDefinitionName": "AdventureWorks Foundry Agents Reader"}],
-                [{**role, "roleDefinitionName": "AdventureWorks Foundry Agents Reader"}],
+                [role, {**role, "scope": project + "/child"}],
+                [{**role, "roleDefinitionName": "Foundry Project Manager"}],
+                [role, {"roleDefinitionName": "AdventureWorks Foundry Agents Reader", "scope": project}],
                 [{**role, "scope": project.rsplit("/", 1)[0]}],
                 [{"roleDefinitionName": None, "scope": project}]]:
             with self.subTest(assignments=assignments):
-                self.assertFalse(auth.foundry_custom_role_assignment_matches_source(
+                self.assertFalse(auth.foundry_data_role_assignment_matches_source(
                     assignments, project))
 
     def test_foundry_builtin_role_assignments_match_exact_account_and_project_scopes(self):
@@ -7330,12 +7431,15 @@ trigger:
             {"roleDefinitionName": "Cognitive Services OpenAI User", "scope": account},
             {"roleDefinitionName": "Azure AI Developer", "scope": account},
             {"roleDefinitionName": "Azure AI Developer", "scope": project},
+            {"roleDefinitionName": "Cognitive Services Data Contributor (Preview)", "scope": project},
         ]
         self.assertTrue(auth.foundry_builtin_role_assignments_match_source(
             assignments, account, project))
         for invalid in [
                 assignments + [{"roleDefinitionName": "Azure AI Developer", "scope": "/"}],
                 assignments + [assignments[0]],
+                assignments + [{"roleDefinitionName": "Cognitive Services Data Contributor (Preview)",
+                                "scope": account}],
                 assignments + [{"roleDefinitionName": "Cognitive Services OpenAI Contributor", "scope": account}],
                 [{"roleDefinitionName": "Cognitive Services OpenAI Contributor", "scope": account}, *assignments[1:]],
                 assignments[:-1],
