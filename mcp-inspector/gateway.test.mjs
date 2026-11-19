@@ -52,8 +52,8 @@ async function fixture(t) {
     request.end(options.body);
   });
   function cookies(response) { return response.headers.getSetCookie().map(value => value.split(";")[0]).join("; "); }
-  async function begin() {
-    const response = await call("/auth/login");
+  async function begin(cookie) {
+    const response = await call("/auth/login", { cookie });
     assert.equal(response.status, 303);
     const logout = new URL(response.headers.get("location"));
     assert.equal(logout.pathname, "/logout");
@@ -271,4 +271,39 @@ test("logout during an in-flight OAuth exchange cannot resurrect the abandoned s
   const response = await callback;
   assert.equal(response.status, 403);
   assert.equal(response.headers.get("set-cookie"), null);
+});
+
+test("a different user's replacement login cancels an in-flight OAuth exchange without disturbing the new session", async t => {
+  const f = await fixture(t), oldFlow = await f.begin();
+  let release, started;
+  const pendingExchange = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  const exchange = f.authorization.exchange;
+  f.authorization.exchange = async (...args) => {
+    const token = await exchange(...args);
+    if (args[0] === "stale") {
+      started();
+      await pendingExchange;
+    }
+    return token;
+  };
+  const callback = f.call("/oauth/callback?state=" + oldFlow.authorize.searchParams.get("state") +
+    "&code=stale", { cookie: oldFlow.cookie });
+  try {
+    await entered;
+    const replacement = await f.begin(oldFlow.cookie);
+    f.subject("employee-2");
+    const currentCookie = await f.finish(replacement);
+    assert.equal((await f.call("/proxy/config", { cookie: currentCookie })).status, 200);
+    release();
+    const stale = await callback;
+    assert.equal(stale.status, 403);
+    assert.equal((await stale.json()).error, "oauth_flow_expired_or_cancelled");
+    assert.equal(stale.headers.get("set-cookie"), null);
+    assert.equal((await f.call("/proxy/config", { cookie: oldFlow.cookie })).status, 401);
+    assert.equal((await f.call("/proxy/config", { cookie: currentCookie })).status, 200);
+  } finally {
+    release();
+    await callback;
+  }
 });

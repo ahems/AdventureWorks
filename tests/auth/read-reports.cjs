@@ -54,7 +54,7 @@
           !/^[0-9a-f]{64}$/.test(entry.sha256)) throw new Error("InvalidReportManifest");
       total += entry.bytes;
     }
-    if (total > 1024 * 1024) throw new Error("ReportTransferExceedsReviewedBound");
+    if (total > 4 * 1024 * 1024) throw new Error("ReportTransferExceedsReviewedBound");
     const artifacts = {};
     for (const name of names) {
       const data = await read(name, manifest[name].bytes);

@@ -63,7 +63,8 @@ public class PromotionAgentService
         string? categoryName = null,
         int? subcategoryId = null,
         string? subcategoryName = null,
-        string? previousResponseId = null)
+        string? previousResponseId = null,
+        string? conversationOwner = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("PromotionAgent.Generate");
         operation.Telemetry.Properties["PromotionType"] = promotionType;
@@ -119,6 +120,7 @@ public class PromotionAgentService
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
                 toolChoice: "none",
+                conversationOwner: conversationOwner,
                 additionalInstructions:
                     "For this invocation, the server has already executed the promotion product query. " +
                     "Do not call GetProductsForPromotion or any other tool, regardless of earlier tool instructions. " +

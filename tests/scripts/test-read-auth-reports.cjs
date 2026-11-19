@@ -16,13 +16,13 @@ async function readReports(defect) {
   if (defect === "boundary-valid" || defect === "boundary-exceeded") {
     const others = Object.entries(files).filter(([name]) => name !== "report.pdf")
       .reduce((sum, [, data]) => sum + data.length, 0);
-    files["report.pdf"] = Buffer.alloc(1024 * 1024 - others + (defect === "boundary-exceeded" ? 1 : 0));
+    files["report.pdf"] = Buffer.alloc(4 * 1024 * 1024 - others + (defect === "boundary-exceeded" ? 1 : 0));
   }
   const manifest = Object.fromEntries(Object.entries(files).map(([name, data]) =>
     [name, { bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") }]));
   if (defect === "checksum") manifest["report.pdf"].sha256 = "a".repeat(64);
   if (defect === "missing") delete manifest["report.pdf"];
-  if (defect === "oversized") manifest["report.pdf"].bytes = 1024 * 1024 + 1;
+  if (defect === "oversized") manifest["report.pdf"].bytes = 4 * 1024 * 1024 + 1;
   const token = "header." + Buffer.from(JSON.stringify({
     oid: defect === "identity" ? "foreign" : config.principalId, tid: config.tenantId,
   })).toString("base64url") + ".private-token-fixture";
@@ -67,7 +67,7 @@ test("private reports use explicit runtime MI, exact run prefix, bounded hashes 
 });
 
 test("private recovery accepts expanded reports within the reviewed bound", async () => {
-  for (const [fixture, expected] of [["large-valid", 800000], ["boundary-valid", 1024 * 1024]]) {
+  for (const [fixture, expected] of [["large-valid", 800000], ["boundary-valid", 4 * 1024 * 1024]]) {
     const { document } = await readReports(fixture);
     assert.ok(document.checks.every(check => check.status === "PASS"));
     assert.equal(Object.values(document.artifacts).reduce((sum, item) => sum + item.bytes, 0), expected);

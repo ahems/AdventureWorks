@@ -5,7 +5,7 @@ namespace AdventureWorks.Auth;
 
 public sealed record McpTaskOwner(string Subject, string Application, string Category, string Tool, string RequiredScope);
 
-public sealed class McpTaskOwnership
+public sealed class McpTaskOwnership(AuthorizationServerOptions options)
 {
     private sealed record Binding(CallerContext Caller, string? Tool, ILogger Logger);
     private readonly AsyncLocal<Binding?> _current = new();
@@ -28,7 +28,8 @@ public sealed class McpTaskOwnership
         var binding = RequireCaller();
         var policy = ToolAuthorizationRegistry.Find(binding.Tool ?? "");
         if (policy is null || !binding.Caller.HasScope(policy.RequiredScope) ||
-            policy.Mode == ToolAccessMode.InternalOnly && binding.Caller.IsConsumer)
+            policy.Mode == ToolAccessMode.InternalOnly && binding.Caller.IsConsumer ||
+            !IsServiceToolAllowed(binding, policy.Tool))
             throw Denied(binding, "create");
         return new(binding.Caller.Subject, binding.Caller.Application!, binding.Caller.Category,
             policy.Tool, policy.RequiredScope);
@@ -43,9 +44,15 @@ public sealed class McpTaskOwnership
             policy.Mode == ToolAccessMode.InternalOnly && binding.Caller.IsConsumer ||
             owner.Subject != binding.Caller.Subject || owner.Application != binding.Caller.Application ||
             owner.Category != binding.Caller.Category ||
-            !binding.Caller.HasScope(owner.RequiredScope))
+            !binding.Caller.HasScope(owner.RequiredScope) ||
+            !IsServiceToolAllowed(binding, policy.Tool))
             throw Denied(binding, "access");
     }
+
+    private bool IsServiceToolAllowed(Binding binding, string tool) =>
+        binding.Caller.Category != UserCategories.Service ||
+        binding.Caller.Application == AuthorizationServerOptions.ServiceClientId &&
+        ServicePrincipalPolicy.CanCall(options, binding.Caller.Subject, tool);
 
     private Binding RequireCaller()
     {

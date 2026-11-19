@@ -175,7 +175,13 @@ public sealed class ManagedIdentityAssertionValidatorTests : IDisposable
     {
         using var factory = new OAuthTestFactory();
         using var server = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
-            services.Replace(ServiceDescriptor.Singleton<IServiceAssertionValidator>(_validator))));
+        {
+            var options = (AuthorizationServerOptions)services
+                .Single(descriptor => descriptor.ServiceType == typeof(AuthorizationServerOptions)).ImplementationInstance!;
+            options.TrustedServicePrincipalIds.Add(Principal);
+            options.FunctionsServicePrincipalId = Principal;
+            services.Replace(ServiceDescriptor.Singleton<IServiceAssertionValidator>(_validator));
+        }));
         using var client = server.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,

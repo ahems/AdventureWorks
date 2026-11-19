@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using api_functions.Models;
 using Azure.Core;
 using McpTools;
 using Xunit;
@@ -47,6 +48,19 @@ public class ManufacturingMcpAuthenticationTests
     }
 
     [Fact]
+    public async Task Omitted_response_scope_means_the_requested_scope_set()
+    {
+        using var handler = new TokenHandler
+        {
+            Body = """{"access_token":"service-token","token_type":"Bearer","expires_in":600}"""
+        };
+        using var http = new HttpClient(handler);
+        var authentication = new McpServiceAuthentication(new TestCredential(), http, "https://mcp.example.test/mcp");
+
+        Assert.Equal("Bearer service-token", await authentication.GetTokenAsync("ReadOnly", default));
+    }
+
+    [Fact]
     public void Read_and_proposal_modes_do_not_receive_write_scopes()
     {
         foreach (var mode in new[] { "ReadOnly", "ProposePending" })
@@ -57,17 +71,51 @@ public class ManufacturingMcpAuthenticationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => McpServiceAuthentication.GetScopesForMode("unexpected"));
     }
 
+    [Theory]
+    [InlineData("ReadOnly")]
+    [InlineData("ProposePending")]
+    public void Read_and_proposal_modes_do_not_offer_autonomous_write_tools(string mode)
+    {
+        var tools = McpServiceAuthentication.GetToolsForMode(mode);
+        Assert.Contains("get_order_details", tools);
+        Assert.Contains("get_production_feasibility", tools);
+        Assert.DoesNotContain("begin_manufacturing_run", tools);
+        Assert.DoesNotContain("place_supply_order", tools);
+        Assert.Equal(tools.Length, tools.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void Autonomous_mode_offers_write_tools_and_unknown_modes_fail_closed()
+    {
+        var readTools = McpServiceAuthentication.GetToolsForMode("ReadOnly");
+        var autonomousTools = McpServiceAuthentication.GetToolsForMode("FullyAutonomous");
+        Assert.Equal(
+            new[] { "begin_manufacturing_run", "place_supply_order" },
+            autonomousTools.Except(readTools, StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        Assert.Empty(readTools.Except(autonomousTools, StringComparer.Ordinal));
+        Assert.Throws<ArgumentOutOfRangeException>(() => McpServiceAuthentication.GetToolsForMode("unexpected"));
+    }
+
     [Fact]
     public void Manufacturing_invocation_mode_is_parsed_fail_closed()
     {
-        Assert.Equal("ReadOnly", McpServiceAuthentication.GetModeFromMessages(["order\nMode=ReadOnly (0)\nrun"]));
-        Assert.Equal("FullyAutonomous",
-            McpServiceAuthentication.GetModeFromMessages(["Mode=FullyAutonomous (2)"]));
         Assert.Throws<InvalidOperationException>(() => McpServiceAuthentication.GetModeFromMessages(["order only"]));
         Assert.Throws<InvalidOperationException>(() =>
-            McpServiceAuthentication.GetModeFromMessages(["Mode=ReadOnly (0)", "Mode=FullyAutonomous (2)"]));
+            McpServiceAuthentication.GetModeFromMessages(["Mode=ReadOnly (1)", "Mode=FullyAutonomous (3)"]));
         Assert.Throws<InvalidOperationException>(() =>
             McpServiceAuthentication.GetModeFromMessages(["Mode=FullyAutonomous (1)"]));
+        Assert.Throws<InvalidOperationException>(() =>
+            McpServiceAuthentication.GetModeFromMessages([$"Mode={ManufacturingAgentMode.Off} ({(int)ManufacturingAgentMode.Off})"]));
+    }
+
+    [Theory]
+    [InlineData(ManufacturingAgentMode.ReadOnly)]
+    [InlineData(ManufacturingAgentMode.ProposePending)]
+    [InlineData(ManufacturingAgentMode.FullyAutonomous)]
+    public void Hosted_agent_accepts_the_actual_queue_trigger_mode_format(ManufacturingAgentMode mode)
+    {
+        var message = $"order\nMode={mode} ({(int)mode})\nrun";
+        Assert.Equal(mode.ToString(), McpServiceAuthentication.GetModeFromMessages([message]));
     }
 
     [Theory]
@@ -94,7 +142,10 @@ public class ManufacturingMcpAuthenticationTests
     [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":0}""")]
     [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":"600"}""")]
     [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600,"scope":"mcp.access"}""")]
-    [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600}""")]
+    [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600,"scope":null}""")]
+    [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600,"scope":123}""")]
+    [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600,"scope":""}""")]
+    [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600,"scope":"mcp.access products.read orders.read inventory.read manufacturing.read manufacturing.write"}""")]
     public async Task Invalid_token_response_never_reaches_mcp_tools(string body)
     {
         using var handler = new TokenHandler { Body = body };
@@ -124,6 +175,39 @@ public class ManufacturingMcpAuthenticationTests
         var authentication = new McpServiceAuthentication(credential, http, "http://mcp.example.test/mcp");
         await Assert.ThrowsAsync<InvalidOperationException>(() => authentication.GetTokenAsync("ReadOnly", default));
         Assert.Equal(0, credential.Requests);
+    }
+
+    [Theory]
+    [InlineData("query")]
+    [InlineData("fragment")]
+    [InlineData("userinfo")]
+    [InlineData("empty-userinfo")]
+    [InlineData("dot-segment")]
+    [InlineData("escaped-dot-segment")]
+    [InlineData("backslash")]
+    public async Task Ambiguous_endpoint_is_rejected_before_credentials_are_acquired(string defect)
+    {
+        var url = defect switch
+        {
+            "query" => "https://mcp.example.test/mcp?destination=other",
+            "fragment" => "https://mcp.example.test/mcp#fragment",
+            "userinfo" => "https://user@mcp.example.test/mcp",
+            "empty-userinfo" => "https://@mcp.example.test/mcp",
+            "dot-segment" => "https://mcp.example.test/a/../mcp",
+            "escaped-dot-segment" => "https://mcp.example.test/a/%2e%2e/mcp",
+            "backslash" => "https://mcp.example.test\\@other.test/mcp",
+            _ => throw new ArgumentOutOfRangeException(nameof(defect))
+        };
+        var credential = new TestCredential();
+        using var handler = new TokenHandler();
+        using var http = new HttpClient(handler);
+        var authentication = new McpServiceAuthentication(credential, http, url);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            authentication.GetTokenAsync("ReadOnly", default));
+        Assert.Contains("MCP_SERVICE_URL", error.Message);
+        Assert.Equal(0, credential.Requests);
+        Assert.Empty(handler.Requests);
     }
 
     private sealed class TestCredential : TokenCredential

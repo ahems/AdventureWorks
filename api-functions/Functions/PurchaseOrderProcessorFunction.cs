@@ -210,21 +210,12 @@ public class PurchaseOrderProcessorFunction
         try
         {
             if (_cachedQueueClient != null) return _cachedQueueClient;
-            string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-            QueueClient client;
-            if (!string.IsNullOrEmpty(queueUri))
-            {
-                var svc = new QueueServiceClient(
-                    new Uri(queueUri),
-                    new Azure.Identity.DefaultAzureCredential());
-                client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
-            }
-            else
-            {
-                string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
-                client = new QueueClient(connStr, SupplyChainService.QUEUE_NAME,
-                    new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
-            }
+            string queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri")
+                ?? throw new InvalidOperationException("AzureWebJobsStorage__queueServiceUri is not configured");
+            var svc = new QueueServiceClient(
+                new Uri(queueUri),
+                new Azure.Identity.DefaultAzureCredential());
+            QueueClient client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
             _cachedQueueClient = client;
             return client;
         }

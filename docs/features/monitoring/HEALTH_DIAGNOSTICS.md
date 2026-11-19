@@ -102,7 +102,14 @@ other callers, and missing/unverifiable identity is not treated as a pass.
 Functions caches the report per process for 60 seconds and coalesces simultaneous
 requests. Each dependency is bounded to 20 seconds. MCP `/ready` likewise caches
 for 60 seconds, bounds its checks to 12 seconds, and returns sanitized JSON with
-HTTP 200/503. MCP `/health` and `/alive` remain liveness probes so dependency outages
+HTTP 200/503. Its `sql` and `tasks` checks are required; the optional
+`sql-identity` check compares the external principal on a separate MCP SQL
+connection with `AZURE_CLIENT_ID` without exposing either identifier. It is
+`not-configured` when local identity configuration is absent and does not change
+core readiness. The assurance runner independently binds the selected MCP
+ingress, ready revision, attached identity and SQL server/database before and
+after the read. This samples one connection, not every tool or SQL permission.
+MCP `/health` and `/alive` remain liveness probes so dependency outages
 do not create restart loops. The Functions backend probes MCP, avoiding extra
 browser CORS requirements.
 

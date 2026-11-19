@@ -54,5 +54,10 @@ jq -e '
   all(.checks[] | select(.id | endswith("-identity")); .required == false) and
   all($required[]; .status == "healthy")
 ' "$temporary_dir/functions.json" >/dev/null
-jq -e '[.checks[].id] | sort == ["sql", "tasks"]' "$temporary_dir/mcp.json" >/dev/null
+jq -e '
+  ([.checks[].id] | sort) == ["sql", "sql-identity", "tasks"] and
+  all(.checks[]; (.required | type) == "boolean") and
+  ([.checks[] | select(.required) | .id] | sort) == ["sql", "tasks"] and
+  all(.checks[] | select(.required); .status == "healthy")
+' "$temporary_dir/mcp.json" >/dev/null
 echo "Health diagnostics smoke test passed (read-only; no inference or mutations)."

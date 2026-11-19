@@ -30,6 +30,10 @@
     "AutoPromotion_GetConfig": "auto-promotion/config",
     "CheckOrderReceipt": "orders/{salesOrderId:int}/receipt-status",
     "DownloadOrderReceipt": "orders/{salesOrderId:int}/receipt",
+    "ExportManufacturingIllustrations": {
+      "route": "manufacturing/illustrations/export",
+      "methods": ["GET", "POST"]
+    },
     "GetAddressById": "addresses/{id:int}",
     "GetAddresses": "addresses",
     "GetCustomerCountryBreakdown": "customer-country-breakdown",
@@ -90,6 +94,46 @@
     "WarehouseMetrics": "warehouse/metrics",
     "WarehouseWorkforceDetail": "warehouse/workforce/detail"
   },
+  "sideEffectingFunctionReads": {
+    "ArchiveTransactionHistoryHttp": {"route": "archive/trigger", "reason": "archives transaction history"},
+    "BankGetAccount": {"route": "bank/accounts/{currencyCode}", "reason": "bank initialization can seed accounts and transactions"},
+    "BankGetAccounts": {"route": "bank/accounts", "reason": "bank initialization can seed accounts and transactions"},
+    "BankGetCurrencies": {"route": "bank/currencies", "reason": "bank initialization can seed accounts and transactions"},
+    "BankGetStatus": {"route": "bank/status", "reason": "bank initialization can seed accounts and transactions"},
+    "BankGetTransactions": {"route": "bank/transactions", "reason": "bank initialization can seed accounts and transactions"},
+    "BankGetTransactionsByCurrency": {"route": "bank/transactions/{currencyCode}", "reason": "bank initialization can seed accounts and transactions"},
+    "FinancialManufacturing": {"route": "financials/manufacturing", "reason": "bank initialization can seed accounts and transactions"},
+    "FinancialProcurement": {"route": "financials/procurement", "reason": "bank initialization can seed accounts and transactions"},
+    "FinancialSummary": {"route": "financials/summary", "reason": "bank initialization can seed accounts and transactions"},
+    "GetManufacturingAgentConfig": {"route": "manufacturing/agent-config", "reason": "enforces auto-shutoff by switching the agent off"},
+    "GetManufacturingProposals": {"route": "manufacturing/proposals", "reason": "auto-rejects expired or excess proposals"},
+    "GetVerifiedReviewsStatus": {"route": "generate-verified-reviews/status", "reason": "can reset and save stale job state"},
+    "ManufacturingStatus": {"route": "manufacturing/status", "reason": "prunes stale shortage records"},
+    "ManufacturingWorkforce": {"route": "manufacturing/workforce", "reason": "workforce initialization can seed workforce table rows"},
+    "ManufacturingWorkforceDetail": {"route": "manufacturing/workforce/detail", "reason": "workforce initialization can seed workforce table rows"},
+    "OrderDelivery_HttpTrigger": {"route": "orders/delivery/trigger", "reason": "promotes shipped orders to delivered"},
+    "PlanFeasibility": {"route": "plan/feasibility/{productId:int}", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "PlanFeasibilityAll": {"route": "plan/feasibility", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "PlanReorderRecommendations": {"route": "plan/reorder-recommendations", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "ReviewModeration_Status": {"route": "reviews/moderation/status", "reason": "can reset stale moderation job state"},
+    "SupplyChainGetCatalog": {"route": "supply/catalog", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "SupplyChainGetCatalogByProduct": {"route": "supply/catalog/{productId:int}", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "SupplyChainGetQuote": {"route": "supply/quote", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "SupplyChainGetVendor": {"route": "supply/vendors/{vendorId}", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "SupplyChainGetVendors": {"route": "supply/vendors", "reason": "supply-chain initialization processes purchase orders and seeds vendor stock"},
+    "TranslateLanguageFile_Terminate": {"route": "TranslateLanguageFile_Terminate", "reason": "terminates a translation orchestration"},
+    "WarehouseGetDamageConfig": {"route": "warehouse/damage-config", "reason": "warehouse initialization can seed configuration and workforce rows"},
+    "WarehouseGetSubcategoryConfig": {"route": "warehouse/subcategory-config", "reason": "warehouse initialization can seed configuration and workforce rows"},
+    "WarehouseGetSupplierReceiveConfig": {"route": "warehouse/supplier-receive-config", "reason": "warehouse initialization can seed configuration and workforce rows"},
+    "WarehouseStatus": {"route": "warehouse/status", "reason": "warehouse initialization can seed configuration and workforce rows"},
+    "WarehouseWorkforce": {"route": "warehouse/workforce", "reason": "warehouse initialization can seed configuration and workforce rows"}
+  },
+  "illustrationExportProbe": [
+    {
+      "illustrationId": 1,
+      "diagram": "<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Width=\"10\" Height=\"10\"><Canvas><Path Data=\"F0 M 0,0 L 10,10\" Stroke=\"#FF000000\"/></Canvas></Viewbox>"
+    }
+  ],
   "anonymousDabReads": [
     "UnitMeasure", "Culture", "Currency", "AddressType", "ContactType",
     "PhoneNumberType", "SalesReason", "CurrencyRate", "CountryRegion",

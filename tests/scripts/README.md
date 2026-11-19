@@ -89,9 +89,11 @@ and templates instead.
 - **test-ai-and-mcp-complete.sh** - Comprehensive test of AI Agent and MCP integration
 - **test-ai-chat-and-mcp.sh** - Runs the authenticated, read-only consumer MCP
   assurance profile using retained fixtures. Add `--customer-agent-canary` for
-  one paid customer-chat inference, or `--admin-agent-canary` for one paid
-  read-only admin-chat inference with positive/negative scope controls. Both
-  require trace-correlated tool authorization.
+  one paid customer-chat request, or `--admin-agent-canary` for one paid
+  read-only admin-chat request with positive/negative scope controls. The latter
+  targets dashboard, sales-by-status and top-selling-product tools, reporting
+  each observed authorization separately. Each request may cause multiple Foundry
+  inference/tool rounds. Both require trace-correlated tool authorization.
   Missing fixtures or telemetry remain BLOCKED. See
   [customer chat testing](../../docs/testing/AI_CHAT_MCP_TESTING.md).
 - **test-product-comparison.sh** - Tests AI-powered product comparison features
@@ -116,14 +118,16 @@ and templates instead.
   The current-run TRX files are consumed by exact-case gates for worker middleware,
   address/password/receipt ownership, all registered consumer handlers including
   guarded order headers, guest-cart expiry/retirement/merge lifecycle, and real
-  MCP assertion validation, HTTP tool dispatch and persisted task ownership
+  MCP assertion validation, HTTP tool dispatch (including service autonomy
+  rechecks before background execution) and persisted task ownership
   (subject/client/category/tool/scope, including demotion, current policy and legacy fail-closed state). Unit-test results
   do not prove deployed route bindings, SQL grants, or live workload exchanges.
 - **Isolated Functions host**: add `--functions-host` to the offline command.
   Functions Core Tools (`func`), Azurite (`azurite`), `dotnet`, `openssl`,
   `unshare` and `ip` must be on `PATH`; Linux user/network namespaces must be
   permitted. The runner starts the real worker on loopback with ephemeral local
-  signing metadata and disables every non-HTTP trigger. The current matrix
+  signing metadata and disables every non-HTTP trigger. Azurite has a bounded
+  30-second startup wait; an early exit or timeout fails the host check. The current matrix
   passed 2,907 cases across 182 protected route/method bindings, including
   invalid tokens, missing expiration, unsupported HEAD/OPTIONS and six destructive
   operations against explicitly blocked test dependencies. Exact
@@ -136,8 +140,9 @@ and templates instead.
   The selected ACR is checked for its shared admin user, anonymous pull and enabled
   non-Entra repository tokens, independently of Container App and seed-job
   managed-identity pull bindings. Web PubSub local-key and Entra modes are also
-  checked. The current deployment fails both local-key checks; the source changes
-  take effect only after user-owned recreation.
+  checked. The refreshed deployment passed all of these keyless configuration
+  checks and the scoped Web PubSub role check; runtime effects are verified
+  separately.
   Communication Services' selected-resource local-auth setting is checked too;
   an omitted value is BLOCKED rather than assumed disabled, and the Functions
   email target must match the selected endpoint. Email send must be separately
@@ -152,32 +157,188 @@ and templates instead.
   SDK token used for each successful read to that attached identity and the
   selected service endpoint. Missing, stale, unrecognized or failed probes remain
   BLOCKED. None proves complete effective RBAC or write/publish permissions.
+  MCP's optional SQL-principal probe is separately bound to the selected ingress,
+  ready revision, attached identity and SQL server/database before and after the
+  read. It proves only that sampled readiness connection, not every MCP tool.
   Configuration-only checks are inventoried as such, not counted as successful
   runtime access.
 - **Safe live route and AI checks**: live/all probes only the reviewed Functions
   name-and-exact-route GET allow-list; unknown or potentially mutating GETs stay
   BLOCKED. The browser guards also deny unreviewed data-plane requests and use
   synthetic manufacturing status and supply-catalog responses, never real
-  side-effecting status reads. The public Help-Me-Choose inference is disabled
-  unless `--public-agent-canary` is supplied with `--live` or `--all`. First
+  side-effecting status reads. Supply vendor/catalog/quote and planning
+  feasibility/reorder GETs may initialize stock and transition purchase orders;
+  some manufacturing workforce, warehouse, bank and financial GETs also seed
+  persistent state. They are not safe read-only probes even when authorized by
+  a read scope. These routes are listed with reasons in `tests/auth/contracts.json`
+  under `sideEffectingFunctionReads`. The `inventory:functions-get-review-closure`
+  gate fails if a protected GET is unclassified, listed in both groups or stale.
+  Their denials run in the isolated Functions host instead of live. The public
+  Help-Me-Choose inference is disabled
+  unless `--public-agent-canary` is supplied with `--catalog-agent`, `--live` or
+  `--all`. `--catalog-agent` limits the scenario to this agent and its telemetry:
+  two wizard requests may perform multiple paid Foundry inference/tool rounds.
+  First
   deploy the matching Functions source through normal `azd deploy`; reading the
   latest Foundry definition alone does not establish a worker's cached tools.
   The opt-in makes bounded, potentially billable AI calls. Correlation requires
   run-specific traces, a completed MCP result, the actually loaded agent version
   and the selected runtime principal's allowed `products.read` decision. The
   runner makes at most four read-only telemetry queries separated by 20 seconds
-  and credits only exact matching current-run tool/version/target obligations.
+  even when partial results have arrived, and credits only exact matching
+  current-run tool/version/target obligations. The targeted catalog profile
+  requests a broad category overview and reports each of its four tools
+  separately; unobserved tools remain BLOCKED.
+  The catalog and opt-in delegated-chat profiles also compare each sampled
+  completed Foundry response's token client ID with the configured Functions
+  identity, then bind its hash to the selected attached identity. They verify
+  the Functions host and Foundry project/agent settings independently. Tokens
+  and raw client IDs are not exported; absent telemetry blocks and a mismatch
+  fails. This is in-process sampled evidence, not proof of every response round.
   Missing or sampled telemetry, downstream SQL/embedding identity and other
   agent/tool paths remain BLOCKED.
+- **Empty-input analysis authorization**: `--live` and `--all` pin the
+  review-analysis and cart-recovery POST routes and their policies. Both require
+  successful DAB-audience and manufacturing Functions positive controls before
+  either route is probed. Each then requires the authorized empty-array request
+  to produce its exact validation error, followed by anonymous, forged,
+  wrong-audience and insufficient-scope requests with that same empty input.
+  A focused deployed run passed all ten route controls and seven inventory/token
+  controls. No inference is sent.
+  Valid-input authorization and identity remain BLOCKED in those profiles.
+  Unit tests verify the empty-input handlers, per-request memory identifiers,
+  tool-free service requests, and policy-failure handling with fake Foundry.
+- **Focused analysis-agent check**: after deploying matching Functions source,
+  run `python3 tests/auth/validate.py --analysis-agent --analysis-agent-canary`.
+  The opt-in reflects both route policies, requires successful positive token
+  and empty-input controls, then sends synthetic valid-input denials before
+  one potentially billable authorized request per agent. A denial incorrectly
+  accepted by the server can itself cause inference, after which that agent's
+  authorized request is not sent. Foundry responses and random per-request
+  memory scopes may persist; no review, cart, order or email mutation is
+  requested. Sampled identity and tool-suppression evidence requires the
+  current request trace and remains BLOCKED if telemetry does not preserve it.
+  The handlers restore the worker invocation activity; an earlier deployed
+  run could not correlate response events, while a later run passed all 30
+  checks, including sampled identity and tool suppression for both agents.
+  Generated content, synthetic cart ID and credentials are not exported.
+  These checks do not independently prove Foundry memory isolation or other
+  agent paths. Without the canary flag no analysis requests are sent.
+- **Mutation-agent boundaries**: the current-run offline gate requires the
+  customer/order generator tests for exact tool lists, endpoints, scopes,
+  tool choices, cached fallbacks and approval handling, plus continuation-error
+  redaction. Tests exercise the actual service call sites with fake Foundry and
+  stop before database persistence. The local `--infra` profile also checks
+  the two selected latest Foundry definitions against their source lists and
+  guarded endpoint/shape. Deployed agent execution and Foundry's remote connector
+  behavior remain BLOCKED; these tests do not authorize order, simulator,
+  customer-generation or email canaries.
+- **Focused promotion-agent check**: after deploying matching Functions source,
+  run `python3 tests/auth/validate.py --promotion-agent --promotion-agent-canary`.
+  The opt-in first checks anonymous, wrong-audience and insufficient-scope
+  denials, then makes one potentially billable admin suggestion request.
+  It reads product data, stores a Foundry response and uses the dedicated
+  `promotion-gen-AuthAssurance` memory scope, which may persist. It does not
+  create a promotion, order or email. The run correlates the completed response
+  to the selected Functions identity using a transient hash of its response ID,
+  since the nested worker telemetry did not preserve the request trace in one
+  run. The ID and hash are not saved to the report. A separate sampled check
+  requires `tool_choice=none`, no offered tools and no reported tool calls;
+  it records whether the cached definition was augmented or fell back. An
+  unknown fetched version or incomplete telemetry remains BLOCKED, and a
+  fetched version does not prove the entire effective definition. The check
+  does not independently inspect Foundry's execution or prove SQL identity,
+  every response round or all promotion paths. Without the canary flag no
+  requests are made, including in `--live` and `--all`; the same flag can be
+  added to either of those profiles when the inference is explicitly intended.
+- **Focused email-content agent check**: run
+  `python3 tests/auth/validate.py --email-content-agent --email-content-agent-canary`
+  from the local deployer after deploying matching Functions source. The opt-in
+  checks anonymous, wrong-audience and insufficient-scope denials, then makes
+  one potentially billable content-only request using a synthetic name, a unique
+  template marker and a random per-request memory scope. The Foundry response
+  and scope may persist; no email is sent and no order or campaign is created. Sampled identity and
+  tool-suppression evidence is correlated through the unique template and
+  worker operation; generated content, the template marker and credentials are
+  not exported. It does not establish email-delivery identity or other agent
+  paths. The same canary flag also works with local `--live` or `--all`.
+  A tool-policy violation returns a sanitized error and stops the admin bulk
+  generation loop; previously generated unsent content is discarded. Other
+  model failures keep the existing per-recipient fallback behavior.
+- **Focused product-content and continuation check**: after deploying matching
+  Functions source, run
+  `python3 tests/auth/validate.py --product-content-agent --product-content-agent-canary`.
+  It performs one synthetic product-content inference after authorization
+  denials, rejects cross-agent, malformed and altered conversation IDs, then
+  permits one same-admin refinement. The altered ID retains the original
+  length and prefix but is not proof of Foundry's particular lookup status.
+  If the cross-agent denial unexpectedly fails it
+  may invoke a paid promotion inference and no refinement is sent. The unique
+  subcategory memory scope and normal Foundry responses may persist; no
+  product, promotion, order or email is created. Generated content and response
+  IDs are not exported. Sampled identity/tool evidence applies to the initial
+  response only; two-owner deployed coverage remains separate. The canary flag
+  also works with local `--live` or `--all`.
+- **Focused manufacturing-content agent check**: run
+  `python3 tests/auth/validate.py --manufacturing-content-agent --manufacturing-content-agent-canary`
+  from the local deployer. Three authorization denials use an invalid part ID,
+  so even a middleware failure cannot trigger inference. The runner then
+  searches a bounded page of existing manufactured parts for an effective BOM
+  and no linked generated sheet. If it finds one, it makes at most one
+  potentially billable generation request; the endpoint performs additional
+  eligibility checks before inference. Generation may use two draft attempts
+  with bounded transient retries and may persist Foundry responses, but does not
+  publish a sheet or send email. Generated content and response IDs are withheld.
+  Sampled response-ID-correlated identity and tool-suppression checks do not
+  prove every attempt, downstream SQL identity or other agent paths. If no
+  candidate or telemetry is available, the corresponding checks remain
+  BLOCKED. On the refreshed deployment, all 27 discovered manufactured parts
+  had effective direct BOMs and linked sheets, so no inference was sent.
+  It then uses read-only DAB discovery to try bounded models with no instructions,
+  then diagram-free models through `supplementExistingInstructions`. Both model
+  paths return unsaved drafts. A 409 eligibility response is BLOCKED and is not
+  retried. On `adventureworks770`, the only diagram-free candidate already has
+  reserved illustrations, so the positive path is BLOCKED by data state.
+  Without the canary flag, no requests are made.
+- **Bounded order canary**: run `python3 tests/auth/validate.py --order-canary`
+  for read-only safety gates (email notifications, auto-promotion, simulator,
+  manufacturing agent and approval delay). Add `--order-cancellation-canary`
+  to create one storefront order for a fresh `@example.invalid` customer and
+  one single-unit store order. The admin cancels both through DAB before the
+  pipeline can approve them, after ownership and cancel denials are checked.
+  After cancellation, both consumers exercise every MCP `SelfOrInternal`
+  order tool with real Customer rows (owner positives, foreign/malformed
+  owner denials) and repeat the DAB `customer_id` owner-row probe. The same
+  flag also works with `--all`, where this evidence closes the ownership
+  umbrella's `SalesOrderHeader` cells.
+  Receipt email is suppressed for reserved domains and verified in telemetry.
+  Cancelled orders and the one-unit inventory decrement stay until environment
+  recreation. See the
+  [authentication guide](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md#bounded-order-canary-with-cancellation).
 - **DAB read matrix**: live/all discovers all GraphQL entity selectors and checks
   source-derived REST/GraphQL reads for anonymous, admin, manufacturing and both
   retained consumers under `consumer`/`authenticated`. Only one key column is
   selected; reports never include its values. Per-cell transport failures remain
   BLOCKED and do not erase the remaining matrix or become authorization denials.
+- **DAB write-decision matrix**: the offline contract `contract:dab:write-decisions`
+  classifies all 1,863 entity/role/write cells in `api/dab-config.json`. Live/all
+  then sends zero-effect REST create, upsert and delete probes and GraphQL update
+  probes. These fail request validation after authorization, so no SQL runs. The
+  callers are the same as for the read matrix, and tokens are renewed with paced
+  logins. The required DAB role/operation gate reconciles from the contract plus
+  the read, write and role-header results in the same run. See
+  [DAB write-decision matrix](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md#dab-write-decision-matrix).
+- **Ownership-handler closure**: `required:chat-continuation-ownership-offline`
+  closes over every Functions caller of an agent service that binds conversations
+  to an owner. Unclassified callers leave it BLOCKED. Live/all adds read-only
+  `dab:owner-rows:*` probes for every DAB owner policy: own rows only, and a
+  filter naming the other consumer returns nothing.
+  `required:all-ownership-handlers-two-owners` reconciles these with the consumer,
+  MCP tool, MCP task and DAB contract gates, so it needs `--all`. See
+  [Ownership-handler two-owner closure](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md#ownership-handler-two-owner-closure).
 - **Catalog/review field boundary**: live/all additionally checks real nonempty
   internal controls and up to 248 public-role REST/GraphQL field, selection,
-  filter and ordering assertions. The updated redaction checks are source-tested
-  but have not yet passed against the current deployment. Public inventory still
+  filter and ordering assertions.   The refreshed live run passed the field-boundary checks. Public inventory still
   exposes per-location IDs and quantities; public reviews still expose author IDs.
 - **[test-order-detail-auth.mjs](test-order-detail-auth.mjs)**: verifies the
   storefront's owner-bound Functions batch, strict response validation and
@@ -195,6 +356,18 @@ and templates instead.
   python3 tests/scripts/run-auth-assurance-job.py --preflight
   python3 tests/scripts/run-auth-assurance-job.py
   ```
+  The default command also runs the isolated Functions worker on the **local
+  control plane**, with its result included in the exported combined report.
+  This requires Linux user/network namespace support and `func`, `azurite`,
+  `dotnet`, `openssl`, `unshare` and `ip` on `PATH`. Missing tools or isolation
+  remain BLOCKED; host-test failures remain FAIL. Non-HTTP triggers are disabled
+  and the worker/emulator can access loopback only. The selected Container Apps
+  runtime denied the namespace preflight, so this test is not moved into the
+  private job or run with weakened isolation. Scoped profiles below do not
+  repeat the host test. A single same-run local required-gate PASS makes only
+  the private job's untouched, unexecuted duplicate NOT_APPLICABLE; failed
+  attempts and missing/ambiguous evidence are never reconciled away. Per-case
+  host evidence stays in the controller's local run directory.
   The default integrated run also executes the disposable mutation suite below;
   it retains run-owned business fixtures and inventories them in the report.
   For disposable-demo API mutations without rebuilding/reseeding the environment:
@@ -213,9 +386,8 @@ and templates instead.
   consumers; a positive-control public marker read and independent pre/post
   reads check for writes even after a denial-shaped response. The wrong-audience
   Functions token is independently validated against the owner's password endpoint.
-  Updated source additionally requires create/read responses to omit reviewer
-  email; that field-redaction assertion has not yet been run against the current
-  deployment.
+  Create/read responses must omit reviewer email; the refreshed direct run passed
+  those checks.
   GraphQL vote updates are also checked for anonymous, forged and
   Functions-audience denial against both owned fixtures, with pre/post full-record
   reads and a subsequent authenticated vote positive control.
@@ -235,14 +407,19 @@ and templates instead.
   Category/subcategory create denial probes use unique names, four credential
   cases for both consumers, and independent public DAB marker reads. A filter
   positive control is required; any uncertain create remains inventoried.
-  The source-tested Customer-create scenario requires private SQL and the ledger:
+  The Customer-create scenario requires private SQL and the ledger:
   it checks both owners across REST/GraphQL and `consumer`/`authenticated`, plus
   anonymous, forged and wrong-audience denials, with independent pre/post SQL
-  reads. Four distinct accounts provide one positive per protocol/role and fresh
+  reads. Each owner/role/protocol also attempts a signed own-person create with
+  forbidden `StoreID: null`, a SQL-valid value: exact REST/GraphQL
+  field-authorization errors and independent SQL absence are required, not a
+  foreign-key or generic validation failure. These eight field cases are part
+  of the exact evidence and ledger gate. Four distinct accounts provide one
+  positive per protocol/role and fresh
   Functions/DAB tokens are checked for the new customer claim. An exact gate
-  requires the complete same-run checks and matching ledger records. It has not
-  yet run against the current deployment; direct mode blocks before sending
-  Customer creates.
+  requires the complete same-run checks and matching ledger records.
+  Direct mode blocks before sending Customer creates; the refreshed direct run
+  therefore leaves those private-only checks BLOCKED.
   The private runner creates a uniquely named `awtest<hex>` table in the existing
   storage account and keeps it available for the mutation suite. Each fixture
   residual is persisted before its write request and updated after confirmation;
@@ -357,15 +534,16 @@ and templates instead.
   Reports explicitly preserve unfinished coverage; running all current tests
   is not proof that all planned tests exist.
 
-  The full profile also runs eleven read-only MCP service-boundary checks using
+  The full profile also runs 14 read-only MCP service-boundary checks using
   the private job's actual selected UAMI: exact catalogue-only grant and signed
-  metadata, real catalogue output, direct/task-capable scope denials, resource
-  audience denials and forbidden grant targets. It never uses deployer credentials
+  metadata, real catalogue output, direct/task-capable scope denials, a direct
+  non-profile tool denial, disallowed administrative/manufacturing grants, resource audience
+  denials and forbidden grant targets. It never uses deployer credentials
   as a workload, invokes models, starts successful tasks/orders or sends email.
   Tokens/records are not published. Dedicated browser/SQL/address/mutation modes
   omit this probe. Isolated tests cover the probe; a fresh private execution is
-  still needed. The equivalent existing-admin-container diagnostic independently
-  passed all eleven checks with its real shared UAMI; it is not actual
+  still needed. An earlier existing-admin-container diagnostic independently
+  passed its eleven checks with the real shared UAMI; it is not actual
   Functions/hosted-instance origin proof. Probes accept the exchange URI and its
   well-known normalized application ID, matching the server validator exactly.
 
@@ -385,7 +563,8 @@ and templates instead.
   existing admin container, not public Storage access or account keys.
   All four artifacts must match the private checksum manifest, exact run/prefix,
   immutable image provenance and consistent assertion counts before any local
-  report directory is created. Downloads are limited to 1 MiB combined and
+  report directory is created. Downloads are limited to 4 MiB combined, with
+  a 6 MiB exec-output bound for base64 and transport overhead, and
   saved in a new mode-0700 directory with mode-0600 files. The original controller
   error is preserved; upload recovery does not erase test failures or blockers.
   Cleanup reconciliation only reads the exact job's absence; recovery never
@@ -454,6 +633,19 @@ and templates instead.
   token/scope/category cases; it does not treat arbitrary POST routes as safe.
 
 - **[validate-auth.sh](validate-auth.sh)** - Runs reflected Functions/MCP inventory, auth unit tests, azd-driven infrastructure checks and safe live probes. See the [end-to-end auth guide](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md). Reports explicit failures and missing coverage; it does not claim complete assurance or start unsafe simulator runs. Run with `--offline`, `--infra`, `--live` or `--all`.
+  The focused, read-only MCP-to-Functions proxy check can run separately:
+  ```bash
+  python3 tests/auth/validate.py --mcp-functions --environment <environment>
+  ```
+  It exercises anonymous and wrong-audience denials, an authenticated
+  manufacturing user with deliberately reduced scopes, and a successful scrap
+  events read through MCP and Functions. Login attempts are paced; no business
+  data or tokens are written to the report. The chosen GET does not initialize
+  simulator state. This samples one tool and does not prove the remaining agent
+  or dependency paths. The offline profile also requires six exact current-run
+  MCP proxy credential-target tests, including all five clients and redirects.
+  Its agent credential gate also covers the Functions-to-hosted-manufacturing
+  project/endpoint binding, loopback redirect refusal and error-body redaction.
   Live Web PubSub checks include one authorized WebSocket upgrade and an anonymous
   denial. They do not publish messages or record capability URLs.
   Infrastructure checks include exact-name, aggregate-only guest-cart cleanup
@@ -472,10 +664,20 @@ and templates instead.
   ungranted role header for all four signed callers over REST and GraphQL.
   The read-only target passed 48 exact 403 decisions plus two fixture logins;
   this does not prove positive access for other departments.
-  The live profile makes one bounded Admin `GeneratePromotion` Foundry call after
-  anonymous, wrong-audience and insufficient-scope denials. It reads product data
-  but does not create business records, send email or invoke tools; generated
-  content is never included in the report. This is one AI inference per live run.
+  The live profile makes one bounded Admin `GeneratePromotion` Foundry call only
+  with `--promotion-agent-canary`, after anonymous, wrong-audience and
+  insufficient-scope denials. Without that opt-in it records a blocker and sends
+  no promotion inference. The canary reads product data but does not create
+  business records, send email or invoke tools; generated content is never
+  included in the report.
+  The illustration-export probe pins the exact protected GET/POST binding:
+  anonymous and forged requests use a synthetic POST fixture also tested by the
+  real converter. The runner also requires a valid authorized database GET,
+  exact wrong-audience and reduced-scope denials, and a converted path in the
+  positive POST. A focused deployed run passed all 17 available controls; two
+  separate consumer-address ownership checks remained blocked because neither
+  retained consumer had an address. These checks do not write SQL or invoke AI.
+  Other mixed-method routes remain blocked.
   The Inspector browser scenario now requires real manufacturing/admin sessions,
   shared-tab logout, independent role/session isolation, actual cross-user/target
   MCP-session replay denials and owner-session survival/cleanup: **30 assertions
@@ -522,8 +724,21 @@ and templates instead.
   seeded internal identities supplied privately in the child environment. Real
   Admin/Manufacturing PKCE/deep-link login, role/audience/owner binding, DAB read,
   refresh and logout, including two-tab logout and a same-user new-generation
-  sign-in that an existing stale tab cannot adopt; intercepts business mutations
-  and MCP tool POSTs. Refresh
+  sign-in that an existing stale tab cannot adopt. The deployed race cases hold
+  real DAB refresh and Functions-token exchange HTTP 200 and 400 responses until
+  after logout and re-login, wait for the original handlers to finish, and
+  verify both generations' stored sessions and new protected DAB/Functions reads.
+  Separate callback cases hold real authorization-code HTTP 200 and 400 responses
+  across a replacement same-user sign-in. The 400 is produced by sending an
+  incorrect PKCE verifier to the server. They require the stale callback to show
+  that it was superseded, preserve the new session and pass a new protected DAB read.
+  Admin-only MCP exchange cases hold real HTTP 200 and 400 responses across
+  logout and same-user re-login, require the stale handler to return null and
+  send no chat request, and use the fresh browser-minted MCP token for a
+  read-only product-availability call with product ID 0. Dashboard counts and
+  the fresh chat response are fulfilled locally; no AI request is sent.
+  Competing control-tab refreshes are intercepted. Business mutations and
+  unreviewed browser MCP tool POSTs are blocked. Refresh
   uses controlled client expiry metadata, not server clock changes. Produces
   sanitized assertions, never tokens, passwords or raw browser traces. Bounded
   Chromium probe/preflight/routing/failure and DNS/connect/send/header timings
@@ -540,9 +755,28 @@ and templates instead.
   denial, invalid data, over-budget reads or mutation attempts still fail.
   The new policy passed all 20 real deployed checks locally (Admin initial read
   75,407ms, other reads 72-219ms); the full private suite has not been rerun.
+  The latest combined run passed 80 expanded checks and the exact aggregate gate,
+  including both cross-category denials.
+  Two earlier attempts timed out during manufacturing sign-in, and a later
+  stale-tab no-request assertion failed; their causes remain unconfirmed. An
+  Admin MCP diagnostic failed its safety gate on four blocked dashboard reads;
+  those reads are now fulfilled locally. One later combined child exited
+  without an evidence file for an unknown reason; the subsequent pass does not
+  establish its cause.
+  Internal login attempts are separated by at least 12 seconds after the
+  preceding response to reduce contention with the shared login rate limit.
+  HTTP 429 fails explicitly without retrying; other users can still share that
+  limit. `validate.py` waits 61 seconds after its last helper login before
+  starting this runner or the Inspector runner, so its own earlier logins do not
+  share the fixed one-minute window. `--site admin` or `--site manufacturing` limits the child runner to one
+  portal for diagnosis, but cannot satisfy the aggregate two-site evidence gate.
   Requires
   Playwright Chromium and its OS dependencies (included in the standalone image).
-  Does not establish Inspector, user-switch or complete browser coverage.
+  Does not establish Inspector or complete browser coverage. Same-portal
+  distinct-user switching is not exercised on the deployment (one seeded
+  identity per portal); it is closed by the source-derived
+  `required:internal-session-transition-races` matrix together with the local
+  suites below.
 - **[test-internal-session-races.mjs](test-internal-session-races.mjs)** - Offline,
   deterministic Admin/Manufacturing OAuth and mounted-context tests for overlapping
   login, callback, logout, token refresh, resource exchange and account switching.
@@ -558,18 +792,38 @@ and templates instead.
   The offline assurance profile includes these and Manufacturing socket/DAB tests.
 - **[test-internal-session-browser.mjs](test-internal-session-browser.mjs)** -
   Local Chromium two-tab tests against the actual portal token modules with a
-  loopback mock OAuth server. Run with
+  loopback mock OAuth server, plus a route-removal regression proving the
+  context network guard remains active. Run with
   `node --test tests/scripts/test-internal-session-browser.mjs`; requires the
   existing Playwright Chromium installation. This does not contact Azure and
   does not replace deployed full-portal browser verification. The live and
   browser assurance profiles also run and report this local check.
+- The internal deployed-browser runner also tries each seeded employee in the
+  other portal before the correct sign-in. It requires the category denial, no
+  token exchange or data request, and cleared local session/PKCE state. The
+  existing denied callback returns to login without retaining the original deep
+  link, so the runner reopens it before testing a valid sign-in. Both seeded
+  identities are required even when selecting a single portal.
 - **[test-inspector-browser-auth.mjs](test-inspector-browser-auth.mjs)** - The
   live/all assurance profile supplies azd-derived endpoints and the seeded
-  manufacturing login privately. Fifteen real Chromium checks exercise hosted
-  Inspector OAuth, both UI target connections, delegated read/catalog access,
-  role-escalation/target/STDIO/Origin denials and logout replay. It blocks business
-  mutations and never exports tokens, browser traces or records. Requires the
-  same Playwright prerequisites as the internal-site scenario. Inspector gateway
+  manufacturing and admin logins privately. Its 39 required Chromium checks
+  exercise hosted Inspector OAuth, both UI target connections, delegated
+  read/catalog access, role-escalation/target/STDIO/Origin denials, two-tab and
+  independent-user session isolation, and logout replay. A manufacturing
+  session with an active backend session is replaced, and its held OAuth
+  callback is replayed with only its old flow cookie after an admin sign-in.
+  The runner captures the real authorization redirect and starts the callback
+  as a separate navigation; Playwright does not intercept redirected requests.
+  `--switch-diagnostic` skips both UI connection checks to isolate the switch
+  when a target is intermittently unavailable; diagnostic output cannot satisfy
+  the 39-check aggregate gate.
+  An isolated client prevents the current browser cookie from contaminating
+  old-cookie checks; exact test-owned flow and unexpected session cookies are
+  logged out. The callback is held before the gateway's token exchange; the
+  in-flight exchange race is separately covered by the offline gateway tests.
+  The scenario blocks business mutations and never exports tokens, browser
+  traces or records. Login submissions are paced and failures are not retried.
+  Requires the same Playwright prerequisites as the internal-site scenario. Inspector gateway
   offline tests run with `npm --prefix mcp-inspector test` and are included in
   the offline suite/container image. See
   [hosted Inspector authentication](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md#hosted-inspector-authentication)
@@ -586,10 +840,33 @@ and templates instead.
   existing admin container's selected UAMI, and requires receipt of the matching
   marker. This can invalidate active admin utility caches, but creates no order,
   email or business record. It proves this runtime identity's group send, not an
-  actual Functions mutation or every group. Repeat after infrastructure recreation.
+  actual Functions mutation or every group.
   Run this additional check with:
   ```bash
   python3 tests/scripts/test-runtime-rbac.py --environment <environment> --webpubsub-probe
+  ```
+  `--keyvault-probe` is a separate read-only check. It binds the selected vault,
+  signing certificate name and shared UAMI to the deployed MCP configuration,
+  then uses the admin container's runtime identity to read that secret's version
+  metadata. It never requests the secret value; Key Vault validates the token's
+  audience. It also checks one current MCP revision replica's recent logs for
+  the exact signing-provider success message, rechecking revision and identity
+  around the read. Missing/rotated logs remain BLOCKED; the provider's token is
+  not inspected and other replicas are not covered.
+  ```bash
+  python3 tests/scripts/test-runtime-rbac.py --environment <environment> --keyvault-probe
+  ```
+  `--service-profile-probe` checks that the selected MCP ingress and current
+  ready revision bind the runtime and hosted principals to separate profiles. From the
+  existing admin container's shared UAMI it obtains a catalogue token, verifies
+  `mcp.admin` and `manufacturing.write` grants are denied, invokes the allowed
+  product-details tool for nonexistent product ID 0, and verifies that the
+  read-only product-availability tool is denied despite matching scopes.
+  No order, email or inference is started. The revision and profiles are
+  rechecked afterward. This is shared-UAMI evidence, not a Functions or hosted
+  agent invocation.
+  ```bash
+  python3 tests/scripts/test-runtime-rbac.py --environment <environment> --service-profile-probe
   ```
   Reports never contain recipient, tokens or response bodies. An uncertain
   invocation must be investigated before repeating a send; a report explicitly
@@ -597,6 +874,25 @@ and templates instead.
   Service `Succeeded`
   is not independent mailbox delivery proof. Offline safety tests:
   `node --test tests/scripts/test-runtime-rbac.cjs`.
+- **[test-functions-webpubsub.py](test-functions-webpubsub.py)** - Opts in to one
+  real Functions publisher and a temporary application fixture:
+  ```bash
+  python3 tests/scripts/test-functions-webpubsub.py --environment <environment>
+  ```
+  It creates one uniquely marked manufacturing-run row in the existing application
+  table, with no queue, order, AI inference or email. The callback rejects anonymous,
+  forged, wrong-audience and insufficient-scope requests; the DAB token first
+  reads a real product, and the missing-scope case requires two ready retained
+  consumer fixtures. If those fixtures are unavailable the scope case is BLOCKED.
+  A read-only runtime-UAMI inspection verifies no steps and an unchanged ETag
+  before the authorized callback. The callback must persist its unique step and
+  deliver the correlated event to an authenticated socket. Cleanup checks the
+  ownership marker and exact state, deletes using the current ETag and verifies
+  absence. This proves one callback and group, not every publisher or identity.
+  An uncertain insert or cleanup is reported with a recovery ledger; do not retry
+  blindly. After investigating, recover only that exact fixture with
+  `--recover <fixture-ledger.json>` and the same environment. No capability URL,
+  bearer token or raw ETag is recorded.
 - **[test-runtime-sql.py](test-runtime-sql.py)** - Builds the existing read-only
   SQL permissions probe and executes it in the existing MCP container using its
   actual shared UAMI. Run `python3 tests/scripts/test-runtime-sql.py` after restoring
@@ -749,7 +1045,10 @@ merge deduplication, origin/redirect restrictions and strict response handling.
 The authentication assurance runner includes these tests. Its guest-isolation scenario
 creates two isolated guest carts, verifies cross-owner denial and DAB denial,
 then retires those exact sessions. The sanitized cleanup ledger contains cart
-IDs/expiry only, never guest capabilities. No order, email or AI call is involved.
+IDs/expiry only, never guest capabilities. It proves each new cart empty before
+checking its expiry, so a malformed expiry does not prevent retirement of a
+proven empty fixture. Unconfirmed or nonempty fixtures are not guessed at.
+No order, email or AI call is involved.
 
 `test-cart-provider-auth.mjs` exercises the real provider with deterministic hook
 lifecycle scheduling: automatic merge, proof-retirement/render races, merge
@@ -803,3 +1102,58 @@ for preview requirements and failure recovery. The offline assurance profile
 includes its seed configuration/probe regression tests; this live probe is an
 explicit separate command rather than silently starting jobs during read-only
 infrastructure validation.
+
+To inspect an existing successful seed execution without starting a job:
+
+```bash
+python3 tests/scripts/test-seed-sql-identity.py --environment <azd-environment>
+```
+
+The command uses the selected deployment's existing Admin container and runtime
+identity to read at most 64 KiB from one uniquely correlated seed log through
+the selected Azure Files endpoint. It starts a process in that container but no
+job, and changes no persisted Azure data or resources. It saves only sanitized
+results under ignored `.auth-results/`. It requires local permission to
+inspect the selected resources and execute in the ready Admin container; a missing
+or ambiguous execution/log, changed binding or inaccessible endpoint is BLOCKED.
+It checks the log's reported seed managed-identity SQL connection, not the SQL
+token or session principal, historical job identity/mount, or image digest.
+
+## Seed SQL principal diagnostic
+
+```bash
+python3 tests/scripts/test-seed-sql-principal.py --environment <azd-environment>
+```
+
+This opt-in diagnostic starts one execution of the existing seed job with a
+reviewed, read-only SQL `SELECT` in place of its seed entrypoint. It binds the
+selected azd environment, SQL administrator and seed identity, pins the
+selected registry's seed image to its immutable digest, removes the seed
+environment and all mounts, and refuses active seed executions. It does not
+reseed, modify SQL data or schema, or change the stored job template.
+
+The local identity needs permission to inspect the selected resources and image,
+start that job execution and read its logs. Results and the exact execution
+ledger are saved under ignored `.auth-results/`; tokens, raw SQL identities and
+logs are not exported. If the start is uncertain or execution does not reach a
+terminal state, inspect the ledger and the exact execution before retrying.
+Only one bounded execution is started; failures are not retried automatically.
+
+The test checks the actual SQL token identity, selected database, SQL session
+login/SID and bootstrap database CONTROL. It also checks the selected runtime
+identity's contained-user SID, direct reader/writer roles and database EXECUTE
+grant, and direct and nested privileged fixed-database-role memberships of
+contained Entra principals. It also checks selected database-scope administrative
+GRANT records on those principals, their database roles and `public`, plus
+`CONTROL`, `ALTER`, `TAKE OWNERSHIP` and `IMPERSONATE` grants on objects/columns,
+schemas and database principals. `GRANT_WITH_GRANT_OPTION` records are checked
+across every database-permission class, including database scope. Separate
+objects and columns are counted independently; duplicate role paths are not.
+These checks inspect grants, not effective rights after DENYs. Traversal
+is bounded; an incomplete role graph or missing `public` role is BLOCKED.
+Additional contained Entra principals remain BLOCKED for review. Counts of
+direct permission entries and runtime denies are informational. A GRANT record
+is not proof of effective permission: DENYs and other mechanisms may apply.
+The test does not prove the historical seed execution's token, SQL session or
+image digest, Entra directory-group membership, complete effective grants,
+server grants, complete object/schema permissions or ownership chains.

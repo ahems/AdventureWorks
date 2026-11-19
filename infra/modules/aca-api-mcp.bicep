@@ -158,6 +158,10 @@ resource apiMcp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'MCP_TRUSTED_SERVICE_PRINCIPAL_IDS'
               value: azidentity.properties.principalId
             }
+            {
+              name: 'MCP_FUNCTIONS_PRINCIPAL_ID'
+              value: azidentity.properties.principalId
+            }
           ]
         }
       ]

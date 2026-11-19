@@ -79,7 +79,7 @@ public class ProductService
         return products.ToList();
     }
 
-    public async Task<List<CultureInfo>> GetSupportedCulturesAsync()
+    public virtual async Task<List<CultureInfo>> GetSupportedCulturesAsync()
     {
         using var connection = await GetConnectionAsync();
 
@@ -88,7 +88,7 @@ public class ProductService
         return cultures.ToList();
     }
 
-    public async Task<string> GetProductsWithPromotionDataAsync(
+    public virtual async Task<string> GetProductsWithPromotionDataAsync(
         string promotionType, int? categoryId = null, int? subcategoryId = null, int topN = 20)
     {
         using var connection = await GetConnectionAsync();
@@ -96,7 +96,7 @@ public class ProductService
             connection, promotionType, categoryId, subcategoryId, topN);
     }
 
-    public async Task<List<TranslationRequest>> GetProductsByModelIdsAsync(List<int> productModelIds)
+    public virtual async Task<List<TranslationRequest>> GetProductsByModelIdsAsync(List<int> productModelIds)
     {
         using var connection = await GetConnectionAsync();
 
@@ -145,7 +145,7 @@ public class ProductService
         return products.ToList();
     }
 
-    public async Task<List<SavedDescriptionResult>> SaveTranslationsAsync(List<TranslatedDescription> translations)
+    public virtual async Task<List<SavedDescriptionResult>> SaveTranslationsAsync(List<TranslatedDescription> translations)
     {
         using var connection = await GetConnectionAsync();
         var results = new List<SavedDescriptionResult>();
@@ -734,7 +734,7 @@ public class ProductService
     /// <summary>
     /// Returns the English-language category and subcategory names for building AI prompts.
     /// </summary>
-    public async Task<(List<CategoryHierarchyItem> categories, List<SubcategoryHierarchyItem> subcategories)> GetCategoryHierarchyAsync()
+    public virtual async Task<(List<CategoryHierarchyItem> categories, List<SubcategoryHierarchyItem> subcategories)> GetCategoryHierarchyAsync()
     {
         using var connection = await GetConnectionAsync();
 
@@ -747,21 +747,21 @@ public class ProductService
         return (categories, subcategories);
     }
 
-    public async Task<int> GetNextCategoryIdAsync()
+    public virtual async Task<int> GetNextCategoryIdAsync()
     {
         using var connection = await GetConnectionAsync();
         var maxId = await connection.QueryFirstOrDefaultAsync<int?>("SELECT MAX(ProductCategoryID) FROM Production.ProductCategory") ?? 0;
         return maxId + 1;
     }
 
-    public async Task<int> GetNextSubcategoryIdAsync()
+    public virtual async Task<int> GetNextSubcategoryIdAsync()
     {
         using var connection = await GetConnectionAsync();
         var maxId = await connection.QueryFirstOrDefaultAsync<int?>("SELECT MAX(ProductSubcategoryID) FROM Production.ProductSubcategory") ?? 0;
         return maxId + 1;
     }
 
-    public async Task InsertCategoryRowAsync(int categoryId, string cultureId, string name)
+    public virtual async Task InsertCategoryRowAsync(int categoryId, string cultureId, string name)
     {
         using var connection = await GetConnectionAsync();
         var sql = @"
@@ -774,7 +774,7 @@ public class ProductService
         await connection.ExecuteAsync(sql, new { CategoryId = categoryId, CultureID = cultureId.PadRight(6), Name = name });
     }
 
-    public async Task InsertSubcategoryRowAsync(int subcategoryId, int categoryId, string cultureId, string name)
+    public virtual async Task InsertSubcategoryRowAsync(int subcategoryId, int categoryId, string cultureId, string name)
     {
         using var connection = await GetConnectionAsync();
         var sql = @"
@@ -1012,7 +1012,7 @@ public class ProductService
         }
     }
 
-    public async Task<List<CultureInfo>> GetAllCulturesAsync()
+    public virtual async Task<List<CultureInfo>> GetAllCulturesAsync()
     {
         using var connection = await GetConnectionAsync();
         var sql = "SELECT CultureID, Name FROM Production.Culture";

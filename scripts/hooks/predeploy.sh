@@ -1,13 +1,34 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Set environment variables for the SWA build process
 # This ensures that when npm run build is called, the VITE_* variables are available
 
-API_URL=$(azd env get-value API_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
-API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
-API_MCP_URL=$(azd env get-value API_MCP_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
-APPINSIGHTS_CONN_STR=$(azd env get-value APPINSIGHTS_CONNECTIONSTRING 2>/dev/null | head -n1 | tr -d '\n\r ')
+environment_args=()
+if [[ -n "${AZURE_ENV_NAME:-}" ]]; then
+  environment_args=(--environment "$AZURE_ENV_NAME")
+fi
+
+get_azd_value() {
+  local name=$1 value
+  if ! value=$(azd env get-value "$name" "${environment_args[@]}" --no-prompt 2>/dev/null); then
+    echo "ERROR: Unable to read $name from the selected azd environment." >&2
+    return 1
+  fi
+  value=${value%%$'\n'*}
+  value=${value//$'\r'/}
+  value=${value// /}
+  if [[ -z "$value" ]]; then
+    echo "ERROR: $name is empty in the selected azd environment." >&2
+    return 1
+  fi
+  printf '%s' "$value"
+}
+
+API_URL=$(get_azd_value API_URL)
+API_FUNC_URL=$(get_azd_value API_FUNCTIONS_URL)
+API_MCP_URL=$(get_azd_value API_MCP_URL)
+APPINSIGHTS_CONN_STR=$(get_azd_value APPINSIGHTS_CONNECTIONSTRING)
 
 echo "Preparing the storefront build configuration..."
 

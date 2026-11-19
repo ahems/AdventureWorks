@@ -47,8 +47,8 @@ public class CartRecoveryAgentService
     /// <summary>
     /// Analyses the provided abandoned carts and returns one recovery strategy per cart.
     /// Carts are processed in batches of 10 to stay within context window limits.
-    /// Batches that fail are returned with <see cref="CartRecoveryResult.Error"/> set so
-    /// callers receive partial results rather than a hard failure.
+    /// Batches with ordinary failures are returned with <see cref="CartRecoveryResult.Error"/>
+    /// set; a tool-policy violation stops the request.
     /// </summary>
     public async Task<List<CartRecoveryResult>> AnalyzeCartsAsync(List<CartRecoveryInput> carts)
     {
@@ -56,6 +56,7 @@ public class CartRecoveryAgentService
         operation.Telemetry.Properties["CartCount"] = carts.Count.ToString();
 
         var results = new List<CartRecoveryResult>();
+        var memoryUserId = $"cart-recovery-analysis-{Guid.NewGuid():N}";
         const int batchSize = 10;
 
         for (int i = 0; i < carts.Count; i += batchSize)
@@ -63,8 +64,13 @@ public class CartRecoveryAgentService
             var batch = carts.Skip(i).Take(batchSize).ToList();
             try
             {
-                var batchResults = await AnalyzeBatchAsync(batch);
+                var batchResults = await AnalyzeBatchAsync(batch, memoryUserId);
                 results.AddRange(batchResults);
+            }
+            catch (FoundryToolPolicyException)
+            {
+                operation.Telemetry.Success = false;
+                throw;
             }
             catch (Exception ex)
             {
@@ -89,7 +95,8 @@ public class CartRecoveryAgentService
         return results;
     }
 
-    private async Task<List<CartRecoveryResult>> AnalyzeBatchAsync(List<CartRecoveryInput> carts)
+    private async Task<List<CartRecoveryResult>> AnalyzeBatchAsync(
+        List<CartRecoveryInput> carts, string memoryUserId)
     {
         // All dynamic cart data is passed in the user message. The agent instructions
         // in Foundry define the expected JSON output schema. No structured_inputs are
@@ -106,10 +113,6 @@ public class CartRecoveryAgentService
         }), new JsonSerializerOptions { WriteIndented = false });
 
         var userMessage = $"Abandoned carts to analyse:\n\n{cartPayload}";
-
-        // Scope Foundry memory per analysis session. Using a fixed key keeps the
-        // agent's memory consistent across successive analyses in the same session.
-        const string memoryUserId = "cart-recovery-analysis";
 
         // tool_choice: "none" — the agent only needs the provided cart data;
         // no MCP tool calls are required or expected.

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using api_functions.Services;
@@ -54,6 +55,21 @@ public class IllustrationSvgConverterTests
         Assert.Equal("#0000ff", (string?)path.Attribute("stroke"));
         Assert.Equal("2 4", (string?)path.Attribute("stroke-dasharray"));
         Assert.NotNull(path.Attribute("stroke-opacity"));
+    }
+
+    [Fact]
+    public void Authentication_probe_fixture_is_a_valid_read_only_conversion()
+    {
+        using var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo(), "tests", "auth", "contracts.json")));
+        var fixture = contract.RootElement.GetProperty("illustrationExportProbe").EnumerateArray().Single();
+        Assert.Equal(1, fixture.GetProperty("illustrationId").GetInt32());
+        var diagram = fixture.GetProperty("diagram").GetString();
+        Assert.NotNull(diagram);
+        var svg = XElement.Parse(IllustrationSvgConverter.Convert(diagram));
+        Assert.Equal("{http://www.w3.org/2000/svg}svg", svg.Name.ToString());
+        var path = Assert.Single(svg.Descendants(), element => element.Name.LocalName == "path");
+        Assert.Equal("M 0,0 L 10,10", (string?)path.Attribute("d"));
+        Assert.Equal("#000000", (string?)path.Attribute("stroke"));
     }
 
     [Theory]

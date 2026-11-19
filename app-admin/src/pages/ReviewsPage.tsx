@@ -701,13 +701,14 @@ const ReviewsPage: React.FC = () => {
         notifyModerationCompletionRef.current = false;
         queryClient.invalidateQueries({ queryKey: ["admin", "reviews"] });
 
+        const stopped = status.processedCount < status.queuedCount;
         toast({
-          title: "Analyze & Approve Complete",
+          title: stopped ? "Analyze & Approve Stopped" : "Analyze & Approve Complete",
           description:
-            status.failedCount > 0
-              ? `${status.successCount} completed, ${status.failedCount} failed, ${status.skippedCount} skipped.`
+            stopped || status.failedCount > 0
+              ? `${status.successCount} completed, ${status.failedCount} failed, ${status.skippedCount} skipped.${stopped && status.lastError ? ` ${status.lastError}` : ""}`
               : `${status.successCount} review${status.successCount === 1 ? "" : "s"} analyzed, replied, and approved.`,
-          variant: status.failedCount > 0 ? "destructive" : undefined,
+          variant: stopped || status.failedCount > 0 ? "destructive" : undefined,
         });
       }
     } catch (error) {

@@ -229,6 +229,14 @@ public class ReviewModerationQueueFunction
                 return;
             }
 
+            state = await _reviewService.GetReviewModerationJobStateAsync();
+            if (!state.IsRunning || !string.Equals(state.JobId, message.JobId, StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "Skipping moderation write for stopped or replaced job {JobId}.", message.JobId);
+                return;
+            }
+
             var outcome = await _reviewService.ApplyModerationReplyAndApproveAsync(
                 message.ProductReviewId,
                 suggestedResponse);
@@ -254,6 +262,18 @@ public class ReviewModerationQueueFunction
                         lastError: null);
                     break;
             }
+        }
+        catch (FoundryToolPolicyException ex)
+        {
+            _logger.LogError(ex, "Review moderation stopped after a tool-policy violation for ProductReviewId={ReviewId}",
+                message.ProductReviewId);
+            await _reviewService.IncrementReviewModerationProgressAsync(
+                message.JobId,
+                success: false,
+                skipped: false,
+                failed: true,
+                lastError: "Review moderation stopped because the agent requested an unapproved tool.",
+                stopJob: true);
         }
         catch (Exception ex)
         {

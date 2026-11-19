@@ -458,23 +458,6 @@ public class CategoryManagementFunctions
             }
 
             var trimmedName = suggestedName[..Math.Min(suggestedName.Length, 50)];
-            int newId;
-
-            if (request.Type == "subcategory")
-            {
-                newId = await _productService.GetNextSubcategoryIdAsync();
-                await _productService.InsertSubcategoryRowAsync(newId, request.CategoryId, "en", trimmedName);
-                _logger.LogInformation("GenerateCategoryWithAI: created subcategory {Id} '{Name}' in category {CatId}",
-                    newId, trimmedName, request.CategoryId);
-            }
-            else
-            {
-                newId = await _productService.GetNextCategoryIdAsync();
-                await _productService.InsertCategoryRowAsync(newId, "en", trimmedName);
-                _logger.LogInformation("GenerateCategoryWithAI: created category {Id} '{Name}'", newId, trimmedName);
-            }
-
-            // Translate to all non-English cultures
             var allCultures = await _productService.GetAllCulturesAsync();
             var nonEnglish = allCultures
                 .Where(c => !c.CultureID.TrimEnd().Equals("en", StringComparison.OrdinalIgnoreCase)
@@ -488,6 +471,21 @@ public class CategoryManagementFunctions
                 trimmedName,
                 $"Product {request.Type} name for an outdoor adventure sports equipment retailer",
                 nonEnglish);
+
+            int newId;
+            if (request.Type == "subcategory")
+            {
+                newId = await _productService.GetNextSubcategoryIdAsync();
+                await _productService.InsertSubcategoryRowAsync(newId, request.CategoryId, "en", trimmedName);
+                _logger.LogInformation("GenerateCategoryWithAI: created subcategory {Id} '{Name}' in category {CatId}",
+                    newId, trimmedName, request.CategoryId);
+            }
+            else
+            {
+                newId = await _productService.GetNextCategoryIdAsync();
+                await _productService.InsertCategoryRowAsync(newId, "en", trimmedName);
+                _logger.LogInformation("GenerateCategoryWithAI: created category {Id} '{Name}'", newId, trimmedName);
+            }
 
             foreach (var culture in nonEnglish)
             {

@@ -419,6 +419,10 @@ public static class AuthorizationEndpoints
                 "Managed-identity service tokens require an explicit set of recognized MCP scopes.",
                 Errors.InvalidScope);
         }
+        if (!ServicePrincipalPolicy.CanGrant(options, validated.ObjectId, requestedScopes))
+        {
+            return Forbid("The requested scopes are not permitted for this service.", Errors.InvalidScope);
+        }
 
         var scopes = requestedScopes.ToList();
         if (!scopes.Contains(OAuthScopes.McpAccess))

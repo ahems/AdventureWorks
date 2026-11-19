@@ -34,6 +34,7 @@ public class McpServiceTokenProvider
     private readonly TokenCredential _credential;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<McpServiceTokenProvider> _logger;
+    private readonly Uri? _mcpEndpoint;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     private readonly ConcurrentDictionary<string, (string Token, DateTimeOffset ExpiresOn)> _tokens = new(StringComparer.Ordinal);
@@ -49,10 +50,13 @@ public class McpServiceTokenProvider
         _httpClientFactory = httpClientFactory;
         _logger = logger;
 
-        if (Uri.TryCreate(mcpServiceUrl, UriKind.Absolute, out var uri))
+        if (TryParseEndpoint(mcpServiceUrl, out var uri))
         {
-            McpOrigin = $"{uri.Scheme}://{uri.Authority}";
+            _mcpEndpoint = uri;
+            McpOrigin = uri.GetLeftPart(UriPartial.Authority);
         }
+        else if (!string.IsNullOrEmpty(mcpServiceUrl))
+            _logger.LogError("MCP_SERVICE_URL must be a canonical HTTPS endpoint without credentials, query, or fragment; HTTP is allowed only on loopback.");
     }
 
     /// <summary>Origin of the api-mcp server (scheme://host[:port]); null when not configured.</summary>
@@ -61,15 +65,51 @@ public class McpServiceTokenProvider
     /// <summary>The MCP resource identifier (audience) requested for service tokens.</summary>
     public string? ResourceIdentifier => McpOrigin is null ? null : McpOrigin + "/mcp";
 
-    /// <summary>True when <paramref name="serverUrl"/> points at the api-mcp server.</summary>
-    public bool IsMcpServer(string? serverUrl)
-    {
-        if (McpOrigin is null || !Uri.TryCreate(serverUrl, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
+    /// <summary>True only for the configured api-mcp endpoint, including its path.</summary>
+    public bool IsMcpServer(string? serverUrl) =>
+        _mcpEndpoint is not null && MatchesEndpoint(_mcpEndpoint, serverUrl);
 
-        return string.Equals($"{uri.Scheme}://{uri.Authority}", McpOrigin, StringComparison.OrdinalIgnoreCase);
+    internal static bool MatchesEndpoint(string? configuredUrl, string? serverUrl) =>
+        TryParseEndpoint(configuredUrl, out var endpoint) && MatchesEndpoint(endpoint, serverUrl);
+
+    private static bool MatchesEndpoint(Uri configured, string? serverUrl)
+    {
+        if (!TryParseEndpoint(serverUrl, out var target))
+            return false;
+
+        static string PathWithoutFinalSlash(Uri uri) =>
+            uri.AbsolutePath.Length > 1 && uri.AbsolutePath.EndsWith('/')
+                ? uri.AbsolutePath[..^1]
+                : uri.AbsolutePath;
+
+        return string.Equals(configured.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(configured.IdnHost, target.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+               configured.Port == target.Port &&
+               string.Equals(PathWithoutFinalSlash(configured), PathWithoutFinalSlash(target), StringComparison.Ordinal);
+    }
+
+    private static bool TryParseEndpoint(string? value, out Uri endpoint)
+    {
+        endpoint = null!;
+        if (string.IsNullOrWhiteSpace(value) || value != value.Trim() ||
+            value.IndexOfAny(['\\', '?', '#']) >= 0 ||
+            !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            !(uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback)) ||
+            !string.IsNullOrEmpty(uri.UserInfo))
+            return false;
+
+        var authorityStart = value.IndexOf("://", StringComparison.Ordinal);
+        if (authorityStart < 0)
+            return false;
+        authorityStart += 3;
+        var pathStart = value.IndexOf('/', authorityStart);
+        var authority = pathStart < 0 ? value[authorityStart..] : value[authorityStart..pathStart];
+        var path = pathStart < 0 ? "/" : value[pathStart..];
+        if (authority.Contains('@') || !string.Equals(path, uri.AbsolutePath, StringComparison.Ordinal))
+            return false;
+
+        endpoint = uri;
+        return true;
     }
 
     /// <summary>
@@ -136,32 +176,34 @@ public class McpServiceTokenProvider
             };
 
             using var form = new FormUrlEncodedContent(formValues);
-            var http = _httpClientFactory.CreateClient(nameof(McpServiceTokenProvider));
+            using var http = _httpClientFactory.CreateClient(nameof(McpServiceTokenProvider));
             using var response = await http.PostAsync(McpOrigin + "/token", form, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 _retryAfter[scopeKey] = DateTimeOffset.UtcNow + FailureBackoff;
                 _logger.LogWarning(
-                    "api-mcp service token request failed with HTTP {Status}: {Body}",
-                    (int)response.StatusCode, body.Length > 300 ? body[..300] : body);
+                    "api-mcp service token request failed with HTTP {Status}",
+                    (int)response.StatusCode);
                 return null;
             }
 
             using var doc = JsonDocument.Parse(body);
-            var token = doc.RootElement.GetProperty("access_token").GetString();
-            var expiresIn = doc.RootElement.TryGetProperty("expires_in", out var exp) && exp.TryGetInt32(out var secs)
-                ? secs
-                : 600;
-
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                throw new JsonException("api-mcp returned an empty service access token.");
-            }
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("access_token", out var tokenElement) ||
+                tokenElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(tokenElement.GetString()) ||
+                !root.TryGetProperty("token_type", out var tokenType) ||
+                tokenType.ValueKind != JsonValueKind.String ||
+                !string.Equals(tokenType.GetString(), "Bearer", StringComparison.OrdinalIgnoreCase) ||
+                !root.TryGetProperty("expires_in", out var exp) ||
+                exp.ValueKind != JsonValueKind.Number || !exp.TryGetInt32(out var expiresIn) || expiresIn <= 0)
+                throw new JsonException("api-mcp returned an invalid service token response.");
 
             var expectedScopes = scopeKey.Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .ToHashSet(StringComparer.Ordinal);
-            var grantedScopes = !doc.RootElement.TryGetProperty("scope", out var scopeElement)
+            var grantedScopes = !root.TryGetProperty("scope", out var scopeElement)
                 ? expectedScopes
                 : scopeElement.ValueKind == JsonValueKind.String
                     ? scopeElement.GetString()!.Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -173,6 +215,7 @@ public class McpServiceTokenProvider
             }
 
             var expiresOn = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
+            var token = tokenElement.GetString()!;
             _tokens[scopeKey] = (token, expiresOn);
             _logger.LogInformation("Obtained api-mcp service token (expires in {Seconds}s)", expiresIn);
             return token;

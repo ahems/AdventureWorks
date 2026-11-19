@@ -497,19 +497,10 @@ public class SupplyChainService
         if (poList.Count == 0) return;
 
         // Build queue client
-        string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-        QueueClient queueClient;
-        if (!string.IsNullOrEmpty(queueUri))
-        {
-            var qSvc = new QueueServiceClient(new Uri(queueUri), new DefaultAzureCredential());
-            queueClient = qSvc.GetQueueClient(QUEUE_NAME);
-        }
-        else
-        {
-            string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
-            queueClient = new QueueClient(connStr, QUEUE_NAME,
-                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
-        }
+        string queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri")
+            ?? throw new InvalidOperationException("AzureWebJobsStorage__queueServiceUri is not configured");
+        var qSvc = new QueueServiceClient(new Uri(queueUri), new DefaultAzureCredential());
+        QueueClient queueClient = qSvc.GetQueueClient(QUEUE_NAME);
 
         // Load recently-injected PO tracking rows to prevent duplicate queue messages.
         // Any PO injected within the last 10 minutes is considered "in flight" and skipped.

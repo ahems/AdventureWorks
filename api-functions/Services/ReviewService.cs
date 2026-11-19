@@ -133,7 +133,7 @@ public class ReviewService
     /// <summary>
     /// Inserts a generated review and returns its new ProductReviewID.
     /// </summary>
-    public async Task<int> SaveGeneratedReviewAndGetIdAsync(GeneratedReview review)
+    public virtual async Task<int> SaveGeneratedReviewAndGetIdAsync(GeneratedReview review)
     {
         using var connection = await GetConnectionAsync();
 
@@ -769,7 +769,8 @@ public class ReviewService
         bool success,
         bool skipped,
         bool failed,
-        string? lastError)
+        string? lastError,
+        bool stopJob = false)
     {
         var client = GetReviewModerationTableClient();
         const int maxAttempts = 6;
@@ -782,7 +783,8 @@ public class ReviewService
 
             var entity = current.Value;
             var currentJobId = entity.GetString("JobId") ?? string.Empty;
-            if (!string.Equals(currentJobId, jobId, StringComparison.Ordinal))
+            if (!string.Equals(currentJobId, jobId, StringComparison.Ordinal) ||
+                entity.GetBoolean("IsRunning") != true)
             {
                 return await GetReviewModerationJobStateAsync();
             }
@@ -792,7 +794,7 @@ public class ReviewService
             var successCount = (entity.GetInt32("SuccessCount") ?? 0) + (success ? 1 : 0);
             var skippedCount = (entity.GetInt32("SkippedCount") ?? 0) + (skipped ? 1 : 0);
             var failedCount = (entity.GetInt32("FailedCount") ?? 0) + (failed ? 1 : 0);
-            var completed = processed >= queued && queued > 0;
+            var completed = stopJob || (processed >= queued && queued > 0);
 
             entity["ProcessedCount"] = processed;
             entity["SuccessCount"] = successCount;

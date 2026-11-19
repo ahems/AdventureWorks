@@ -23,6 +23,25 @@ public class ManufacturingAgentResponseTests
         Assert.DoesNotContain("https://example.test", exception.InnerException.Message);
     }
 
+    [Fact]
+    public void Untrusted_error_code_and_message_are_not_exposed()
+    {
+        const string body = """
+            {"status":"failed","error":{"code":"private-code-sentinel","message":"private-message-sentinel"},"output":[]}
+            """;
+        var exception = Assert.Throws<TargetInvocationException>(() => Parse(body));
+        Assert.DoesNotContain("private-code-sentinel", exception.InnerException!.Message);
+        Assert.DoesNotContain("private-message-sentinel", exception.InnerException.Message);
+    }
+
+    [Fact]
+    public void Malformed_json_does_not_expose_property_names()
+    {
+        const string body = """{"private-path-sentinel":{"broken":}}""";
+        var exception = Assert.Throws<TargetInvocationException>(() => Parse(body));
+        Assert.DoesNotContain("private-path-sentinel", exception.InnerException!.Message);
+    }
+
     public static IEnumerable<object[]> InvalidResponses()
     {
         yield return [LiveFailure];

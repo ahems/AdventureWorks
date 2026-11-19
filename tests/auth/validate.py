@@ -52,7 +52,28 @@ def command(args, *, environment=None, timeout=180):
         raise EvidenceError(f"{args[0]} unavailable or timed out") from error
     if result.returncode:
         # CLI output may contain tokens or application settings. Never echo it.
-        raise EvidenceError(f"{args[0]} {args[1]} exited {result.returncode}")
+        message = f"{args[0]} {args[1]} exited {result.returncode}"
+        if args[:4] == ["python3", "-B", "-m", "unittest"]:
+            failures = re.findall(
+                r"^(?:FAIL|ERROR): [A-Za-z_][A-Za-z0-9_]* \([A-Za-z_][A-Za-z0-9_.]*\)$",
+                result.stderr, re.MULTILINE)
+            if failures:
+                message += "; failed tests: " + ", ".join(failures[:20])
+        elif args[:2] == ["node", "tests/scripts/test-internal-browser-auth.mjs"]:
+            signatures = (
+                ("closed-target", "Target page, context or browser has been closed"),
+                ("route-fulfill", "route.fulfill"), ("route-abort", "route.abort"),
+                ("already-handled", "Route is already handled"), ("unhandled-rejection", "UnhandledPromiseRejection"),
+                ("timeout", "TimeoutError"), ("assertion", "AssertionError"),
+                ("type-error", "TypeError"), ("syntax-error", "SyntaxError"),
+            )
+            categories = [name for name, marker in signatures if marker in result.stderr]
+            locations = sorted(set(re.findall(
+                r"test-internal-browser-auth\.mjs:\d{1,5}:\d{1,5}", result.stderr)))
+            message += "; sanitized browser failure: " + (", ".join(categories) or "unclassified")
+            if locations:
+                message += "; source locations: " + ", ".join(locations[:5])
+        raise EvidenceError(message)
     return result.stdout
 
 
@@ -132,21 +153,87 @@ def reviewed_function_read_routes():
         raise EvidenceError("Reviewed Functions read-route contract is unavailable or invalid") from error
     if not isinstance(routes, dict) or not routes:
         raise EvidenceError("Reviewed Functions read-route contract is empty or invalid")
-    for name, route in routes.items():
+    for name, binding in routes.items():
+        if isinstance(binding, str):
+            route, methods = binding, ["GET"]
+        elif isinstance(binding, dict) and set(binding) == {"route", "methods"}:
+            route, methods = binding["route"], binding["methods"]
+        else:
+            raise EvidenceError("Reviewed Functions read-route contract contains an invalid entry")
         if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_]+", name) or
                 not isinstance(route, str) or not route or route != route.strip("/") or
                 any(char in route for char in "?#\\") or
-                any(segment in {".", ".."} for segment in route.split("/"))):
+                any(segment in {".", ".."} for segment in route.split("/")) or
+                not isinstance(methods, list) or not methods or
+                any(not isinstance(method, str) or not re.fullmatch(r"[A-Z]{1,10}", method)
+                    for method in methods) or len(methods) != len(set(methods)) or "GET" not in methods):
             raise EvidenceError("Reviewed Functions read-route contract contains an invalid entry")
     return routes
+
+
+def side_effecting_function_reads():
+    try:
+        routes = json.loads(CONTRACTS.read_text())["sideEffectingFunctionReads"]
+        safe = set(reviewed_function_read_routes())
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise EvidenceError("Reviewed side-effecting Functions read contract is unavailable or invalid") from error
+    if not isinstance(routes, dict) or not routes:
+        raise EvidenceError("Reviewed side-effecting Functions read contract is empty or invalid")
+    for name, entry in routes.items():
+        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_]+", name) or name in safe or
+                not isinstance(entry, dict) or set(entry) != {"route", "reason"} or
+                not isinstance(entry["route"], str) or not entry["route"] or
+                entry["route"] != entry["route"].strip("/") or
+                not isinstance(entry["reason"], str) or not 8 <= len(entry["reason"]) <= 200):
+            raise EvidenceError("Reviewed side-effecting Functions read contract contains an invalid entry")
+    return routes
+
+
+def side_effecting_read_reason(function, routes):
+    entry = routes.get(function.get("Name"))
+    policy = function.get("Policy")
+    if (isinstance(entry, dict) and entry.get("route") == function.get("Route") and
+            isinstance(policy, dict) and policy.get("IsAnonymous") is False and
+            "GET" in function.get("Methods", [])):
+        return entry["reason"]
+    return None
+
+
+def function_get_review_closure(report):
+    try:
+        safe = reviewed_function_read_routes()
+        side_effecting = side_effecting_function_reads()
+    except EvidenceError as error:
+        report.add("inventory:functions-get-review-closure", "contracts", "FAIL", str(error))
+        return
+    protected = {item.get("Name"): item for item in report.inventory.get("functions", [])
+                 if isinstance(item.get("Policy"), dict) and item["Policy"].get("IsAnonymous") is False and
+                 "GET" in item.get("Methods", [])}
+    unclassified = sorted(name for name, item in protected.items()
+                          if not is_reviewed_function_read(item, safe) and
+                          side_effecting_read_reason(item, side_effecting) is None)
+    stale = sorted(set(side_effecting) - set(protected))
+    report.check("inventory:functions-get-review-closure", "contracts", not unclassified and not stale,
+                 "Every protected Functions GET must be reviewed as read-only or side-effecting" +
+                 (": unclassified " + ", ".join(unclassified) if unclassified else "") +
+                 (": stale " + ", ".join(stale) if stale else ""))
 
 
 def is_reviewed_function_read(function, routes):
     policy = function.get("Policy")
     name = function.get("Name")
+    binding = routes.get(name)
+    if isinstance(binding, str):
+        route, expected_methods = binding, ["GET"]
+    elif isinstance(binding, dict):
+        route, expected_methods = binding["route"], binding["methods"]
+    else:
+        return False
+    methods = function.get("Methods")
     return (isinstance(policy, dict) and policy.get("IsAnonymous") is False and
-            function.get("Methods") == ["GET"] and
-            name in routes and routes[name] == function.get("Route"))
+            isinstance(methods, list) and len(methods) == len(expected_methods) and
+            all(isinstance(method, str) for method in methods) and
+            set(methods) == set(expected_methods) and route == function.get("Route"))
 
 
 def http(method, url, *, token=None, data=None, form=None, headers=None, timeout=90, opener=None):
@@ -221,6 +308,22 @@ def passwordless_sql(value):
     return (fields.get("authentication") in {"activedirectorydefault", "activedirectorymanagedidentity",
                                             "activedirectorymsi"} and
             not any(key in fields for key in ["password", "pwd", "userid", "uid", "accesstoken"]))
+
+
+def mcp_sql_target_matches(value, server, database):
+    if not passwordless_sql(value) or not all(isinstance(item, str) and item for item in (server, database)):
+        return False
+    fields = {}
+    for part in value.split(";"):
+        if part.strip():
+            key, _, item = part.partition("=")
+            fields[key.strip().lower().replace(" ", "")] = item.strip()
+    if set(fields) != {"server", "database", "authentication"}:
+        return False
+    hostname = server.lower()
+    permitted_servers = {hostname, "tcp:" + hostname, hostname + ",1433", "tcp:" + hostname + ",1433"}
+    return (fields["server"].lower() in permitted_servers and
+            fields["database"].lower() == database.lower())
 
 
 def sensitive_management_grants(definition, scope=None):
@@ -479,6 +582,18 @@ def parse_principal_id_allowlist(value):
     if len(normalized) != len(values) or len(normalized) != len(set(normalized)):
         raise EvidenceError("Managed-identity trust allow-list has empty or duplicate principal IDs")
     return set(normalized)
+
+
+def mcp_service_profiles_match(configuration, functions_principal, hosted_principal):
+    try:
+        functions = uuid.UUID(functions_principal)
+        hosted = uuid.UUID(hosted_principal)
+        configured_functions = uuid.UUID(configuration.get("MCP_FUNCTIONS_PRINCIPAL_ID"))
+        configured_hosted = uuid.UUID(configuration.get("MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID"))
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return (functions.int != 0 and hosted.int != 0 and functions != hosted and
+            configured_functions == functions and configured_hosted == hosted)
 
 
 def seed_acr_pull_is_exact(assignments, principal_id, registry_scope):
@@ -964,8 +1079,44 @@ def workflow_invocations(workflow):
     return invocations
 
 
-def summarize_agent_version(name, version, record, custom_origin, dab_origin):
+def agent_mcp_endpoint_identity(value):
+    if (not isinstance(value, str) or not value or value != value.strip() or
+            any(char in value for char in "\\?#") or
+            any(ord(char) < 33 or ord(char) == 127 for char in value)):
+        raise EvidenceError("MCP endpoint is not a canonical HTTPS URL")
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        hostname, port = parsed.hostname, parsed.port
+    except ValueError as error:
+        raise EvidenceError("MCP endpoint is not a canonical HTTPS URL") from error
+    path = parsed.path or "/"
+    if (parsed.scheme != "https" or not hostname or not hostname.isascii() or
+            parsed.username is not None or parsed.password is not None or "@" in parsed.netloc or
+            not re.fullmatch(r"(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9a-fA-F]{2})*", path) or
+            any(segment in {".", ".."} for segment in path.split("/")) or
+            any(chr(int(match.group()[1:], 16)) in
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+                for match in re.finditer(r"%[0-9a-fA-F]{2}", path))):
+        raise EvidenceError("MCP endpoint is not a canonical HTTPS URL")
+    if len(path) > 1 and path.endswith("/"):
+        path = path[:-1]
+    return hostname.lower(), 443 if port is None else port, path
+
+
+def agent_mcp_endpoint_origin(identity):
+    hostname, port, _ = identity
+    host = f"[{hostname}]" if ":" in hostname else hostname
+    return "https://" + host + (f":{port}" if port != 443 else "")
+
+
+def agent_mcp_endpoint_digest(identity):
+    return hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
+
+
+def summarize_agent_version(name, version, record, custom_endpoint, dab_endpoint):
     version_id = foundry_agent_version_id(name, version)
+    custom_identity = agent_mcp_endpoint_identity(custom_endpoint)
+    dab_identity = agent_mcp_endpoint_identity(dab_endpoint)
     definition = record.get("definition")
     if not isinstance(definition, dict):
         raise EvidenceError("Foundry agent version has no supported definition")
@@ -993,7 +1144,10 @@ def summarize_agent_version(name, version, record, custom_origin, dab_origin):
         summary = {"type": tool_type}
         if tool_type == "mcp":
             target = tool.get("server_url")
-            tool_origin = origin(target) if isinstance(target, str) else None
+            try:
+                target_identity = agent_mcp_endpoint_identity(target)
+            except EvidenceError:
+                target_identity = None
             server_label = tool.get("server_label")
             if (not isinstance(server_label, str) or not server_label or
                     any(char.isspace() for char in server_label)):
@@ -1004,22 +1158,26 @@ def summarize_agent_version(name, version, record, custom_origin, dab_origin):
                 raise EvidenceError("Deployed MCP agent tool has invalid headers")
             server_id = f"{version_id}:mcp-server:{server_label}"
             allowed_tools = mcp_allowed_tool_names(tool)
+            is_custom = target_identity is not None and target_identity == custom_identity
+            has_top_level_authorization = any(key.lower() == "authorization" for key in tool)
             summary.update({
                 "server": server_label,
-                "resource": "custom-mcp" if tool_origin == custom_origin else
-                "dab-mcp" if tool_origin == dab_origin else "unclassified",
-                "targetOrigin": tool_origin,
+                "resource": "custom-mcp" if is_custom else
+                "dab-mcp" if target_identity is not None and target_identity == dab_identity else "unclassified",
+                "targetOrigin": agent_mcp_endpoint_origin(target_identity) if target_identity else None,
+                "targetEndpointSha256": agent_mcp_endpoint_digest(target_identity) if target_identity else None,
                 "surfaceId": server_id,
                 "allowedTools": allowed_tools,
                 "surfaceIds": ([f"{server_id}:tool:{tool_name}" for tool_name in allowed_tools]
                                if allowed_tools else []),
                 "hasStoredAuthorization": any(
                     key.lower() == "authorization" for key in headers
-                ),
-                "hasStoredCredentialHeaders": any(key.lower() in {
-                    "authorization", "proxy-authorization", "api-key", "x-api-key",
+                ) or has_top_level_authorization,
+                "hasStoredCredentialHeaders": has_top_level_authorization or any(key.lower() in {
+                    "authorization", "proxy-authorization", "cookie", "api-key", "x-api-key",
                     "ocp-apim-subscription-key", "x-functions-key",
-                } for key in headers),
+                } for key in headers) or (
+                    is_custom and any(key.lower() == "project_connection_id" for key in tool)),
                 "hasStaticHeaders": bool(headers),
                 "definitionIndex": index,
             })
@@ -1106,7 +1264,8 @@ def agent_tool_runtime_evidence(report, versions):
                     raise EvidenceError("An MCP tool inventory has inconsistent surface identities")
                 entries = [{
                     "id": tool_id, "kind": "mcp-tool", "from": version["versionId"],
-                    "toOrigin": tool.get("targetOrigin"), "tool": name,
+                    "toOrigin": tool.get("targetOrigin"),
+                    "toEndpointSha256": tool.get("targetEndpointSha256"), "tool": name,
                 } for name, tool_id in zip(names, surfaces)]
             else:
                 if tool.get("surfaceIds") != [surface]:
@@ -1212,6 +1371,7 @@ def agent_tool_allowlist_matches(expected, tools):
     if not expected:
         return not actual
     return (len(actual) == 1 and actual[0].get("server") == "adventureworks_mcp" and
+            actual[0].get("resource") == "custom-mcp" and
             actual[0].get("allowedTools") == expected)
 
 
@@ -1438,6 +1598,10 @@ class Report:
         self.checks = []
         self.inventory = {}
         self.provenance = {}
+        self._promotion_response_hash = None
+        self._email_content_template = None
+        self._product_content_response_hash = None
+        self._manufacturing_content_response_hash = None
 
     def add(self, check_id, group, status, detail):
         if status not in STATUSES:
@@ -1554,6 +1718,8 @@ def offline_tests(report):
                            "-p", "test_hosted_agent_mcp_trust.py"]),
         ("python:agent-tools", ["python3", "-B", "-m", "unittest", "discover", "-s", "tests/scripts",
                                 "-p", "test_agent_tools_config.py"]),
+        ("python:manufacturing-agent-tools", ["python3", "-B", "-m", "unittest", "discover", "-s", "tests/scripts",
+                                              "-p", "test_manufacturing_agent_tools.py"]),
         ("python:keyvault-hook", ["python3", "-B", "tests/scripts/test_keyvault_firewall.py",
                                    "KeyVaultFirewallTests"]),
         ("python:assurance", ["python3", "-B", "-m", "unittest", "discover", "-s", "tests/auth",
@@ -1565,8 +1731,7 @@ def offline_tests(report):
                                         "src/hooks/useWebPubSub.test.ts", "src/lib/dabFetch.test.ts",
                                         "src/components/ShortagesPanel.test.tsx"]),
         ("node:auth", ["node", "--experimental-vm-modules", "--test",
-                       "tests/scripts/test-route-auth.mjs", "tests/scripts/test-internal-session-races.mjs",
-                       "tests/scripts/test-internal-request-sessions.mjs", "tests/scripts/test-live-updates.mjs",
+                       "tests/scripts/test-route-auth.mjs", "tests/scripts/test-live-updates.mjs",
                        "tests/scripts/test-eshop-chat.mjs", "tests/scripts/test-auth-browser-network-policy.mjs",
                        "tests/scripts/test-review-auth.mjs", "tests/scripts/test-guest-cart-auth.mjs",
                        "tests/scripts/test-cart-provider-auth.mjs", "tests/scripts/test-runtime-rbac.cjs",
@@ -1581,6 +1746,7 @@ def offline_tests(report):
             report.add(name, "offline", "PASS", "Configured test runner passed")
         except EvidenceError as error:
             report.add(name, "offline", "FAIL", str(error))
+    internal_session_transition_evidence(report)
 
 
 def current_test_evidence(report, prefix):
@@ -1790,6 +1956,34 @@ def mcp_dispatch_evidence(report):
     tools = report.inventory.get("mcp", [])
     expected = set()
     expected.add(prefix + "Authorized_task_opt_in_preserves_background_dispatch")
+    expected.update(prefix + name for name in [
+        "Future_autonomy_shutoff_permits_a_service_action",
+        "Human_manufacturing_actions_are_not_bound_to_agent_autonomy",
+        "Existing_service_token_stops_dispatching_when_principal_trust_is_removed",
+        "Existing_hosted_token_stops_dispatching_when_the_instance_profile_rotates",
+        "Service_task_handlers_deny_an_existing_token_after_principal_trust_is_removed",
+    ])
+    expected.update(
+        prefix + "Service_actions_require_the_persisted_autonomy_mode" +
+        f'(tool: "{tool}", mode: {mode}, allowed: {allowed})'
+        for tool in ["begin_manufacturing_run", "place_supply_order"]
+        for mode, allowed in [(0, "False"), (1, "False"), (2, "False"), (3, "True")]
+    )
+    expected.update(
+        prefix + f'Service_actions_fail_closed_when_autonomy_cannot_be_confirmed(condition: "{condition}")'
+        for condition in ["expired", "inconsistent", "malformed", "unavailable"]
+    )
+    expected.update(
+        prefix + "Service_action_rechecks_autonomy_before_tool_dispatch" +
+        f'(tool: "{tool}", task: {task})'
+        for tool in ["begin_manufacturing_run", "place_supply_order"]
+        for task in ["False", "True"]
+    )
+    expected.update(
+        prefix + "Autonomous_service_action_task_reaches_dispatch_when_mode_remains_enabled" +
+        f'(tool: "{tool}")'
+        for tool in ["begin_manufacturing_run", "place_supply_order"]
+    )
     expected.update(prefix + "Catalogue_only_service_cannot_dispatch_purchase_history_recommendations" +
                     f"(task: {task})" for task in ["False", "True"])
     expected.update(
@@ -1800,8 +1994,11 @@ def mcp_dispatch_evidence(report):
         expected.update(prefix + "Every_tool_denial_stops_real_http_dispatch" +
                         f'(name: "{name}", reason: "{reason}")'
                         for reason in ["anonymous", "missing-business-scope", "wrong-audience"])
-        expected.add(prefix + "Every_tool_with_issued_service_scope_reaches_dispatch_once" +
+        expected.add(prefix + "Every_tool_with_issued_staff_scope_reaches_dispatch_once" +
                      f'(name: "{name}")')
+        expected.update(prefix + "Each_service_profile_enforces_its_tool_boundary" +
+                        f'(name: "{name}", profile: "{profile}")'
+                        for profile in ["functions", "hosted"])
         expected.add(prefix + "Denied_task_opt_in_returns_authorization_error_not_a_background_task" +
                      f'(name: "{name}")')
         if tool["Policy"]["Mode"] == "SelfOrInternal":
@@ -1816,10 +2013,222 @@ def mcp_dispatch_evidence(report):
                "FAIL" if failed else "PASS" if complete else "BLOCKED",
                "Current-run TRX requires all " + str(len(expected)) +
                " registry-derived real HTTP/OpenIddict/SDK dispatch cases exactly once: anonymous, "
-               "wrong-resource and missing-scope denials, issued service-token positives, "
-               "task opt-in authorization before creation, preserved authorized background dispatch, "
-               "two-owner injection and malformed/foreign owner denials. An innermost sentinel "
+               "wrong-resource and missing-scope denials, issued staff-token positives, "
+               "both principal-specific service tool matrices, trust-revocation and instance-rotation denials, "
+               "task opt-in authorization before creation, preserved authorized background dispatch and current service trust, "
+               "two-owner injection and malformed/foreign owner denials, plus persisted autonomy checks "
+               "before service action creation and execution, mode transitions and unchanged human authorization. An innermost sentinel "
                "replaces business execution; does not prove SQL/proxy/task behavior or deployed access. "
+               "Evidence SHA256: " + json.dumps(sources, sort_keys=True))
+
+
+def hosted_agent_auth_evidence(report):
+    prefix = "ApiFunctions.Tests.ManufacturingMcpAuthenticationTests."
+    expected = {prefix + name for name in [
+        "Autonomous_mode_offers_write_tools_and_unknown_modes_fail_closed",
+        "Manufacturing_invocation_mode_is_parsed_fail_closed",
+        "Omitted_response_scope_means_the_requested_scope_set",
+        "Insecure_endpoint_is_rejected_before_credentials_are_acquired",
+        "Exchanges_managed_identity_assertion_for_the_correct_mcp_resource_each_invocation",
+    ]}
+    expected.update(prefix + f'Ambiguous_endpoint_is_rejected_before_credentials_are_acquired(defect: "{defect}")'
+                    for defect in ["query", "fragment", "userinfo", "empty-userinfo", "dot-segment",
+                                   "escaped-dot-segment", "backslash"])
+    expected.update(
+        prefix + f"Hosted_agent_accepts_the_actual_queue_trigger_mode_format(mode: {mode})"
+        for mode in ["ReadOnly", "ProposePending", "FullyAutonomous"]
+    )
+    expected.update(
+        prefix + f'Read_and_proposal_modes_do_not_offer_autonomous_write_tools(mode: "{mode}")'
+        for mode in ["ReadOnly", "ProposePending"]
+    )
+    results, sources = current_test_evidence(report, prefix)
+    failed = any(outcome not in {"Passed", "NotExecuted"} for values in results.values() for outcome in values)
+    complete = all(results.get(name) == ["Passed"] for name in expected)
+    report.add("required:hosted-agent-auth", "required",
+               "FAIL" if failed else "PASS" if complete else "BLOCKED",
+               "Current-run TRX requires the actual queue-mode contract, mode-specific tool lists, OAuth "
+               "response-scope omission and safe endpoint cases. These offline tests do not prove a deployed hosted invocation "
+               "or its managed identity. Evidence SHA256: " + json.dumps(sources, sort_keys=True))
+
+
+def agent_token_target_cases():
+    provider = "ApiFunctions.Tests.McpServiceTokenProviderTests."
+    client = "ApiFunctions.Tests.FoundryAgentClientTests."
+    endpoint = "https://mcp.test/mcp"
+    targets = [
+        (endpoint, endpoint, True),
+        (endpoint + "/", "https://MCP.TEST:443/mcp", True),
+        (endpoint, endpoint + "/", True),
+        ("http://localhost:5000/mcp", "http://localhost:5000/mcp", True),
+        *[(endpoint, target, False) for target in [
+            "https://mcp.test/other", "https://mcp.test/mcp/other",
+            "https://mcp.test/mcp//", "https://mcp.test/MCP",
+            "https://mcp.test/a/../mcp", "https://mcp.test/a/%2e%2e/mcp",
+            "https://mcp.test/mcp%2fother", "https://mcp.test/mcp?x=1",
+            "https://mcp.test/mcp#fragment", "https://user@mcp.test/mcp",
+            "https://@mcp.test/mcp", r"https://mcp.test\\@evil.test/mcp",
+            "https://mcp.test:444/mcp", "https://mcp.test.evil.test/mcp",
+            "http://mcp.test/mcp",
+        ]],
+        ("https://mcp.test/mcp?x=1", endpoint, False),
+        ("https://user@mcp.test/mcp", endpoint, False),
+        ("http://mcp.test/mcp", "http://mcp.test/mcp", False),
+    ]
+    expected = {
+        provider + "Mcp_server_matching_requires_the_exact_safe_endpoint" +
+        f'(configuredUrl: "{configured}", targetUrl: "{target}", expected: {str(allowed)})'
+        for configured, target, allowed in targets
+    }
+    expected.update(provider + f'Unsafe_configuration_never_requests_an_assertion_or_service_token(configuredUrl: "{url}")'
+                    for url in ["https://mcp.test/mcp?x=1", "https://user@mcp.test/mcp", "http://mcp.test/mcp"])
+    expected.update(provider + f'Invalid_token_type_or_expiry_is_never_returned(defect: "{defect}")'
+                    for defect in ["missing-type", "wrong-type", "missing-expiry",
+                                   "zero-expiry", "negative-expiry", "string-expiry"])
+    expected.update(provider + name for name in [
+        "Requested_scopes_are_sent_and_cached_separately",
+        "Provider_rejects_a_token_with_broader_or_missing_granted_scopes",
+        "Provider_accepts_omitted_scope_when_token_endpoint_grants_the_requested_scopes",
+        "Empty_scope_set_is_rejected_without_requesting_a_token",
+        "Failed_token_exchange_does_not_log_the_response_body",
+    ])
+    unexpected_urls = ["https://mcp.test/other", "https://mcp.test/mcp?other=1"]
+    expected.update(client + "Delegated_tokens_are_not_sent_to_other_same_origin_endpoints" +
+                    f'(serverUrl: "{url}", withProvider: {present})'
+                    for url in unexpected_urls for present in ["True", "False"])
+    expected.update(client + f'Service_tokens_are_not_requested_for_other_same_origin_endpoints(serverUrl: "{url}")'
+                    for url in unexpected_urls)
+    expected.update(client + "Delegated_tokens_reach_the_configured_endpoint_with_safe_normalization" +
+                    f'(serverUrl: "{url}")' for url in ["https://MCP.TEST:443/mcp", "https://mcp.test/mcp/"])
+    expected.update(client + "Api_mcp_tools_reject_static_authorization_before_requesting_tokens" +
+                    f'(credentialField: "{field}", delegated: {delegated})'
+                    for field, delegated in [
+                        ("Authorization", "False"), ("authorization", "False"),
+                        ("authorization", "True"), ("X-API-Key", "False"), ("Cookie", "True"),
+                        ("top-level", "True"), ("project-connection", "False")])
+    expected.update(client + name for name in [
+        "Guarded_chat_rejects_mismatched_provider_and_fallback_endpoints",
+        "Credential_bearing_requests_do_not_log_foundry_error_bodies",
+        "Warmup_propagates_caller_cancellation",
+    ])
+    expected.update(client + f'Warmup_does_not_log_untrusted_tool_urls(warmupMode: "{mode}")'
+                    for mode in ["success", "failure", "timeout"])
+    mutation_agents = ["customer", "order"]
+    definition_defects = [
+        "missing-scopes", "missing-scope", "broader-scope", "duplicate-scope", "delegated",
+        "wrong-choice", "multiple-policies", "missing-allow-list", "extra-tool", "missing-tool",
+        "duplicate-tool", "wrong-server", "wrong-path", "wrong-label", "provider-mismatch",
+        "static-header", "static-authorization", "unknown-property", "additional-server",
+        "unavailable-definition", "missing-instructions", "missing-tools",
+    ]
+    expected.update(client + "Mutation_agent_policy_rejects_unreviewed_credentials_and_definitions" +
+                    f'(operation: "{operation}", defect: "{defect}")'
+                    for operation in mutation_agents for defect in definition_defects)
+    expected.update(client + "Mutation_agent_rejects_unreviewed_completed_tool_calls" +
+                    f'(operation: "{operation}", defect: "{defect}")'
+                    for operation in mutation_agents
+                    for defect in ["unknown-tool", "wrong-server", "missing-name", "function-call"])
+    expected.update(client + "Mutation_agent_never_approves_unreviewed_or_ambiguous_requests" +
+                    f'(operation: "{operation}", defect: "{defect}")'
+                    for operation in mutation_agents
+                    for defect in ["unknown-tool", "wrong-server", "missing-id",
+                                   "duplicate-id", "missing-response-id"])
+    expected.update(client + name + f'(operation: "{operation}")'
+                    for operation in mutation_agents for name in [
+                        "Mutation_services_use_provisioned_tools_and_exact_scopes_before_persistence",
+                        "Mutation_services_reject_unreviewed_tool_definitions_before_persistence",
+                        "Mutation_agent_can_approve_a_reviewed_tool_and_rejects_cached_fallbacks",
+                        "Mutation_agent_accepts_a_reviewed_completed_tool_call",
+                    ])
+    expected.update(client + "Failed_continuations_surface_errors_without_logging_response_bodies" +
+                    f'(operation: "{operation}")'
+                    for operation in [*mutation_agents, "delegated"])
+    expected.add(client + "Order_agent_handler_denies_a_foreign_conversation_before_order_creation")
+    expected.add(client + "Order_generation_failures_do_not_log_the_agent_response_body")
+    expected.update(client + f'Review_batch_agents_propagate_unsolicited_tool_calls(operation: "{operation}")'
+                    for operation in ["reviews", "replies"])
+    expected.update(client + f'Review_batch_agents_preserve_non_policy_error_fallbacks(operation: "{operation}")'
+                    for operation in ["reviews", "replies"])
+    expected.update(client + f'Verified_review_job_stops_after_tool_policy_rejection(stage: "{stage}")'
+                    for stage in ["review", "reply"])
+    expected.add(client + "Review_agent_does_not_log_unparseable_generated_content")
+    expected.update(client + f'{name}(operation: "{operation}")'
+                    for operation in ["review", "recovery"] for name in [
+                        "Analysis_memory_is_isolated_per_request_and_shared_within_batches",
+                        "Analysis_handlers_return_failure_after_a_policy_rejection",
+                        "Analysis_services_preserve_non_policy_batch_fallbacks",
+                    ])
+    expected.update(client + "Analysis_policy_rejection_stops_later_batches" +
+                    f'(operation: "{operation}", rejectedRound: {round_number})'
+                    for operation in ["review", "recovery"] for round_number in [1, 2])
+    expected.add(client + "Moderation_policy_rejection_persists_terminal_state_and_skips_queued_items")
+    expected.add(client + "Moderation_skips_an_inflight_write_when_another_worker_stopped_the_job")
+    expected.add(client + "Email_content_memory_is_isolated_between_customer_requests")
+    expected.update(client + f"Email_content_handler_surfaces_policy_errors_and_preserves_ordinary_fallbacks(policy: {policy})"
+                    for policy in ["True", "False"])
+    expected.update(client + "Secondary_translation_policy_errors_stop_before_description_persistence" +
+                    f'(caller: "{caller}", policy: {policy})'
+                    for caller in ["queue", "activity"] for policy in ["True", "False"])
+    expected.update(client + "Ai_category_generation_defers_writes_until_translation_policy_is_satisfied" +
+                    f'(type: "{type_name}", policy: {policy})'
+                    for type_name in ["category", "subcategory"] for policy in ["True", "False"])
+    expected.update(client + "Data_supplied_handlers_correlate_foundry_completion_to_the_host_trace" +
+                    f'(operation: "{operation}")' for operation in ["review", "recovery", "email"])
+    expected.update(client + f"Foundry_error_and_retry_logs_omit_untrusted_response_bodies(retry: {retry})"
+                    for retry in ["True", "False"])
+    expected.add("ApiFunctions.Tests.AgentHttpClientSecurityTests."
+                 "Managed_identity_assertions_and_delegated_tool_tokens_do_not_follow_redirects")
+    hosted = "ApiFunctions.Tests.AgentHttpClientSecurityTests."
+    expected.add(hosted + "Hosted_agent_sends_to_the_validated_endpoint_and_returns_completed_findings")
+    expected.update(hosted + f'Hosted_agent_rejects_untrusted_endpoint_before_acquiring_a_token(defect: "{defect}")'
+                    for defect in ["foreign-host", "lookalike-host", "wrong-project", "wrong-path", "extra-query",
+                                   "fragment", "userinfo", "dot-segment", "encoded-dot-segment", "insecure",
+                                   "invalid-project"])
+    expected.update(hosted + "Hosted_agent_http_errors_do_not_read_or_expose_untrusted_bodies" +
+                    f"(status: {status})"
+                    for status in ["Found", "Unauthorized", "Forbidden", "TooManyRequests",
+                                   "ServiceUnavailable", "InternalServerError"])
+    expected.update("ApiFunctions.Tests.ManufacturingAgentResponseTests." + name for name in [
+        "Untrusted_error_code_and_message_are_not_exposed",
+        "Malformed_json_does_not_expose_property_names",
+    ])
+    return expected
+
+
+def agent_token_target_evidence(report):
+    expected = agent_token_target_cases()
+    results, sources = current_test_evidence(report, "ApiFunctions.Tests.")
+    failed = any(outcome not in {"Passed", "NotExecuted"}
+                 for name in expected for outcome in results.get(name, []))
+    complete = all(results.get(name) == ["Passed"] for name in expected)
+    report.add("required:agent-token-target-offline", "required",
+               "FAIL" if failed else "PASS" if complete else "BLOCKED",
+               f"Current-run TRX requires all {len(expected)} exact endpoint, credential, agent "
+               "tool-policy, analysis isolation, job failure, token-response, hosted-agent redaction, "
+               "project-target binding and loopback redirect cases once. This proves Functions-side handling, "
+               "not Foundry's remote MCP connector or a deployed hosted invocation. Evidence SHA256: " +
+               json.dumps(sources, sort_keys=True))
+
+
+def mcp_functions_target_evidence(report):
+    prefix = "AdventureWorks.Tests.FunctionsServiceTokenHandlerTests."
+    expected = {prefix + name for name in [
+        "Functions_endpoint_accepts_only_canonical_https_or_loopback_origins",
+        "Functions_service_token_is_sent_only_to_the_configured_origin",
+        "Functions_proxy_rejects_supplied_authorization_and_host_headers",
+        "Functions_proxy_fails_closed_without_a_remote_issuer_but_preserves_loopback_development",
+        "Functions_proxy_fails_closed_without_signing_credentials",
+        "Registered_functions_proxy_clients_do_not_follow_redirects",
+    ]}
+    results, sources = current_test_evidence(report, prefix)
+    failed = any(outcome not in {"Passed", "NotExecuted"} for values in results.values() for outcome in values)
+    complete = set(results) == expected and all(results.get(name) == ["Passed"] for name in expected)
+    report.add("required:mcp-functions-token-target-offline", "required",
+               "FAIL" if failed else "PASS" if complete else "BLOCKED",
+               "Current-run TRX requires all six exact MCP-to-Functions credential-target tests once: "
+               "canonical origins, valid signed service tokens for all five registered clients, "
+               "foreign targets and supplied headers, missing issuer/signing credentials, and real same- "
+               "and cross-origin loopback redirects. This is not deployed invocation evidence. "
                "Evidence SHA256: " + json.dumps(sources, sort_keys=True))
 
 
@@ -1917,11 +2326,213 @@ def consumer_handler_evidence(report):
                "ownership, transactions or side effects. Evidence SHA256: " + json.dumps(sources, sort_keys=True))
 
 
+CONTINUATION_HANDLERS = {"AIAgentFunctions", "GenerateOrderWithAIFunction", "GenerateProductContentFunction",
+                         "GeneratePromotionFunction"}
+CONTINUATION_WORKERS = {"AIJobProcessorFunction", "SimulationOrderQueueTrigger", "AutoPromotionQueueTrigger"}
+
+
+def continuation_handler_closure(root=ROOT):
+    """Source-derived callers of services that bind Foundry continuations to a conversation owner."""
+    services = set()
+    for path in sorted((root / "api-functions/Services").glob("*.cs")):
+        if path.stem != "FoundryAgentClient" and re.search(
+                r"string\?\s+conversationOwner\s*=", path.read_text(encoding="utf-8")):
+            services.add(path.stem)
+    handlers, workers, unknown = set(), set(), set()
+    for path in sorted((root / "api-functions/Functions").glob("*.cs")):
+        source = path.read_text(encoding="utf-8")
+        if not any(re.search(r"\b" + re.escape(service) + r"\b", source) for service in services):
+            continue
+        binds = re.search(r"conversationOwner:\s*caller\.SubjectId|caller\.SubjectId\s*\)", source) is not None
+        resumes = re.search(r"previousResponseId|conversationOwner", source, re.IGNORECASE) is not None
+        if path.stem in CONTINUATION_HANDLERS and binds:
+            handlers.add(path.stem)
+        elif path.stem in CONTINUATION_WORKERS and not resumes:
+            workers.add(path.stem)
+        else:
+            unknown.add(path.stem)
+    return services, handlers, workers, unknown
+
+
+def chat_continuation_ownership_evidence(report):
+    prefix = "ApiFunctions.Tests.FoundryAgentClientTests."
+    facts = {prefix + name for name in [
+        "Chat_resumes_only_responses_owned_by_the_same_subject_and_agent",
+        "Chat_handler_binds_conversations_to_the_validated_token_subject_not_the_body",
+        "Product_content_handler_binds_initial_and_resumed_conversations_to_the_validated_subject",
+        "Promotion_handler_binds_resumed_conversations_to_the_validated_subject",
+        "Order_agent_handler_denies_a_foreign_conversation_before_order_creation",
+    ]}
+    theories = {prefix + "Externally_supplied_continuations_require_a_validated_owner_before_any_io": 3,
+                prefix + "Invalid_conversation_metadata_is_denied_without_a_followup": 3,
+                prefix + "Unavailable_conversation_identifiers_are_denied_without_a_followup": 2}
+    results, sources = current_test_evidence(report, prefix)
+    selected = {name: outcomes for name, outcomes in results.items()
+                if name in facts or name.startswith(tuple(base + "(" for base in theories))}
+    services, handlers, workers, unknown = continuation_handler_closure()
+    failed = any(outcome not in {"Passed", "NotExecuted"} for values in selected.values() for outcome in values)
+    tests_complete = (all(selected.get(name) == ["Passed"] for name in facts) and all(
+        sum(1 for name, outcomes in selected.items() if name.startswith(base + "(") and outcomes == ["Passed"])
+        == count for base, count in theories.items()))
+    closed = (not unknown and handlers == CONTINUATION_HANDLERS and workers == CONTINUATION_WORKERS and
+              len(services) == 4)
+    report.inventory["continuationOwnership"] = {
+        "services": sorted(services), "handlers": sorted(handlers), "workers": sorted(workers),
+        "unclassified": sorted(unknown)}
+    report.add("required:chat-continuation-ownership-offline", "required",
+               "FAIL" if failed else "PASS" if tests_complete and closed else "BLOCKED",
+               "Source-derived closure: every Functions caller of an owner-binding agent service is either one of "
+               "four HTTP handlers binding caller.SubjectId (chat, order, product content, promotion) or one of "
+               "three queue/worker callers that never resume a conversation. Requires 13 current-run cases: "
+               "same-subject/agent resume, two-owner handler denials with forged body owners, pre-IO owner "
+               "validation and invalid/unavailable metadata denial. Unclassified callers: " +
+               (", ".join(sorted(unknown)) or "none") + ". Evidence SHA256: " + json.dumps(sources, sort_keys=True))
+
+
+SESSION_PORTALS = {"app-admin": "admin", "app-manufacturing": "manufacturing"}
+SESSION_EXCHANGES = {"handleCallback": "callback", "refreshAccessToken": "refresh",
+                     "getFunctionsAccessToken": "functions", "getMcpAccessToken": "mcp"}
+SESSION_STATUSES = {"callback": [200], "refresh": [200, 400], "functions": [200, 401], "mcp": [200, 401]}
+
+
+def session_transition_matrix(root=ROOT):
+    """Asynchronous session exchanges each internal portal exports, derived from its OAuth module."""
+    matrix = {}
+    for app in SESSION_PORTALS:
+        source = (root / app / "src/services/dabAuth.ts").read_text()
+        matrix[app] = sorted(kind for name, kind in SESSION_EXCHANGES.items()
+                             if re.search(r"^export (?:async )?function " + name + r"\(", source, re.MULTILINE))
+    return matrix
+
+
+def session_transition_local_titles(matrix):
+    races, requests, browser = set(), set(), set()
+    for app, kinds in matrix.items():
+        races.update({f"{app}: a token read interrupted by an account switch is discarded",
+                      f"{app}: stale portal state cannot clear a different signed-in user",
+                      f"{app}: account switching during user creation cannot attach a stale profile"})
+        if "callback" in kinds:
+            races.add(f"{app}: a callback superseded during exchange stops loading without clearing the new session")
+        for status in SESSION_STATUSES["refresh"] if "refresh" in kinds else []:
+            races.add(f"{app}: stale refresh {status} neither replaces nor invalidates a new session")
+        for status in SESSION_STATUSES["functions"] if "functions" in kinds else []:
+            races.add(f"{app}: stale Functions exchange {status} leaves a new session intact")
+        for status in SESSION_STATUSES["mcp"] if "mcp" in kinds else []:
+            races.add(f"{app}: stale MCP exchange {status} leaves a new session intact")
+        for kind in ["dab", "functions"]:
+            requests.add(f"{app}: {kind} request does not retry or return a stale result after an account switch")
+        if "mcp" in kinds:
+            requests.add(f"{SESSION_PORTALS[app]}: agent calls cannot dispatch or return across account switches")
+        for kind in kinds:
+            for status in SESSION_STATUSES[kind]:
+                browser.add(f"{app}: real browser rejects a stale {kind} {status} after cross-tab logout and switch")
+    return races, requests, browser
+
+
+def tap_results(output):
+    return {match.group(2): match.group(1) == "ok"
+            for match in re.finditer(r"^(not ok|ok) \d+ - (.+?)(?: # .*)?$", output, re.MULTILINE)}
+
+
+def internal_session_transition_evidence(report):
+    matrix = session_transition_matrix()
+    races, requests, _ = session_transition_local_titles(matrix)
+    report.inventory["sessionTransitions"] = matrix
+    try:
+        output = command(["node", "--experimental-vm-modules", "--test", "--test-reporter=tap",
+                          "tests/scripts/test-internal-session-races.mjs",
+                          "tests/scripts/test-internal-request-sessions.mjs"], timeout=180,
+                         environment={key: value for key, value in os.environ.items()
+                                      if not key.startswith("AUTH_ASSURANCE_")})
+    except EvidenceError as error:
+        report.add("required:internal-session-transition-local", "required", "FAIL", str(error))
+        return
+    results = tap_results(output)
+    missing = sorted(title for title in races | requests if title not in results)
+    failed = sorted(title for title, passed in results.items() if not passed)
+    report.add("required:internal-session-transition-local", "required",
+               "FAIL" if failed else "BLOCKED" if missing or not all(matrix.values()) else "PASS",
+               f"Source-derived exchange matrix {json.dumps(matrix, sort_keys=True)}: each portal requires distinct-"
+               f"user account-switch, stale-exchange and stale-request cases ({len(races | requests)} titled). "
+               f"Missing: {', '.join(missing[:8]) or 'none'}; failed: {', '.join(failed[:8]) or 'none'}.")
+
+
+def reconcile_session_transition_requirement(report):
+    required = [item for item in report.checks if item["id"] == "required:internal-session-transition-races"]
+    if len(required) != 1:
+        raise EvidenceError("The internal session transition requirement must exist exactly once")
+    matrix = report.inventory.get("sessionTransitions") or {}
+    gates = [[item for item in report.checks if item["id"] == check_id] for check_id in
+             ["required:internal-session-transition-local", "browser:internal:cross-tab-local",
+              "browser:internal:complete", "exception:session:deployed-distinct-user-switch"]]
+    passed = {item["detail"] for item in report.checks
+              if item["id"].startswith("browser:internal:") and item["id"].split(":")[-1].isdigit()
+              and item["status"] == "PASS"}
+    deployed = {f"{SESSION_PORTALS[app]}:concurrent-{kind}-{mode}-{suffix}"
+                for app, kinds in matrix.items() for kind in kinds for mode in ["success", "rejected"]
+                for suffix in ["server-response", "stale-response-ignored", "new-session-read"]}
+    deployed.update(f"{label}:{name}" for label in SESSION_PORTALS.values() for name in
+                    ["wrong-category-denied", "same-user-new-generation-owner", "stale-second-tab-no-adoption",
+                     "logout-clears-resource-sessions", "same-origin-second-tab-signout"])
+    failed = any(item["status"] == "FAIL" for items in gates for item in items)
+    complete = (bool(matrix) and all(matrix.values()) and deployed <= passed and
+                all(len(items) == 1 for items in gates) and
+                all(items[0]["status"] == "PASS" for items in gates[:3]) and
+                gates[3][0]["status"] == "ACCEPTED_EXCEPTION")
+    required[0].update({
+        "status": "FAIL" if failed else "PASS" if complete else "BLOCKED",
+        "detail": "Closed transition matrix over the exchanges each portal exports: deployed same-user "
+                  f"generation, logout and stale-tab races plus {len(deployed)} deployed cells "
+                  f"({len(deployed & passed)} passed) including wrong-category distinct-user denial; local "
+                  "node and real-browser distinct-user switches for every exchange. Deployed same-portal "
+                  "distinct-user switching is an accepted exception (one seeded identity per portal).",
+    })
+
+
+OWNERSHIP_DEPENDENCIES = ["required:consumer-handlers-offline", "required:mcp-tool-http-dispatch",
+                          "required:mcp-task-ownership-offline", "required:chat-continuation-ownership-offline",
+                          "contract:dab:write-decisions"]
+
+
+def reconcile_ownership_handlers_requirement(report):
+    required = [item for item in report.checks if item["id"] == "required:all-ownership-handlers-two-owners"]
+    if len(required) != 1:
+        raise EvidenceError("The ownership-handler requirement must exist exactly once")
+    gates = [[item for item in report.checks if item["id"] == check_id] for check_id in OWNERSHIP_DEPENDENCIES]
+    owner_rows = [item for item in report.checks if item["id"].startswith("dab:owner-rows:")]
+    customer_rows = {item["id"].removeprefix("dab:owner-rows-customer:"): item for item in report.checks
+                     if item["id"].startswith("dab:owner-rows-customer:")}
+    expected_rows = len(report.inventory.get("dabOwnerRows", []))
+
+    def row_proven(item):
+        if item["status"] == "PASS":
+            return True
+        # Retained fixtures lack Customer profiles; the order canary's two real Customers prove those cells.
+        substitute = customer_rows.get(item["id"].removeprefix("dab:owner-rows:"))
+        return (item["status"] == "BLOCKED" and item["detail"].startswith(OWNER_ROW_CLAIM_BLOCKER) and
+                substitute is not None and substitute["status"] == "PASS")
+
+    failed = any(item["status"] == "FAIL" for items in gates + [owner_rows, list(customer_rows.values())]
+                 for item in items)
+    complete = (all(len(items) == 1 and items[0]["status"] == "PASS" for items in gates) and
+                expected_rows > 0 and len(owner_rows) == expected_rows and
+                len(customer_rows) == len(report.inventory.get("dabCustomerOwnerRows", [])) and
+                all(row_proven(item) for item in owner_rows))
+    required[0].update({
+        "status": "FAIL" if failed else "PASS" if complete else "BLOCKED",
+        "detail": "Umbrella over every owner-bound surface with two distinct owners: 17 consumer Functions "
+                  "handlers, MCP SelfOrInternal tools, MCP tasks, chat/agent continuations, the DAB write-decision "
+                  f"contract and {len(owner_rows)}/{expected_rows} live DAB owner-policy row-isolation reads. "
+                  "Mutation-level cross-owner DAB writes are covered by tests/auth/mutation_suite.py.",
+    })
+
+
 def mcp_task_ownership_evidence(report):
     prefix = "AdventureWorks.Tests.McpTaskOwnershipTests."
     expected = {
         prefix + "Creation_without_tool_authority_never_writes_a_table_entity",
         prefix + "In_memory_tasks_enforce_the_same_owner_and_scope_boundary",
+        prefix + "Service_tasks_recheck_current_principal_trust_and_tool_profile",
     }
     expected.update(
         prefix + "Table_task_owner_and_scope_survive_recreation_and_block_all_foreign_operations" +
@@ -1934,9 +2545,9 @@ def mcp_task_ownership_evidence(report):
     complete = set(results) == expected and all(results.get(name) == ["Passed"] for name in expected)
     report.add("required:mcp-task-ownership-offline", "required",
                "FAIL" if failed else "PASS" if complete else "BLOCKED",
-               "Ten exact current-run task-store cases: persisted subject/app/category/tool/scope across recreation, "
+               "Eleven exact current-run task-store cases: persisted subject/app/category/tool/scope across recreation, "
                "both owners, no foreign writes/input events, scope/category loss, changed tool policy, wrong app, unbound/legacy denial "
-               "and no creation without tool authority. Uses isolated TableClient transport and real "
+               "and service trust/profile revocation. Uses isolated TableClient transport and real "
                "in-memory store; actual task HTTP handlers are gated separately. "
                "Evidence SHA256: " + json.dumps(sources, sort_keys=True))
 
@@ -2144,6 +2755,113 @@ def cart_contract(report, config):
                  "DAB cart reads require signed ownership; all cart writes use owned Functions")
 
 
+EMAIL_SDK_MARKERS = ("Azure.Communication.Email", "azure.communication.email", "@azure/communication-email")
+EMAIL_SERVICE = "api-functions/Services/EmailService.cs"
+EMAIL_GUARD = "EmailRecipientPolicy.IsReservedNonDeliverable("
+
+
+def email_send_boundary_violations(root=ROOT):
+    """EmailService must be the only ACS client site and guard reserved domains before each send."""
+    violations = []
+    sources = [path for path in root.rglob("*") if path.is_file() and path.suffix in {".cs", ".py", ".ts", ".tsx"}
+               and not {"node_modules", "bin", "obj", ".auth-results", "tests"} & set(path.relative_to(root).parts)
+               and not path.relative_to(root).parts[0].endswith(".Tests")]
+    for path in sources:
+        try:
+            text = path.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        if any(marker in text for marker in EMAIL_SDK_MARKERS) and path.relative_to(root).as_posix() != EMAIL_SERVICE:
+            violations.append("ACS email SDK used outside EmailService: " + path.relative_to(root).as_posix())
+    service = (root / EMAIL_SERVICE).read_text()
+    if len(re.findall(r"\bnew\s*\(|\bnew\s+EmailClient\s*\(", service.split("CreateEmailClient() =>", 1)[-1][:120])) != 1 \
+            or service.count("CreateEmailClient() =>") != 1 or service.count("new EmailClient(") != 0:
+        violations.append("EmailService must construct EmailClient only in CreateEmailClient")
+    methods = re.split(r"\n    (?=public |private |protected |internal )", service)
+    calls = 0
+    for method in methods:
+        for match in re.finditer(r"(?<!EmailClient )CreateEmailClient\(\)(?! =>)", method):
+            calls += 1
+            if EMAIL_GUARD not in method[:match.start()]:
+                violations.append("EmailService send path creates a client before the reserved-domain guard")
+    if calls == 0:
+        violations.append("EmailService has no guarded send path")
+    return violations
+
+
+def email_send_boundary_contract(report):
+    violations = email_send_boundary_violations()
+    report.check("contract:email:reserved-domain-boundary", "contracts", not violations,
+                 "EmailService is the only ACS email client site and checks reserved recipient domains before "
+                 "every client creation" + ("" if not violations else ": " + "; ".join(violations)))
+
+
+SDK_CLIENT_SOURCES = ["api-functions", "api-mcp", "manufacturing-agent"]
+SDK_CLIENT_TYPES = (
+    "BlobServiceClient", "BlobContainerClient", "BlobClient", "QueueServiceClient", "QueueClient",
+    "TableServiceClient", "TableClient", "ShareServiceClient", "ShareClient", "SecretClient",
+    "CertificateClient", "KeyClient", "CryptographyClient", "WebPubSubServiceClient", "EmailClient",
+    "AIProjectClient", "PersistentAgentsClient", "AgentsClient", "AzureOpenAIClient", "OpenAIClient",
+    "ChatCompletionsClient", "LogsQueryClient", "ArmClient",
+)
+SDK_KEY_PATTERNS = re.compile(
+    r"\b(?:AzureKeyCredential|StorageSharedKeyCredential|AzureSasCredential|ApiKeyCredential)\b|"
+    r"AccountKey=|SharedAccessKey=|UseDevelopmentStorage|GenerateSasUri\(|"
+    r"GetEnvironmentVariable\(\s*\"AzureWebJobsStorage\"\s*\)|\[\s*\"AzureWebJobsStorage\"\s*\]"
+)
+SDK_CLIENT_PATTERN = re.compile(
+    r"new\s+(?:[A-Za-z_][\w.]*\.)?(" + "|".join(SDK_CLIENT_TYPES) + r")\s*(?=\()")
+
+
+def call_arguments(text, start):
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "(":
+            depth += 1
+        elif text[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1:index]
+    return ""
+
+
+def is_token_credential_argument(arguments, text):
+    if re.search(r"credential", arguments, re.IGNORECASE):
+        return True
+    for name in re.findall(r"(?:^|,)\s*([A-Za-z_]\w*)\s*(?=,|$)", arguments):
+        if re.search(r"\b(?:var|TokenCredential)\s+" + re.escape(name) +
+                     r"\s*=\s*new\s+\w*Credential\(", text):
+            return True
+    return False
+
+
+def service_client_credential_violations(root=ROOT):
+    violations, clients = [], 0
+    for source in SDK_CLIENT_SOURCES:
+        for path in sorted((root / source).rglob("*.cs")):
+            parts = path.relative_to(root).parts
+            if {"bin", "obj"} & set(parts) or any(part.endswith(".Tests") for part in parts):
+                continue
+            text = path.read_text()
+            location = lambda offset: f"{path.relative_to(root)}:{text.count(chr(10), 0, offset) + 1}"
+            for match in SDK_KEY_PATTERNS.finditer(text):
+                violations.append(f"{location(match.start())} key/SAS/connection-string storage credential")
+            for match in SDK_CLIENT_PATTERN.finditer(text):
+                clients += 1
+                if not is_token_credential_argument(call_arguments(text, match.end()), text):
+                    violations.append(f"{location(match.start())} {match.group(1)} without a token credential")
+    return violations, clients
+
+
+def service_client_credential_contract(report, root=ROOT):
+    violations, clients = service_client_credential_violations(root)
+    report.inventory["serviceClientConstructions"] = clients
+    report.check("contract:service-clients:token-credential", "contracts", clients > 0 and not violations,
+                 f"All {clients} Azure SDK client constructions in Functions, MCP and the hosted agent use an "
+                 "Entra token credential; key, SAS, development-storage and storage connection-string paths "
+                 "are absent" + ("" if not violations else ": " + "; ".join(violations)))
+
+
 def contracts(report):
     contract = json.loads(CONTRACTS.read_text())
     functions = report.inventory.get("functions", [])
@@ -2152,7 +2870,8 @@ def contracts(report):
                  all(len(matches := [item for item in functions if item.get("Name") == name]) == 1 and
                      is_reviewed_function_read(matches[0], safe_reads)
                      for name in safe_reads),
-                 "Reviewed read probes require the exact protected function name, route and GET-only binding")
+                 "Reviewed read probes require the exact protected function name, route and method binding")
+    function_get_review_closure(report)
     public = {item["Name"] for item in functions if item["Policy"] and item["Policy"]["IsAnonymous"]}
     report.check("inventory:public-functions", "contracts",
                  public == set(contract["publicFunctions"]),
@@ -2174,6 +2893,8 @@ def contracts(report):
     operations = dab_inventory(config)
     review_contract(report, config)
     order_detail_contract(report, config)
+    email_send_boundary_contract(report)
+    dab_write_decision_contract(report)
     catalog_contract(report, config)
     order_header_contract(report, config)
     customer_contract(report, config)
@@ -2214,19 +2935,28 @@ def contracts(report):
                      "Every provisioned MCP tool name must exist in the authorization registry" +
                      (": " + ", ".join(unknown) if unknown else ""))
         consumer_chat_tool_contract(report, provisioner_tools, report.inventory["mcp"])
+    service_client_credential_contract(report)
     report.add("inventory:caller-trust-edge-closure", "agents", "BLOCKED",
-               "Provisioners are discovered; complete source/deployment caller and dependency-edge reconciliation remains required")
+               "Service-client token credentials and provisioner tools are source-checked; correlated runtime "
+               "caller/dependency-edge evidence for every agent and invocation path remains required")
     for name in agents:
         report.add("agent-path:" + name, "agents", "BLOCKED",
                    "Actual deployed identity, tool calls and dependency authorization require correlated runtime evidence")
-    for obligation in ["functions-middleware-host-denials", "all-ownership-handlers-two-owners",
-                       "browser-real-login-all-sites", "dab-all-role-operation-decisions",
-                       "mcp-task-ownership"]:
+    for obligation in ["functions-middleware-host-denials", "browser-real-login-all-sites", "mcp-task-ownership"]:
         report.add("required:" + obligation, "required", "BLOCKED",
                    "Required coverage obligation is not established by registry or helper tests")
+    report.add("required:all-ownership-handlers-two-owners", "required", "BLOCKED",
+               "Requires offline ownership gates plus current-run live DAB owner-policy row isolation")
+    report.add("required:dab-all-role-operation-decisions", "required", "BLOCKED",
+               "Requires the DAB decision contract plus current-run live read, write and role-header matrices")
     report.add("required:internal-session-transition-races", "required", "BLOCKED",
-               "Generation-scoped portal sessions have deterministic and local two-tab Chromium tests, "
-               "but overlapping callback, refresh and account-switch races still require deployed evidence.")
+               "Requires the source-derived local transition matrix, local real-browser distinct-user switches "
+               "and current-run deployed internal browser races for every exported session exchange.")
+    report.add("exception:session:deployed-distinct-user-switch", "exceptions", "ACCEPTED_EXCEPTION",
+               "Each internal portal has one seeded demo identity; a second same-portal deployed account would "
+               "need a seed/database change, which this plan excludes. Compensated by deployed wrong-category "
+               "distinct-user denial, subject-bound resource tokens, and local node plus real-browser "
+               "distinct-user switch cases for every exported session exchange.")
     assertion_evidence(report)
     middleware_evidence(report)
     address_ownership_evidence(report)
@@ -2234,8 +2964,12 @@ def contracts(report):
     receipt_ownership_evidence(report)
     cart_lifecycle_evidence(report)
     mcp_dispatch_evidence(report)
+    hosted_agent_auth_evidence(report)
+    agent_token_target_evidence(report)
+    mcp_functions_target_evidence(report)
     mcp_task_ownership_evidence(report)
     consumer_handler_evidence(report)
+    chat_continuation_ownership_evidence(report)
 
 
 class Deployment:
@@ -2285,6 +3019,152 @@ class Deployment:
     def arm(self, provider_path, version):
         return self.azure("rest", "--method", "get", "--url",
                           self.resource(provider_path) + "?api-version=" + version)
+
+
+def mcp_sql_binding_snapshot(deployment):
+    d = deployment
+    app_name = d.required("SERVICE_API_MCP_NAME")
+    identity_name = d.required("USER_MANAGED_IDENTITY_NAME")
+    server_name = d.required("SQL_SERVER_NAME")
+    database_name = d.required("SQL_DATABASE_NAME")
+    identity = d.azure("identity", "show", "-g", d.group, "-n", identity_name)
+    server = d.azure("sql", "server", "show", "-g", d.group, "-n", server_name)
+    database = d.azure("sql", "db", "show", "-g", d.group, "-s", server_name, "-n", database_name)
+    app = d.azure("containerapp", "show", "-g", d.group, "-n", app_name)
+
+    try:
+        properties = app["properties"]
+        revision = properties["latestReadyRevisionName"]
+        ingress = properties["configuration"]["ingress"]
+        traffic = ingress["traffic"]
+        if (properties.get("provisioningState") != "Succeeded" or not isinstance(revision, str) or
+                not revision or properties.get("latestRevisionName") != revision or
+                not isinstance(traffic, list) or not traffic or
+                any(not isinstance(route, dict) or type(route.get("weight")) is not int or
+                    route["weight"] < 0 or route["weight"] > 100 for route in traffic)):
+            raise ValueError("MCP revision is not ready")
+        active = [route for route in traffic if route["weight"] > 0]
+        if len(active) != 1 or active[0]["weight"] != 100:
+            raise ValueError("MCP traffic does not target one revision")
+        route = active[0]
+        if not ((route.get("latestRevision") is True and route.get("revisionName") in (None, revision)) or
+                (route.get("latestRevision") in (None, False) and route.get("revisionName") == revision)):
+            raise ValueError("MCP traffic does not target the ready revision")
+
+        containers = [item for item in properties["template"]["containers"] if item.get("name") == app_name]
+        if len(containers) != 1 or not isinstance(containers[0].get("env"), list):
+            raise ValueError("MCP runtime container is ambiguous")
+        env = containers[0]["env"]
+
+        def configured(name):
+            matches = [item.get("value") for item in env if isinstance(item, dict) and item.get("name") == name]
+            return matches[0] if len(matches) == 1 and isinstance(matches[0], str) else None
+
+        client_id = str(uuid.UUID(identity["clientId"]))
+        selected_client_id = str(uuid.UUID(d.required("AZURE_CLIENT_ID")))
+        configured_client_id = configured("AZURE_CLIENT_ID")
+        identity_id = identity["id"]
+        attached = app["identity"]["userAssignedIdentities"]
+        fqdn = ingress["fqdn"]
+        sql_fqdn = server["fullyQualifiedDomainName"]
+        sql_connection = configured("ConnectionStrings__AdventureWorks")
+        mcp_url = urllib.parse.urlsplit(https_url(d.required("API_MCP_URL")))
+        if (not isinstance(identity_id, str) or not isinstance(attached, dict) or
+                not isinstance(fqdn, str) or not fqdn or not isinstance(sql_fqdn, str) or not sql_fqdn):
+            raise ValueError("MCP resource binding is incomplete")
+
+        root = f"/subscriptions/{d.subscription}/resourceGroups/{d.group}/providers/"
+        expected_app = root + "Microsoft.App/containerApps/" + app_name
+        expected_identity = root + "Microsoft.ManagedIdentity/userAssignedIdentities/" + identity_name
+        expected_server = root + "Microsoft.Sql/servers/" + server_name
+        expected_database = expected_server + "/databases/" + database_name
+        valid = (
+            isinstance(app.get("id"), str) and app["id"].lower() == expected_app.lower() and
+            identity_id.lower() == expected_identity.lower() and
+            isinstance(server.get("id"), str) and server["id"].lower() == expected_server.lower() and
+            isinstance(database.get("id"), str) and database["id"].lower() == expected_database.lower() and
+            identity_id.lower() in {key.lower() for key in attached if isinstance(key, str)} and
+            client_id == selected_client_id and configured_client_id is not None and
+            str(uuid.UUID(configured_client_id)) == client_id and
+            ingress.get("external") is True and mcp_url.netloc.lower() == fqdn.lower() and
+            mcp_url.path.rstrip("/") == "/mcp" and
+            mcp_sql_target_matches(sql_connection, sql_fqdn, database_name)
+        )
+        return {
+            "revision": revision, "traffic": dict(route), "appId": app.get("id"), "ingress": fqdn,
+            "identityId": identity_id, "clientId": client_id, "configuredClientId": configured_client_id,
+            "serverId": server.get("id"), "serverFqdn": sql_fqdn, "databaseId": database.get("id"),
+            "sqlConnection": sql_connection, "valid": valid,
+        }
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
+        raise EvidenceError("Cannot bind the selected ready MCP revision, identity, ingress and SQL target") from error
+
+
+def mcp_sql_principal_readiness(report, deployment):
+    before = mcp_sql_binding_snapshot(deployment)
+    if not before["valid"]:
+        report.add("infra:mcp-sql-binding", "infra", "FAIL",
+                   "The selected MCP ingress, attached identity or configured SQL target does not match the deployment.")
+        report.add("infra:mcp-sql-principal", "infra", "BLOCKED",
+                   "A matching MCP deployment binding is required before crediting SQL principal evidence.")
+        return
+    endpoint = origin(deployment.required("API_MCP_URL")) + "/ready"
+    status, _, raw = http("GET", endpoint)
+    after = mcp_sql_binding_snapshot(deployment)
+    if before != after or not after["valid"]:
+        raise EvidenceError("The MCP revision, identity, ingress or SQL target changed during the readiness read")
+    if status not in {200, 503}:
+        raise EvidenceError(f"MCP readiness returned unexpected HTTP {status}")
+    try:
+        document = json.loads(raw)
+        checked_at = document["checkedAt"]
+        checks = document["checks"]
+        if not isinstance(checked_at, str) or not isinstance(checks, list):
+            raise ValueError("Invalid MCP readiness report")
+        normalized = re.sub(r"(\.\d{6})\d+(?=Z|[+-]|$)", r"\1", checked_at).replace("Z", "+00:00")
+        timestamp = datetime.fromisoformat(normalized)
+        if timestamp.tzinfo is None or abs((datetime.now(timezone.utc) - timestamp).total_seconds()) > 180:
+            raise ValueError("Stale MCP readiness report")
+        by_id = {}
+        for check in checks:
+            if (not isinstance(check, dict) or check.get("id") not in {"sql", "tasks", "sql-identity"} or
+                    check["id"] in by_id or type(check.get("required")) is not bool or
+                    check.get("status") not in {"healthy", "unhealthy", "timeout", "not-configured", "unknown"} or
+                    not isinstance(check.get("message"), str)):
+                raise ValueError("Invalid MCP readiness check")
+            by_id[check["id"]] = check
+        if (set(by_id) != {"sql", "tasks", "sql-identity"} or
+                not by_id["sql"]["required"] or not by_id["tasks"]["required"] or
+                by_id["sql-identity"]["required"]):
+            raise ValueError("Missing or incorrectly classified MCP readiness check")
+        overall = "healthy" if all(item["status"] == "healthy" for item in checks if item["required"]) else "unhealthy"
+        if document["status"] != overall or status != (200 if overall == "healthy" else 503):
+            raise ValueError("MCP readiness status contradicts required dependencies")
+    except (ValueError, KeyError, TypeError) as error:
+        raise EvidenceError("MCP readiness returned incomplete, stale or inconsistent evidence") from error
+
+    report.add("infra:mcp-sql-binding", "infra", "PASS",
+               "The selected MCP ingress, ready revision, attached identity and SQL target match before and after the read.")
+    report.inventory["mcpDependencyReadiness"] = {
+        "checkedAt": checked_at, "httpStatus": status,
+        "checks": [{"id": name, "required": by_id[name]["required"], "status": by_id[name]["status"]}
+                   for name in sorted(by_id)],
+    }
+    identity = by_id["sql-identity"]
+    if (identity["status"] == "healthy" and
+            identity["message"] == "SQL principal matches the configured managed identity." and
+            by_id["sql"]["status"] == "healthy"):
+        result = "PASS"
+        detail = ("One MCP readiness SQL connection's external principal matches the selected attached runtime "
+                  "identity and configured SQL target; other connections and permissions remain unproven.")
+    elif (identity["status"] == "unhealthy" and
+          identity["message"] == "SQL principal does not match the configured managed identity."):
+        result = "FAIL"
+        detail = "The MCP readiness SQL connection's current principal does not match the selected managed identity."
+    else:
+        result = "BLOCKED"
+        detail = "The selected MCP SQL principal needs a current, recognized positive identity probe and catalog read."
+    report.add("infra:mcp-sql-principal", "infra", result, detail)
 
 
 def functions_dependency_readiness(report, deployment):
@@ -2637,8 +3517,17 @@ def infra(report, deployment):
         latest_summaries = []
         version_summaries = []
         references = set()
-        custom_origin = origin(d.required("API_MCP_URL"))
-        dab_origin = origin(d.required("API_URL"))
+        custom_endpoint = d.required("MCP_SERVICE_URL")
+        dab_endpoint = origin(d.required("API_URL")) + "/mcp"
+        mutation_keys = {
+            "admin-customer-agent": ("AI_AGENT_CUSTOMER_ID", "customer-generation"),
+            "admin-order-agent": ("AI_AGENT_ORDER_ID", "order-generation"),
+        }
+        report.check(
+            "agent:custom-mcp-endpoint-config", "agents",
+            agent_mcp_endpoint_identity(custom_endpoint) == agent_mcp_endpoint_identity(d.required("API_MCP_URL")),
+            "Selected MCP_SERVICE_URL and API_MCP_URL must identify the same safe endpoint",
+        )
         for name, agent in sorted(deployed.items()):
             latest = agent["versions"]["latest"]
             latest_version = latest.get("version")
@@ -2651,7 +3540,7 @@ def infra(report, deployment):
             provisioned_tools = report.inventory.get("agentProvisionerTools", {})
             for version, record in sorted(versions.items()):
                 summary = summarize_agent_version(
-                    name, version, record, custom_origin, dab_origin)
+                    name, version, record, custom_endpoint, dab_endpoint)
                 is_latest = version == latest_version
                 summary["isLatest"] = is_latest
                 version_summaries.append(summary)
@@ -2701,7 +3590,7 @@ def infra(report, deployment):
                     report.check(
                         f"agent:tool-origin:{name}:{index}{suffix}", "agents",
                         tool.get("resource") != "unclassified",
-                        "Deployed MCP origin must match selected custom MCP or DAB",
+                        "Deployed MCP endpoint must match the selected custom MCP or DAB endpoint, including its path",
                     )
                     report.add(
                         f"agent:no-stored-token:{name}:{index}{suffix}", "agents",
@@ -2723,9 +3612,29 @@ def infra(report, deployment):
                         agent_tool_allowlist_matches(provisioned_tools[name], summary["tools"]),
                         "Deployed MCP servers and tool names must exactly match the source provisioner",
                     )
+                    if name in mutation_keys:
+                        environment_key, label = mutation_keys[name]
+                        source_tools = provisioned_tools[name]
+                        valid_source = (isinstance(source_tools, list) and bool(source_tools) and
+                                        all(isinstance(tool, str) and tool for tool in source_tools) and
+                                        len(source_tools) == len(set(source_tools)))
+                        valid = (d.required(environment_key) == name and
+                                 latest.get("id") == f"{name}:{latest_version}" and valid_source and
+                                 guarded_agent_tool_definition_matches(
+                                     latest.get("definition"), set(source_tools), custom_endpoint))
+                        report.check(
+                            f"agent:{label}:definition", "agent-policy", valid,
+                            "Selected latest definition matches the source tool list and guarded endpoint/shape; "
+                            "this does not establish the version cached by Functions or a deployed invocation.",
+                        )
             if not isinstance(latest_version, str) or not latest_version:
                 raise EvidenceError("Foundry agent has no versioned latest definition")
 
+        for _, label in mutation_keys.values():
+            check_id = f"agent:{label}:definition"
+            if not any(check["id"] == check_id for check in report.checks):
+                report.add(check_id, "agent-policy", "BLOCKED",
+                           "Selected agent or classified source tool list is missing; no definition match established.")
         report.inventory["deployedAgents"] = latest_summaries
         report.inventory["deployedAgentVersions"] = version_summaries
         report.inventory["agentDependencyEdges"] = (
@@ -2844,12 +3753,18 @@ def infra(report, deployment):
         report.check("infra:mcp-service-grant-trust", "infra",
                      hosted_identity_valid and required_principals == trusted_principals,
                      "api-mcp trusts exactly the selected runtime and hosted manufacturing-agent principals")
+        report.check("infra:mcp-service-principal-profiles", "infra",
+                     hosted_identity_valid and mcp_service_profiles_match(
+                         mcp_configuration, identity["principalId"], hosted_principal),
+                     "Scope/tool profiles bind separately to the selected runtime and hosted instance principals")
         account = d.azure("account", "show")
         report.check("infra:mcp-service-grant-tenant", "infra",
                      mcp_configuration.get("MCP_ENTRA_TENANT_ID") == account.get("tenantId"),
                      "api-mcp managed-identity assertion validation uses the selected tenant")
         report.inventory["mcpTrustedServicePrincipalCount"] = len(trusted_principals)
     report.guarded("infra:revisions", "infra", revisions)
+    report.guarded("infra:mcp-sql-principal", "infra",
+                   lambda: mcp_sql_principal_readiness(report, d))
     report.guarded("infra:functions-readiness", "infra",
                    lambda: functions_dependency_readiness(report, d))
     report.guarded("guest-cart:cleanup:telemetry", "infra",
@@ -2991,7 +3906,7 @@ class ConsumerSession:
     def token(self, resource, scopes=None):
         key = (resource, scopes)
         cached = self.tokens.get(key)
-        if cached and cached[1] > time.monotonic() + 60:
+        if cached and cached[1] > time.monotonic() + 120:
             return cached[0]
         status, _, body = self.exchange(resource, scopes)
         if status != 200:
@@ -3009,18 +3924,22 @@ class ConsumerSession:
             base = origin(self.deployment.required("API_MCP_URL"))
             audience = self.deployment.values.get(resource.upper() + "_RESOURCE_IDENTIFIER", base + "/" + resource)
             audiences = claims.get("aud")
+            expiry = claims.get("exp")
+            observed_monotonic = time.monotonic()
+            remaining = expiry - time.time() if type(expiry) is int else 0
             valid = (isinstance(token, str) and claims.get("category") == "consumer" and
                      (audiences == audience or isinstance(audiences, list) and audience in audiences) and
                      owner is not None and owner > 0 and
                      (self.business_id is None or owner == self.business_id) and
-                     type(document["expires_in"]) is int and document["expires_in"] > 60)
+                     type(document["expires_in"]) is int and document["expires_in"] > 120 and
+                     remaining > 120)
         except (ValueError, KeyError, TypeError, IndexError) as error:
             raise EvidenceError("Consumer authorization service returned invalid token metadata") from error
         if not valid:
             raise EvidenceError("Consumer token metadata does not match the retained fixture owner")
         # Metadata only schedules renewal; the actual APIs validate token signatures and authorization.
         self.business_id = owner
-        self.tokens[key] = (token, time.monotonic() + document["expires_in"])
+        self.tokens[key] = (token, observed_monotonic + min(document["expires_in"], remaining))
         return token
 
 
@@ -3088,7 +4007,10 @@ def retained_consumer_fixtures(report, deployment):
 def guest_expiry(value):
     if not isinstance(value, str):
         raise EvidenceError("Server returned invalid guest expiry")
-    normalized = re.sub(r"(\.\d{6})\d+(?=Z|[+-]|$)", r"\1", value).replace("Z", "+00:00")
+    normalized = re.sub(
+        r"\.(\d+)(?=Z|[+-]|$)",
+        lambda match: "." + match.group(1).ljust(6, "0")[:6],
+        value).replace("Z", "+00:00")
     try:
         expiry = datetime.fromisoformat(normalized)
         if expiry.tzinfo is None:
@@ -3427,7 +4349,8 @@ def consumer_mcp_owner_denials(report, deployment, consumers):
                 if denied and text == ["No customer profile is associated with your account."]:
                     report.add(check_id, "live-denials", "BLOCKED",
                                "Retained consumer has no Customer profile; its earlier profile denial "
-                               "does not prove the owner-argument boundary. No SQL fixture was created.")
+                               "does not prove the owner-argument boundary. No SQL fixture was created. "
+                               "The opt-in --order-cancellation-canary proves this cell with two real Customers.")
                 else:
                     report.check(check_id, "live-denials",
                                  denied and text == ["You can only access your own records."],
@@ -3740,14 +4663,14 @@ def guest_cart_live(report, deployment):
             ledger["sessions"].append(entry)
             attempt["response"] = "validated"
             save()
-            expiry = guest_expiry(session["expiresAt"])
-            require("one-day-" + label, before + 86400 - 10 <= expiry <= after + 86400 + 10,
-                    "Fixed expiry is one day from issuance (10 seconds clock-skew tolerance)")
             status, items = call("GET", "/items", session, expected=session["cartId"])
             require("initial-empty-" + label, status == 200 and items == [],
                     "Newly issued cart is empty before any fixture mutation")
             entry["cleanupEligible"] = True
             save()
+            expiry = guest_expiry(session["expiresAt"])
+            require("one-day-" + label, before + 86400 - 10 <= expiry <= after + 86400 + 10,
+                    "Fixed expiry is one day from issuance (10 seconds clock-skew tolerance)")
         a, b = sessions[0][0], sessions[1][0]
         require("distinct-sessions", a["cartId"] != b["cartId"] and a["token"] != b["token"],
                 "Two independent capabilities resolve different carts")
@@ -3937,10 +4860,15 @@ def internal_session_browser(report):
     output = command(["node", "--test", "--test-reporter=tap",
                       "tests/scripts/test-internal-session-browser.mjs"], timeout=90)
     counts = re.findall(r"^# (tests|pass|fail) (\d+)$", output, re.MULTILINE)
-    complete = counts == [("tests", "12"), ("pass", "12"), ("fail", "0")]
+    results = tap_results(output)
+    _, _, expected = session_transition_local_titles(session_transition_matrix())
+    expected.add("removing a temporary page route preserves the in-flight context guard")
+    complete = (counts == [("tests", str(len(expected))), ("pass", str(len(expected))), ("fail", "0")] and
+                all(results.get(title) is True for title in expected))
     report.check("browser:internal:cross-tab-local", "frontend", complete,
-                 "Twelve two-tab Chromium cases use local source and a mock OAuth server; "
-                 "they do not establish deployed portal behavior.")
+                 f"{len(expected) - 1} source-matrix two-tab Chromium distinct-user switch cases and one "
+                 "route-removal case use local source and a mock server; they do not establish deployed portal "
+                 "behavior.")
 
 
 def internal_browser(report, deployment):
@@ -3952,12 +4880,15 @@ def internal_browser(report, deployment):
         environment[key] = https_url(deployment.required(key))
     environment["DAB_RESOURCE_IDENTIFIER"] = (
         deployment.values.get("DAB_RESOURCE_IDENTIFIER") or origin(environment["API_MCP_URL"]) + "/dab")
+    environment["FUNCTIONS_RESOURCE_IDENTIFIER"] = (
+        deployment.values.get("FUNCTIONS_RESOURCE_IDENTIFIER") or origin(environment["API_MCP_URL"]) + "/functions")
     for label in ["admin", "manufacturing"]:
         email, password, *_ = helper.IDENTITIES[label]
         environment["AUTH_BROWSER_" + label.upper() + "_EMAIL"] = email
         environment["AUTH_BROWSER_" + label.upper() + "_PASSWORD"] = password
     output = report.output / "internal-browser.json"
     failure = None
+    await_login_limiter_window()
     try:
         command(["node", "tests/scripts/test-internal-browser-auth.mjs", "--output", str(output)],
                 environment=environment, timeout=policy["runnerTimeoutSeconds"])
@@ -3977,16 +4908,32 @@ def internal_browser(report, deployment):
     for index, item in enumerate(checks):
         report.add("browser:internal:" + str(index), "frontend", item["status"], item["name"])
     scenarios = {
-        "anonymous-gate-no-data", "pkce-resource-role-owner", "resource-server-read", "real-refresh-exchange",
+        "anonymous-gate-no-data", "wrong-category-denied", "pkce-resource-role-owner",
+        "resource-server-read", "real-refresh-exchange",
         "renewal-preserves-route", "logout-clears-resource-sessions", "logout-gates-deep-link", "no-business-mutations",
         "renewal-resource-role-owner", "renewed-resource-server-read",
         "same-origin-second-tab-owner", "same-origin-second-tab-resource-read", "no-token-to-untrusted-origin",
         "same-origin-second-tab-signout", "same-user-new-generation-owner",
         "same-user-new-generation-resource-read", "stale-second-tab-no-adoption",
+        "concurrent-refresh-success-server-response", "concurrent-refresh-success-stale-response-ignored",
+        "concurrent-refresh-success-new-session-read",
+        "concurrent-refresh-rejected-server-response", "concurrent-refresh-rejected-stale-response-ignored",
+        "concurrent-refresh-rejected-new-session-read",
+        "concurrent-functions-success-server-response", "concurrent-functions-success-stale-response-ignored",
+        "concurrent-functions-success-new-session-read",
+        "concurrent-functions-rejected-server-response", "concurrent-functions-rejected-stale-response-ignored",
+        "concurrent-functions-rejected-new-session-read",
+        "concurrent-callback-success-server-response", "concurrent-callback-success-stale-response-ignored",
+        "concurrent-callback-success-new-session-read",
+        "concurrent-callback-rejected-server-response", "concurrent-callback-rejected-stale-response-ignored",
+        "concurrent-callback-rejected-new-session-read",
     }
     expected = {label + ":" + name for label in ["admin", "manufacturing"] for name in scenarios}
     expected.update({"manufacturing:reorder-progress-current-generation",
                      "manufacturing:reorder-progress-isolated-after-login"})
+    expected.update({"admin:concurrent-mcp-" + mode + "-" + suffix
+                     for mode in ["success", "rejected"]
+                     for suffix in ["server-response", "stale-response-ignored", "new-session-read"]})
     reads = document.get("reads")
     anonymous_requests = document.get("anonymousRequests")
     anonymous_requests_valid = (
@@ -4000,7 +4947,11 @@ def internal_browser(report, deployment):
     expected_reads = {(label, label + ":" + phase)
                       for label in ["admin", "manufacturing"]
                       for phase in ["real-dab-read", "renewal", "same-origin-second-tab",
-                                    "same-user-new-generation"]}
+                                    "same-user-new-generation", "concurrent-refresh-success",
+                                    "concurrent-refresh-rejected", "concurrent-functions-success",
+                                    "concurrent-functions-rejected", "concurrent-callback-success",
+                                    "concurrent-callback-rejected"]}
+    expected_reads.update({("admin", "admin:concurrent-mcp-" + mode) for mode in ["success", "rejected"]})
     reads_complete = isinstance(reads, list) and len(reads) == len(expected_reads)
     if reads_complete:
         observed_reads = set()
@@ -4018,9 +4969,126 @@ def internal_browser(report, deployment):
                 reads_complete = False
                 break
         reads_complete = reads_complete and observed_reads == expected_reads
+    def race_evidence_complete(key, labels=("admin", "manufacturing")):
+        race_diagnostics = document.get(key)
+        race_events = {
+            "pre-reload-refresh-aborted", "control-refresh-aborted", "other-refresh-aborted",
+            "target-refresh-started", "fixture-ready", "fixture-not-ready",
+            "response-captured", "response-delivered", "route-failed",
+            "handler-returned-null", "handler-returned-other",
+            "stale-chat-not-sent", "stale-chat-sent",
+            "new-session-preserved", "new-session-changed", "stale-tab-gated", "stale-tab-ungated",
+        }
+        if (not isinstance(race_diagnostics, list) or len(race_diagnostics) > 48 or not all(
+                isinstance(event, dict) and set(event) <= {"site", "mode", "event", "status", "count"} and
+                event.get("site") in labels and
+                event.get("mode") in {"success", "rejected"} and event.get("event") in race_events and
+                (("status" not in event) if event.get("event") != "response-captured" else
+                 type(event.get("status")) is int and 100 <= event["status"] <= 599) and
+                ("count" not in event or (type(event["count"]) is int and 2 <= event["count"] <= 10000))
+                for event in race_diagnostics)):
+            return False
+        required_events = ["target-refresh-started", "response-captured",
+                           "response-delivered", "handler-returned-null"]
+        for label in labels:
+            for mode, status in [("success", 200), ("rejected", 400)]:
+                events = [event for event in race_diagnostics
+                          if event["site"] == label and event["mode"] == mode]
+                matching = [event for event in events if event["event"] in required_events]
+                if ([event["event"] for event in matching] != required_events or
+                        any("count" in event for event in matching) or matching[1]["status"] != status or
+                        sum(event["event"] == "fixture-ready" and "count" not in event
+                            for event in events) != 1 or
+                        any(event["event"] in {"fixture-not-ready", "route-failed", "handler-returned-other",
+                                              "new-session-changed", "stale-tab-ungated"} for event in events)):
+                    return False
+                chat_events = [event for event in events if event["event"].startswith("stale-chat-")]
+                if key == "mcpRaceDiagnostics":
+                    if len(chat_events) != 1 or chat_events[0]["event"] != "stale-chat-not-sent" or \
+                            "count" in chat_events[0]:
+                        return False
+                elif chat_events:
+                    return False
+        return True
+
+    def callback_evidence_complete():
+        diagnostics = document.get("callbackRaceDiagnostics")
+        if (not isinstance(diagnostics, list) or len(diagnostics) != 16 or not all(
+                isinstance(event, dict) and set(event) <= {"site", "mode", "event", "status"} and
+                event.get("site") in {"admin", "manufacturing"} and event.get("mode") in {"success", "rejected"} and
+                event.get("event") in {"authorization-code-started", "response-captured",
+                                       "response-delivered", "callback-superseded"} and
+                (("status" not in event) if event.get("event") != "response-captured" else
+                 type(event.get("status")) is int and 100 <= event["status"] <= 599)
+                for event in diagnostics)):
+            return False
+        for label in ["admin", "manufacturing"]:
+            for mode, status in [("success", 200), ("rejected", 400)]:
+                events = [event for event in diagnostics if event["site"] == label and event["mode"] == mode]
+                if ([event["event"] for event in events] !=
+                        ["authorization-code-started", "response-captured", "response-delivered",
+                         "callback-superseded"] or events[1]["status"] != status):
+                    return False
+        return True
+
+    functions_reads = document.get("functionsReads")
+    expected_functions_reads = {(label, label + ":concurrent-functions-" + mode)
+                                for label in ["admin", "manufacturing"] for mode in ["success", "rejected"]}
+    expected_functions_reads.update({("admin", "admin:concurrent-mcp-" + mode)
+                                     for mode in ["success", "rejected"]})
+    functions_reads_complete = (isinstance(functions_reads, list) and
+                                len(functions_reads) == len(expected_functions_reads))
+    if functions_reads_complete:
+        observed_functions_reads = set()
+        for read in functions_reads:
+            if (not isinstance(read, dict) or (read.get("site"), read.get("phase")) not in expected_functions_reads or
+                    read.get("status") != 200 or read.get("valid") is not True or read.get("error") or
+                    type(read.get("durationMs")) is not int or
+                    not 0 <= read["durationMs"] <= policy["renewedReadTimeoutMs"] or
+                    read.get("timeoutMs") != policy["renewedReadTimeoutMs"]):
+                functions_reads_complete = False
+                break
+            observed_functions_reads.add((read["site"], read["phase"]))
+        functions_reads_complete = functions_reads_complete and observed_functions_reads == expected_functions_reads
+    mcp_reads = document.get("mcpReads")
+    expected_mcp_reads = {("admin", "admin:concurrent-mcp-" + mode) for mode in ["success", "rejected"]}
+    mcp_reads_complete = isinstance(mcp_reads, list) and len(mcp_reads) == len(expected_mcp_reads)
+    if mcp_reads_complete:
+        observed_mcp_reads = set()
+        for read in mcp_reads:
+            if (not isinstance(read, dict) or (read.get("site"), read.get("phase")) not in expected_mcp_reads or
+                    read.get("status") != 200 or read.get("valid") is not True or read.get("error") or
+                    type(read.get("durationMs")) is not int or
+                    not 0 <= read["durationMs"] <= policy["renewedReadTimeoutMs"] or
+                    read.get("timeoutMs") != policy["renewedReadTimeoutMs"]):
+                mcp_reads_complete = False
+                break
+            observed_mcp_reads.add((read["site"], read["phase"]))
+        mcp_reads_complete = mcp_reads_complete and observed_mcp_reads == expected_mcp_reads
+    login_attempts = document.get("loginAttempts")
+    login_attempts_complete = isinstance(login_attempts, list) and len(login_attempts) == 34
+    if login_attempts_complete:
+        previous_response = None
+        for index, attempt in enumerate(login_attempts):
+            expected_site = "admin" if index < 19 else "manufacturing"
+            expected_identity = ({"admin": "manufacturing", "manufacturing": "admin"}[expected_site]
+                                 if index in {0, 19} else expected_site)
+            if (not isinstance(attempt, dict) or set(attempt) != {"site", "identity", "responseAtMs", "status"} or
+                    attempt["site"] != expected_site or attempt["identity"] != expected_identity or
+                    type(attempt["responseAtMs"]) is not int or attempt["responseAtMs"] < 0 or
+                    type(attempt["status"]) is not int or attempt["status"] != 302 or
+                    (previous_response is not None and
+                     attempt["responseAtMs"] - previous_response < policy["internalLoginMinimumIntervalMs"] - 2)):
+                login_attempts_complete = False
+                break
+            previous_response = attempt["responseAtMs"]
     complete = (failure is None and document.get("phase") == "complete" and len(checks) == len(expected) and
                 {item["name"] for item in checks} == expected and all(item["status"] == "PASS" for item in checks) and
-                reads_complete and document.get("readPolicy") == policy and
+                reads_complete and functions_reads_complete and mcp_reads_complete and login_attempts_complete and
+                race_evidence_complete("raceDiagnostics") and
+                race_evidence_complete("functionsRaceDiagnostics") and
+                race_evidence_complete("mcpRaceDiagnostics", labels=("admin",)) and callback_evidence_complete() and
+                document.get("readPolicy") == policy and
                 anonymous_requests_valid and
                 type(document.get("blockedMutations")) is int and document["blockedMutations"] == 0 and
                 type(document.get("tokenOriginViolations")) is int and document["tokenOriginViolations"] == 0)
@@ -4028,7 +5096,7 @@ def internal_browser(report, deployment):
     diagnostic = ""
     error = document.get("error")
     if isinstance(error, dict) and error.get("category") in {
-            "network", "navigation", "timeout", "aborted", "javascript-reference", "javascript-type",
+            "network", "navigation", "timeout", "rate-limited", "aborted", "javascript-reference", "javascript-type",
             "assertion-or-browser"}:
         diagnostic = "; sanitized failure category: " + error["category"]
         if error.get("operation") in {"anonymous-deep-link-navigation", "browser-flow"}:
@@ -4037,6 +5105,25 @@ def internal_browser(report, deployment):
         diagnostic += "; anonymous API request attempts: " + ", ".join(sorted({
             item["site"] + "/" + item["service"] + "/" + item["method"] for item in anonymous_requests
         }))
+    if not complete:
+        navigation = document.get("navigationResponses")
+        if isinstance(navigation, list):
+            for response in navigation[:24]:
+                if (isinstance(response, dict) and response.get("site") in {"admin", "manufacturing"} and
+                        response.get("kind") in {"document", "script"} and
+                        type(response.get("status")) is int and 100 <= response["status"] <= 599):
+                    diagnostic += "; " + response["site"] + " anonymous " + response["kind"] + \
+                        " HTTP " + str(response["status"])
+        for key in ["raceDiagnostics", "functionsRaceDiagnostics", "mcpRaceDiagnostics"]:
+            events = document.get(key)
+            if not isinstance(events, list):
+                continue
+            for event in events[:48]:
+                if (isinstance(event, dict) and event.get("site") in {"admin", "manufacturing"} and
+                        event.get("mode") in {"success", "rejected"} and event.get("event") in {
+                            "handler-returned-null", "handler-returned-other",
+                            "new-session-preserved", "new-session-changed", "stale-tab-gated", "stale-tab-ungated"}):
+                    diagnostic += "; " + key + "/" + event["site"] + "/" + event["mode"] + "/" + event["event"]
     for read in document.get("reads", []):
         if (isinstance(read, dict) and read.get("site") in {"admin", "manufacturing"} and
                 type(read.get("status")) is int and 0 <= read["status"] <= 599 and
@@ -4074,9 +5161,13 @@ def internal_browser(report, deployment):
                 if type(timing.get(key)) is int and -1 <= timing[key] <= diagnostic_limit_ms:
                     diagnostic += " " + key + "=" + str(timing[key]) + "ms"
     report.add("browser:internal:complete", "frontend", "PASS" if complete else "BLOCKED" if blocked else "FAIL",
-               "Real Admin/Manufacturing PKCE, resource authorization, refresh, logout, same-origin tab isolation, "
-               "token-origin confinement and read-only safety; Inspector, user-switch and origin-negative "
-               "scenarios remain separate obligations" + diagnostic)
+               "Real Admin/Manufacturing category denials, PKCE, resource authorization, refresh, logout, "
+               "same-origin tab isolation, "
+               "delayed DAB refresh, Functions/MCP exchanges and authorization-code callback success/rejection "
+               "with completed stale handlers, "
+               "token-origin confinement "
+               "and read-only safety; Inspector, user-switch and origin-negative scenarios remain separate "
+               "obligations" + diagnostic)
 
 
 INSPECTOR_BROWSER_CHECKS = {
@@ -4092,6 +5183,9 @@ INSPECTOR_BROWSER_CHECKS = {
     "manufacturing-logout-preserves-admin", "admin-logout-invalidates-only-own-session",
     "owned-backend-session-established", "other-user-backend-session-denied", "other-target-backend-session-denied",
     "owner-backend-session-survives-replay", "owned-backend-session-cleanup",
+    "switch-previous-session-active", "switch-previous-backend-active", "switch-old-flow-held",
+    "switch-replacement-admin-read", "switch-replay-cleanup", "switch-cancelled-callback-denied",
+    "switch-session-preserved", "switch-old-session-replay-denied", "switch-old-backend-session-denied",
 }
 
 
@@ -4109,6 +5203,7 @@ def inspector_browser(report, deployment):
     environment["AUTH_BROWSER_ADMIN_PASSWORD"] = password
     output = report.output / "inspector-browser.json"
     failure = None
+    await_login_limiter_window()
     try:
         command(["node", "tests/scripts/test-inspector-browser-auth.mjs", "--output", str(output)],
                 environment=environment, timeout=1200)
@@ -4136,17 +5231,64 @@ def inspector_browser(report, deployment):
                      startup["slow"] == (startup["durationMs"] >= policy["slowReadThresholdMs"]))
     if valid_startup:
         report.inventory["inspectorStartupRead"] = {key: startup[key] for key in ["status", "durationMs", "timeoutMs", "slow"]}
-    complete = (failure is None and document.get("phase") == "complete" and
+    attempts = document.get("loginAttempts")
+    expected_identities = ["manufacturing", "admin", "manufacturing", "manufacturing", "admin"]
+    valid_attempts = (
+        isinstance(attempts, list) and len(attempts) == len(expected_identities) and
+        all(isinstance(item, dict) and set(item) == {"identity", "submittedAtMs", "responseAtMs", "status"} and
+            item.get("identity") == identity and type(item.get("status")) is int and item["status"] == 302 and
+            type(item.get("submittedAtMs")) is int and type(item.get("responseAtMs")) is int and
+            0 <= item["submittedAtMs"] <= item["responseAtMs"]
+            for item, identity in zip(attempts, expected_identities)) and
+        all(current["submittedAtMs"] - previous["responseAtMs"] >= policy["internalLoginMinimumIntervalMs"]
+            for previous, current in zip(attempts, attempts[1:]))
+    )
+    switch_evidence = {
+        "loginStatus": 302, "browserLoginStatus": 200, "authorizeStatus": 302, "callbackIntercepted": True,
+        "oldFlowCaptured": True, "staleStatus": 403, "staleError": "invalid_oauth_state",
+        "staleSetCookie": False, "replayCleanupCount": 1, "replayCleanupStatus": 303,
+        "replacementPreserved": True, "oldSessionStatus": 401,
+        "oldBackendStatus": 403, "oldBackendError": "session_not_owned",
+    }
+    observed_switch = document.get("switchEvidence")
+    valid_switch = (observed_switch == switch_evidence and
+                    all(type(observed_switch[key]) is bool
+                        for key in ["callbackIntercepted", "oldFlowCaptured", "staleSetCookie",
+                                    "replacementPreserved"]) and
+                    all(type(observed_switch[key]) is int
+                        for key in ["loginStatus", "browserLoginStatus", "authorizeStatus",
+                                    "staleStatus", "replayCleanupCount", "replayCleanupStatus",
+                                    "oldSessionStatus", "oldBackendStatus"]))
+    complete = (failure is None and document.get("phase") == "complete" and document.get("diagnosticOnly") is False and
                 document.get("policy") == policy and valid_startup and
                 type(document.get("blockedMutations")) is int and document["blockedMutations"] == 0 and
+                valid_attempts and valid_switch and
                 len(checks) == len(INSPECTOR_BROWSER_CHECKS) and
                 {item["name"] for item in checks} == INSPECTOR_BROWSER_CHECKS and
                 all(item["status"] == "PASS" for item in checks))
     blocked = any(item["status"] == "BLOCKED" for item in checks)
+    diagnostic = ""
+    if not complete:
+        ui = document.get("dabUiDiagnostics")
+        if isinstance(ui, dict):
+            for key in ["targetInputMatches", "targetUrlMatches", "targetConnectError", "proxyHealthError"]:
+                if type(ui.get(key)) is bool:
+                    diagnostic += "; " + key + "=" + str(ui[key])
+        responses = document.get("proxyResponses")
+        if isinstance(responses, list):
+            for response in responses[:50]:
+                if (isinstance(response, dict) and response.get("endpoint") == "mcp" and
+                        response.get("target") in {"custom", "dab", "other"} and
+                        type(response.get("status")) is int and 100 <= response["status"] <= 599):
+                    diagnostic += "; " + response["target"] + " proxy HTTP " + str(response["status"])
     report.add("browser:inspector:complete", "frontend", "PASS" if complete else "BLOCKED" if blocked else "FAIL",
                "Actual hosted Inspector internal PKCE, opaque session, both UI connections, delegated target "
                "authorization, role/origin/target denials, two-tab logout and independent manufacturing/admin "
-               "role/session isolation; no business writes. Natural expiry and full role/tool matrices remain separate obligations")
+               "role/session isolation. A previously active manufacturing session and backend session are "
+               "replaced, then a manufacturing callback held before gateway exchange is replayed with an "
+               "isolated old-flow cookie after admin sign-in. Old-session/backend replay is denied and the "
+               "admin session survives; the test-owned replay flow is cleaned up. No business writes. "
+               "In-flight exchange, natural expiry and full role/tool matrices remain separate obligations" + diagnostic)
 
 
 def native_dab_mcp(report, deployment, dab_token, functions_token, role):
@@ -4320,11 +5462,8 @@ def native_dab_mcp(report, deployment, dab_token, functions_token, role):
             report.check("dab-mcp:session-cleanup", "cleanup", confirmed, detail)
 
 
-def dab_read_role_matrix(report, deployment, admin_token, manufacturing_token, consumers):
-    config = json.loads((ROOT / "api/dab-config.json").read_text())
-    dab_inventory(config)
-    entities = config["entities"]
-    url = https_url(deployment.required("API_URL"))
+def dab_graphql_selectors(url, admin_token, entities):
+    """Discover each source GraphQL entity's list selector and every type's fields with an admin schema read."""
     schema_query = """{ __schema { queryType { fields {
       name type { kind name ofType { kind name } }
     } } types { name fields { name } } } }"""
@@ -4362,6 +5501,16 @@ def dab_read_role_matrix(report, deployment, admin_token, manufacturing_token, c
     expected = {name for name, entity in entities.items() if entity.get("graphql", True) is True}
     if set(selectors) != expected:
         raise EvidenceError("DAB read-role schema does not close over the source GraphQL entities")
+    return selectors, types
+
+
+def dab_read_role_matrix(report, deployment, admin_token, manufacturing_token, consumers):
+    config = json.loads((ROOT / "api/dab-config.json").read_text())
+    dab_inventory(config)
+    entities = config["entities"]
+    url = https_url(deployment.required("API_URL"))
+    selectors, types = dab_graphql_selectors(url, admin_token, entities)
+    expected = set(selectors)
     callers = [("anonymous", None, "anonymous"), ("admin", admin_token, "executive-admin"),
                ("manufacturing", manufacturing_token, "manufacturing-engineer")]
     for consumer in consumers:
@@ -4396,12 +5545,18 @@ def dab_read_role_matrix(report, deployment, admin_token, manufacturing_token, c
                 item = {"entity": name, "caller": caller, "role": role, "column": column,
                         "protocol": protocol, "expected": "allow" if allowed else "deny"}
                 evidence.append(item)
-                try:
-                    status, _, raw = http(
+                def read():
+                    return http(
                         "GET" if protocol == "rest" else "POST", rest_url if protocol == "rest" else url,
                         token=token, headers={"X-MS-API-ROLE": role},
                         data=None if protocol == "rest" else {
                             "query": f"{{ {selector}(first: 1) {{ items {{ {column} }} }} }}"})
+                try:
+                    try:
+                        status, _, raw = read()
+                    except EvidenceError:
+                        # Read-only probe: a single transport retry cannot change state.
+                        status, _, raw = read()
                 except EvidenceError as error:
                     item["status"] = "BLOCKED"
                     report.add(check_id, group, "BLOCKED", str(error))
@@ -4440,6 +5595,414 @@ def dab_read_role_matrix(report, deployment, admin_token, manufacturing_token, c
                              f"rows={len(rows) if isinstance(rows, list) else 'none'}. "
                              "Public anonymous reads are inherited. Values withheld; empty allowed results "
                              "do not prove ownership or total counts.")
+    report.guarded("dab:owner-rows:matrix", "live-denials",
+                   lambda: dab_owner_row_isolation(report, url, entities, selectors, consumers))
+
+
+OWNER_ROW_CLAIM_BLOCKER = "Both fixtures need distinct non-empty"
+DAB_OWNER_ROW_POLICY = re.compile(r"@item\.([A-Za-z_][A-Za-z0-9_]*) eq @claims\.([a-z_]+)")
+
+
+def dab_owner_policy_entities(entities, claim):
+    """Entities whose consumer/authenticated read policy binds rows to the named signed claim."""
+    return {name for name, entity in entities.items() for permission in entity.get("permissions", [])
+            if permission.get("role") in {"consumer", "authenticated"}
+            for action in permission.get("actions", []) if isinstance(action, dict) and
+            action.get("action") == "read" and
+            (match := DAB_OWNER_ROW_POLICY.fullmatch(action.get("policy", {}).get("database") or "")) and
+            match.group(2) == claim}
+
+
+def jwt_claims(token):
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (ValueError, IndexError, AttributeError) as error:
+        raise EvidenceError("Token metadata could not be decoded") from error
+    if not isinstance(claims, dict):
+        raise EvidenceError("Token metadata is not an object")
+    return claims
+
+
+DAB_SCHEMA_SQL = ROOT / "seed-job/sql/AdventureWorks.sql"
+SQL_TEXT_TYPES = {"nvarchar", "varchar", "nchar", "char", "uniqueidentifier"}
+SQL_INTEGER_TYPES = {"int", "bigint", "smallint", "tinyint"}
+
+
+def dab_owner_column_is_text(source, column, schema_text):
+    """Classify an owner-policy column from its declared table so filters use the column's literal type."""
+    schema, _, table = str(source).rpartition(".")
+    body = re.search(r"CREATE TABLE \[" + re.escape(schema or "dbo") + r"\]\.\[" + re.escape(table) +
+                     r"\]\((.*?)\n\)", schema_text, re.DOTALL)
+    declared = body and re.search(r"^\s*\[" + re.escape(column) + r"\]\s+\[(\w+)\]", body.group(1), re.MULTILINE)
+    kind = declared.group(1).lower() if declared else None
+    if kind not in SQL_TEXT_TYPES | SQL_INTEGER_TYPES:
+        raise EvidenceError(f"DAB owner column {source}.{column} has no classified SQL type")
+    return kind in SQL_TEXT_TYPES
+
+
+def dab_owner_row_isolation(report, url, entities, selectors, consumers, schema_text=None, *, only=None,
+                            prefix="dab:owner-rows", inventory="dabOwnerRows"):
+    """Read-only two-owner row isolation for every source-declared DAB owner read policy."""
+    if len(consumers) != 2:
+        raise EvidenceError("DAB owner-row isolation requires two distinct consumer fixtures")
+    schema_text = DAB_SCHEMA_SQL.read_text() if schema_text is None else schema_text
+    cells = []
+    for name in sorted(entities):
+        if only is not None and name not in only:
+            continue
+        entity = entities[name]
+        for permission in entity["permissions"]:
+            if permission["role"] not in {"consumer", "authenticated"}:
+                continue
+            for action in permission["actions"]:
+                policy = action.get("policy", {}).get("database") if isinstance(action, dict) else None
+                if not isinstance(action, dict) or action.get("action") != "read" or not policy:
+                    continue
+                match = DAB_OWNER_ROW_POLICY.fullmatch(policy)
+                if not match or name not in selectors:
+                    raise EvidenceError("DAB owner read policy for " + name + " is not a classified equality")
+                cells.append((name, permission["role"], match.group(1), match.group(2),
+                              entity.get("rest", True) is not False,
+                              dab_owner_column_is_text((entity.get("source") or {}).get("object", name),
+                                                       match.group(1), schema_text)))
+    if only is not None and not cells:
+        raise EvidenceError("No DAB owner read policy matched the requested entities")
+    tokens = {label: consumer.token("dab", "customers.read orders.read products.read")
+              for label, consumer in zip(["A", "B"], consumers)}
+    owners = {label: jwt_claims(token) for label, token in tokens.items()}
+    evidence = []
+    report.inventory[inventory] = evidence
+    for name, role, column, claim, rest, text_column in cells:
+        selector = selectors[name]
+        for own, other in [("A", "B"), ("B", "A")]:
+            value, foreign = owners[own].get(claim), owners[other].get(claim)
+            for protocol in ["graphql", "rest"] if rest else ["graphql"]:
+                for probe in ["own", "foreign-filter"]:
+                    check_id = f"{prefix}:{protocol}:{name}:{role}:{own}:{probe}"
+                    evidence.append({"entity": name, "role": role, "owner": own, "protocol": protocol,
+                                     "probe": probe, "column": column, "claim": claim})
+                    if value in {None, ""} or foreign in {None, ""} or str(value) == str(foreign):
+                        report.add(check_id, "live-denials", "BLOCKED",
+                                   f"{OWNER_ROW_CLAIM_BLOCKER} {claim} claims")
+                        continue
+                    target = value if probe == "own" else foreign
+                    if not text_column and not re.fullmatch(r"-?\d+", str(target)):
+                        report.add(check_id, "live-denials", "BLOCKED",
+                                   f"{claim} is not an integer for integer owner column {column}")
+                        continue
+                    literal = ("'" + str(target).replace("'", "''") + "'") if text_column else str(int(target))
+                    if protocol == "rest":
+                        params = {"$select": column, "$first": 100}
+                        if probe != "own":
+                            params["$filter"] = f"{column} eq {literal}"
+                        request = ("GET", origin(url) + "/api/" + name + "?" + urllib.parse.urlencode(params), None)
+                    else:
+                        gql_value = json.dumps(str(target)) if text_column else str(int(target))
+                        where = "" if probe == "own" else f", filter: {{ {column}: {{ eq: {gql_value} }} }}"
+                        request = ("POST", url, {"query": f"{{ {selector}(first: 100{where}) "
+                                                          f"{{ items {{ {column} }} }} }}"})
+                    try:
+                        status, _, raw = http(request[0], request[1], token=tokens[own],
+                                              headers={"X-MS-API-ROLE": role}, data=request[2])
+                        body = json.loads(raw) if raw else {}
+                    except (EvidenceError, ValueError) as error:
+                        report.add(check_id, "live-denials", "BLOCKED", "Owner-row probe unavailable: " +
+                                   type(error).__name__)
+                        continue
+                    rows = (body.get("value") if protocol == "rest" else
+                            ((body.get("data") or {}).get(selector) or {}).get("items")) \
+                        if isinstance(body, dict) else None
+                    clean = (status == 200 and isinstance(rows, list) and not body.get("errors") and
+                             all(isinstance(row, dict) and set(row) == {column} for row in rows))
+                    if probe == "own":
+                        valid = clean and all(str(row[column]) == str(value) for row in rows)
+                        detail = "every returned row belongs to the signed owner"
+                    else:
+                        # DAB may reject a policy-contradicting filter or return an empty set; never rows.
+                        valid = (clean and rows == []) or (status in {400, 403} and not rows)
+                        detail = "a filter naming the other fixture owner returns no rows"
+                    report.check(check_id, "live-denials", valid,
+                                 f"{protocol} {name} as {role} owner {own}: {detail}; HTTP {status}, "
+                                 f"rows={len(rows) if isinstance(rows, list) else 'none'}. Values withheld.")
+
+
+DAB_WRITE_OPERATIONS = ["create", "update", "delete"]
+DAB_ROLES = ["anonymous", "authenticated", "consumer", "manufacturing-engineer", "sales-admin",
+             "marketing-admin", "inventory-admin", "operations-admin", "executive-admin"]
+DAB_OWNER_POLICY = re.compile(r"@item\.([A-Za-z_][A-Za-z0-9_]*) eq @claims\.business_entity_id")
+DAB_REST_ALLOW = {
+    ("BadRequest", "A Mutation operation on more than one entity in a single request is not yet supported."),
+    ("InvalidIdentifierField", "Primary key column: NotAColumn not found in the entity definition."),
+    ("BadRequest", "Primary key column(s) provided do not match DB schema."),
+}
+DAB_REST_DENY = ("AuthorizationCheckFailed", "Authorization Failure: Access Not Allowed.")
+# Each probe fails DAB request validation after authorization, so no SQL statement runs.
+# REST PATCH is an upsert, so DAB authorizes it against both create and update.
+DAB_WRITE_PROBES = {
+    "rest-create": ("POST", "", [], {"create"}),
+    "rest-upsert": ("PATCH", "/NotAColumn/x", {"zzNotAField": 1}, {"create", "update"}),
+    "rest-delete": ("DELETE", "/NotAColumn/x", None, {"delete"}),
+}
+GRAPHQL_PROBE_VALUES = {"Int": "-1", "Short": "-1", "Byte": "0", "UnsignedByte": "0", "Long": "-1",
+                        "DateTime": '"2000-01-01T00:00:00Z"', "String": '"x"',
+                        "UUID": '"00000000-0000-0000-0000-000000000000"'}
+
+
+def dab_effective_permission(entity, role):
+    """DAB role inheritance: named role -> authenticated -> anonymous when the role is not configured."""
+    permissions = {permission["role"]: permission for permission in entity["permissions"]}
+    chain = {"anonymous": ["anonymous"], "authenticated": ["authenticated", "anonymous"]}.get(
+        role, [role, "authenticated", "anonymous"])
+    return next((permissions[name] for name in chain if name in permissions), None)
+
+
+def dab_write_decisions(config):
+    entities = config["entities"]
+    configured = {permission["role"] for entity in entities.values() for permission in entity["permissions"]}
+    if not configured <= set(DAB_ROLES):
+        raise EvidenceError("DAB config uses an unclassified role: " + ", ".join(sorted(configured - set(DAB_ROLES))))
+    cells = []
+    for name in sorted(entities):
+        entity = entities[name]
+        for role in DAB_ROLES:
+            permission = dab_effective_permission(entity, role)
+            actions = {}
+            for definition in (permission or {}).get("actions", []):
+                action = definition if isinstance(definition, str) else definition["action"]
+                if action == "*":
+                    raise EvidenceError(f"DAB {name}/{permission['role']} uses a wildcard action; decisions must be explicit")
+                actions[action] = {} if isinstance(definition, str) else definition
+            for operation in DAB_WRITE_OPERATIONS:
+                definition = actions.get(operation)
+                cells.append({"entity": name, "role": role, "operation": operation,
+                              "decision": "allow" if definition is not None else "deny",
+                              "inheritedFrom": permission["role"] if permission and permission["role"] != role else None,
+                              "policy": (definition or {}).get("policy", {}).get("database"),
+                              "fields": (definition or {}).get("fields"),
+                              "source": entity["source"]})
+    return cells
+
+
+def dab_graphql_update_allowed(entity, role):
+    """GraphQL mutation authorization uses only the role's explicit entity permission."""
+    permission = next((item for item in entity["permissions"] if item["role"] == role), None)
+    return permission is not None and "update" in action_names(permission)
+
+
+def dab_write_decision_violations(config):
+    cells = dab_write_decisions(config)
+    violations = []
+    by_key = {(cell["entity"], cell["role"], cell["operation"]): cell for cell in cells}
+    for cell in cells:
+        label = f"{cell['entity']}/{cell['role']}/{cell['operation']}"
+        if cell["decision"] != "allow":
+            continue
+        if cell["role"] == "anonymous" or cell["inheritedFrom"] == "anonymous":
+            violations.append(label + ": anonymous writes are prohibited")
+        if cell["source"].get("type", "table") != "table":
+            violations.append(label + ": views must be read-only")
+        if cell["role"] in {"consumer", "authenticated"}:
+            policy = cell["policy"] or ""
+            owner = DAB_OWNER_POLICY.fullmatch(policy)
+            vote_only = (cell["entity"] == "ProductReview" and cell["operation"] == "update" and not policy and
+                         cell["fields"] == {"include": ["HelpfulVotes"]})
+            if not owner and not vote_only:
+                violations.append(label + ": consumer writes require an exact owner policy or the vote-only field set")
+            other = by_key[(cell["entity"], "authenticated" if cell["role"] == "consumer" else "consumer",
+                            cell["operation"])]
+            if (other["decision"], other["policy"], other["fields"]) != ("allow", cell["policy"], cell["fields"]):
+                violations.append(label + ": consumer and authenticated write decisions must be identical")
+        internal = cell["role"] not in {"anonymous", "authenticated", "consumer"}
+        if internal and cell["inheritedFrom"] == "authenticated" and not DAB_OWNER_POLICY.fullmatch(cell["policy"] or ""):
+            # Internal tokens never carry business_entity_id, so only inherited owner policies fail closed.
+            violations.append(label + ": an internal role inherits a consumer write without a fail-closed owner policy")
+        if (cell["role"] == "manufacturing-engineer" and cell["inheritedFrom"] is None and
+                not cell["source"]["object"].startswith("Production.")):
+            violations.append(label + ": manufacturing writes are limited to Production tables")
+        if cell["role"] != "executive-admin" and by_key[(cell["entity"], "executive-admin",
+                                                         cell["operation"])]["decision"] != "allow":
+            violations.append(label + ": executive-admin must hold every write granted to another role")
+    return cells, violations
+
+
+def dab_write_decision_contract(report, config=None):
+    config = config or json.loads((ROOT / "api/dab-config.json").read_text())
+    cells, violations = dab_write_decision_violations(config)
+    report.inventory["dabWriteDecisions"] = [
+        {key: cell[key] for key in ["entity", "role", "operation", "decision", "inheritedFrom", "policy"]}
+        for cell in cells]
+    expected = len(config["entities"]) * len(DAB_ROLES) * len(DAB_WRITE_OPERATIONS)
+    report.check("contract:dab:write-decisions", "contracts", not violations and len(cells) == expected,
+                 f"Every entity x role x create/update/delete cell ({len(cells)} of {expected}) has an explicit "
+                 "inheritance-resolved decision: no anonymous or view writes, consumer writes owner-bound or "
+                 "vote-only, internal inheritance only through fail-closed owner policies, manufacturing explicit grants "
+                 "limited to Production, executive-admin a superset" +
+                 ("; violations: " + "; ".join(violations[:10]) if violations else ""))
+
+
+def renewing_internal_tokens(deployment, identities, resource, *, max_age=420):
+    """Internal access tokens live ten minutes; long matrices renew them with paced logins."""
+    interval = json.loads((Path(__file__).with_name("browser-policy.json")).read_text())[
+        "internalLoginMinimumIntervalMs"] / 1000
+    state = {"last": None}
+    cache = {}
+
+    def provider(identity):
+        def current():
+            token, issued = cache.get(identity, (None, None))
+            if token is None or time.monotonic() - issued > max_age:
+                if state["last"] is not None:
+                    time.sleep(max(0, interval - (time.monotonic() - state["last"])))
+                token = internal_token(deployment, identity, resource)
+                state["last"] = issued = time.monotonic()
+                cache[identity] = (token, issued)
+            return token
+        current()
+        return current
+
+    return [provider(identity) for identity in identities]
+
+
+def graphql_update_selectors(url, admin_token, entities):
+    query = ("{ __schema { mutationType { fields { name type { kind name } "
+             "args { name type { kind name ofType { kind name } } } } } } }")
+    status, _, raw = http("POST", url, token=admin_token, headers={"X-MS-API-ROLE": "executive-admin"},
+                          data={"query": query})
+    try:
+        document = json.loads(raw)
+        fields = document["data"]["__schema"]["mutationType"]["fields"]
+    except (ValueError, KeyError, TypeError) as error:
+        raise EvidenceError("DAB mutation schema discovery returned invalid metadata") from error
+    if status != 200 or document.get("errors") or not isinstance(fields, list):
+        raise EvidenceError("DAB mutation schema discovery was not authorized")
+    selectors = {}
+    for field in fields:
+        name, target = field.get("name"), field.get("type") or {}
+        if not isinstance(name, str) or not name.startswith("update") or target.get("name") not in entities:
+            continue
+        if target["name"] in selectors or not re.fullmatch(r"update[_0-9A-Za-z]+", name):
+            raise EvidenceError("DAB mutation schema has a duplicate or invalid update selector")
+        arguments = []
+        for argument in field.get("args") or []:
+            if argument.get("name") == "item":
+                continue
+            scalar = argument.get("type") or {}
+            scalar = scalar.get("ofType") or scalar
+            value = GRAPHQL_PROBE_VALUES.get(scalar.get("name"))
+            if value is None or not re.fullmatch(r"[_A-Za-z][_0-9A-Za-z]*", argument.get("name") or ""):
+                raise EvidenceError("DAB update selector has an unclassified key argument type")
+            arguments.append(f"{argument['name']}: {value}")
+        selectors[target["name"]] = f"{name}({', '.join(arguments + ['item: {}'])})"
+    expected = {name for name, entity in entities.items()
+                if entity["source"].get("type", "table") == "table" and entity.get("graphql", True) is True and
+                any("update" in action_names(permission) for permission in entity["permissions"])}
+    if set(selectors) != expected:
+        raise EvidenceError("DAB update mutations do not close over the source table entities")
+    return selectors
+
+
+def dab_write_role_matrix(report, deployment, admin_token, manufacturing_token, consumers):
+    config = json.loads((ROOT / "api/dab-config.json").read_text())
+    entities = config["entities"]
+    cells = dab_write_decisions(config)
+    url = https_url(deployment.required("API_URL"))
+    base = origin(url) + "/api/"
+    resolve = lambda token: token() if callable(token) else token
+    selectors = graphql_update_selectors(url, resolve(admin_token), entities)
+    callers = [("anonymous", None, "anonymous"), ("admin", admin_token, "executive-admin"),
+               ("manufacturing", manufacturing_token, "manufacturing-engineer")]
+    for consumer in consumers:
+        # ConsumerSession.token renews before expiry, so resolve it per entity.
+        token = lambda consumer=consumer: consumer.token("dab", "customers.read orders.read products.read")
+        callers.extend([(consumer.label, token, "consumer"), ("authenticated-" + consumer.label, token, "authenticated")])
+    decisions = {(cell["entity"], cell["role"], cell["operation"]): cell["decision"] for cell in cells}
+    evidence = []
+    report.inventory["dabWriteRoleMatrix"] = evidence
+
+    def record(check_id, item, request):
+        group = "live-allows" if item["expected"] == "allow" else "live-denials"
+        evidence.append(item)
+        try:
+            try:
+                status, raw = request()
+            except EvidenceError:
+                # The probe is zero-effect, so a single transport retry cannot duplicate a write.
+                status, raw = request()
+        except EvidenceError as error:
+            item["status"] = "BLOCKED"
+            report.add(check_id, group, "BLOCKED", str(error))
+            return
+        try:
+            document = json.loads(raw)
+        except ValueError:
+            document = None
+        if item["probe"] == "graphql-update":
+            errors = document.get("errors") if isinstance(document, dict) else None
+            error = errors[0] if isinstance(errors, list) and len(errors) == 1 and isinstance(errors[0], dict) else {}
+            outcome = (status, (error.get("extensions") or {}).get("code"), error.get("message"))
+            allowed = (200, "BadRequest", "Update mutation does not update any values")
+            denied = (200, "AUTH_NOT_AUTHENTICATED" if item["caller"] == "anonymous" else "AUTH_NOT_AUTHORIZED",
+                      "The current user is not authorized to access this resource.")
+        else:
+            error = document.get("error") if isinstance(document, dict) else None
+            error = error if isinstance(error, dict) else {}
+            outcome = (status, error.get("code"), error.get("message"))
+            allowed = None
+            denied = (403,) + DAB_REST_DENY
+        valid = (outcome == denied if item["expected"] == "deny" else
+                 outcome == allowed if allowed else status == 400 and outcome[1:] in DAB_REST_ALLOW)
+        item["status"] = "PASS" if valid else "FAIL"
+        report.check(check_id, group, valid,
+                     f"Source role={item['role']} expects {item['probe']}={item['expected']}; HTTP {status} "
+                     f"{outcome[1]}. Validation rejects the probe after authorization, so no SQL runs; "
+                     "row-level owner policies are proven by the mutation suite.")
+
+    for name in sorted(entities):
+        for caller, source, role in callers:
+            token = resolve(source)
+            headers = {"X-MS-API-ROLE": role} if token else None
+            for probe, (method, suffix, body, operations) in DAB_WRITE_PROBES.items():
+                expected = "allow" if all(decisions[(name, role, operation)] == "allow"
+                                          for operation in operations) else "deny"
+                record(f"dab:write-role:{name}:{caller}:{probe}",
+                       {"entity": name, "caller": caller, "role": role, "probe": probe, "expected": expected},
+                       lambda method=method, suffix=suffix, body=body, token=token, headers=headers: http(
+                           method, base + name + suffix, token=token, data=body, headers=headers)[::2])
+            if name in selectors:
+                selector = selectors[name]
+                expected = "allow" if dab_graphql_update_allowed(entities[name], role) else "deny"
+                record(f"dab:write-role:{name}:{caller}:graphql-update",
+                       {"entity": name, "caller": caller, "role": role, "probe": "graphql-update",
+                        "expected": expected},
+                       lambda selector=selector, token=token, headers=headers: http(
+                           "POST", url, token=token, headers=headers,
+                           data={"query": f"mutation {{ {selector} {{ __typename }} }}"})[::2])
+
+
+def reconcile_dab_operation_requirement(report):
+    required = [item for item in report.checks if item["id"] == "required:dab-all-role-operation-decisions"]
+    if len(required) != 1:
+        raise EvidenceError("The DAB role/operation requirement must exist exactly once")
+    reads = [item for item in report.checks if item["id"].startswith("dab:read-role:")]
+    writes = [item for item in report.checks if item["id"].startswith("dab:write-role:")]
+    headers = [item for item in report.checks if item["id"].startswith("dab:role-header:")]
+    contract = [item for item in report.checks if item["id"] == "contract:dab:write-decisions"]
+    expected_writes = len(report.inventory.get("dabWriteRoleMatrix", []))
+    groups = [reads, writes, headers, contract]
+    failed = any(item["status"] == "FAIL" for items in groups for item in items)
+    complete = (all(items and all(item["status"] == "PASS" for item in items) for items in groups) and
+                len(contract) == 1 and expected_writes and len(writes) == expected_writes and
+                len(reads) == len(report.inventory.get("dabReadRoleMatrix", [])))
+    required[0].update({
+        "status": "FAIL" if failed else "PASS" if complete else "BLOCKED",
+        "detail": f"Requires the explicit decision contract for every entity/role/write cell, {len(reads)} live read "
+                  f"cells and {len(writes)} live zero-effect write cells (REST create/upsert/delete and GraphQL "
+                  "update) for anonymous, consumer, authenticated, "
+                  "manufacturing-engineer and executive-admin, all PASS, plus signed role-header denials. "
+                  "sales/marketing/inventory/operations-admin have no seeded identity, so their cells are "
+                  "decided by the contract and the role-header denials, not by live calls.",
+    })
 
 
 def dab_role_header_denials(report, deployment, admin_token, manufacturing_token, consumers):
@@ -5219,8 +6782,27 @@ def consumer_password_reads(report, deployment, consumers):
                 raise EvidenceError("Password ownership/verification result not established; remaining requests stopped")
 
 
+def illustration_export_fixture():
+    try:
+        fixture = json.loads(CONTRACTS.read_text())["illustrationExportProbe"]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise EvidenceError("The reviewed illustration export fixture is unavailable or invalid") from error
+    if (not isinstance(fixture, list) or len(fixture) != 1 or not isinstance(fixture[0], dict) or
+            set(fixture[0]) != {"illustrationId", "diagram"} or
+            type(fixture[0]["illustrationId"]) is not int or fixture[0]["illustrationId"] != 1 or
+            not isinstance(fixture[0]["diagram"], str) or not fixture[0]["diagram"] or
+            len(fixture[0]["diagram"]) > 2048):
+        raise EvidenceError("The reviewed illustration export fixture is unavailable or invalid")
+    return fixture
+
+
+SIDE_EFFECT_DETAIL = ("Reviewed side-effecting GET ({}); live denial not sent because an authorization "
+                      "regression would execute the effect. Isolated-host denial evidence covers this route.")
+
+
 def function_denial_obligations(report, functions_base):
     safe_reads = reviewed_function_read_routes()
+    side_effects = side_effecting_function_reads()
     functions = report.inventory.get("functions", [])
     names = [item.get("Name") for item in functions]
     if len(names) != len(set(names)):
@@ -5238,8 +6820,16 @@ def function_denial_obligations(report, functions_base):
                 url = functions_base + "/api/" + route_path(function["Route"])
                 for label, token in [("anonymous", None), ("forged", "invalid-auth-validation-token")]:
                     obligations.append((prefix + ":" + label, method, url, token, None))
+            elif (function["Name"] == "ExportManufacturingIllustrations" and method == "POST" and
+                  is_reviewed_function_read(function, safe_reads)):
+                url = functions_base + "/api/" + function["Route"]
+                fixture = illustration_export_fixture()
+                for label, token in [("anonymous", None), ("forged", "invalid-auth-validation-token")]:
+                    obligations.append((prefix + ":" + label, method, url, token, fixture))
             else:
-                detail = ("GET/HEAD denial probe has no exact reviewed read-only route; no request sent"
+                reason = side_effecting_read_reason(function, side_effects) if method == "GET" else None
+                detail = (SIDE_EFFECT_DETAIL.format(reason) if reason else
+                          "GET/HEAD denial probe has no exact reviewed read-only route; no request sent"
                           if method in {"GET", "HEAD"} else
                           "Mutation denial probe requires reviewed per-operation safe fixture; no resets/queue clears")
                 report.add(prefix + ":deny", "live-denials", "BLOCKED", detail)
@@ -5270,6 +6860,37 @@ def reviewed_function_read_url(report, functions_base, name):
     return functions_base + "/api/" + functions[0]["Route"]
 
 
+def reduced_consumer_functions_token(deployment, consumer):
+    if type(consumer.business_id) is not int or consumer.business_id <= 0:
+        raise EvidenceError("A retained consumer owner is required before scope probes")
+    mcp_base = origin(deployment.required("API_MCP_URL"))
+    audience = deployment.values.get("FUNCTIONS_RESOURCE_IDENTIFIER", mcp_base + "/functions")
+    token = consumer.token("functions", "mcp.access")
+    helper = load_auth_helper()
+    try:
+        claims = helper.claims(token)
+    except helper.AuthError as error:
+        raise EvidenceError("Reduced-scope consumer token has invalid metadata; no scope probes started") from error
+    scope_claim = claims.get("scope")
+    scopes = (scope_claim.split() if isinstance(scope_claim, str) else scope_claim
+              if isinstance(scope_claim, list) and all(isinstance(item, str) for item in scope_claim) else [])
+    audiences = claims.get("aud")
+    invalid = []
+    if scopes != ["mcp.access"]:
+        invalid.append("scope")
+    if claims.get("category") != "consumer":
+        invalid.append("category")
+    if str(claims.get("business_entity_id")) != str(consumer.business_id):
+        invalid.append("owner")
+    if audiences not in (audience, [audience]):
+        invalid.append("audience")
+    if type(claims.get("exp")) is not int or claims["exp"] <= time.time() + 60:
+        invalid.append("lifetime")
+    if invalid:
+        raise EvidenceError("Reduced-scope token metadata invalid: " + ", ".join(invalid))
+    return token, set(scopes)
+
+
 def functions_scope_read_denials(report, deployment, consumer):
     if type(consumer.business_id) is not int or consumer.business_id <= 0:
         raise EvidenceError("A retained consumer owner is required before scope probes")
@@ -5281,23 +6902,9 @@ def functions_scope_read_denials(report, deployment, consumer):
     base = https_url(deployment.required("API_FUNCTIONS_URL"))
     mcp_base = origin(deployment.required("API_MCP_URL"))
     metadata = mcp_base + "/.well-known/oauth-protected-resource"
-    audience = deployment.values.get("FUNCTIONS_RESOURCE_IDENTIFIER", mcp_base + "/functions")
     safe_reads = reviewed_function_read_routes()
-    token = consumer.token("functions", "mcp.access")
-    helper = load_auth_helper()
-    try:
-        claims = helper.claims(token)
-    except helper.AuthError as error:
-        raise EvidenceError("Reduced-scope consumer token has invalid metadata; no scope probes started") from error
-    scope_claim = claims.get("scope")
-    scopes = (scope_claim.split() if isinstance(scope_claim, str) else scope_claim
-              if isinstance(scope_claim, list) and all(isinstance(item, str) for item in scope_claim) else [])
-    audiences = claims.get("aud")
-    if (set(scopes) != {"mcp.access"} or claims.get("category") != "consumer" or
-            str(claims.get("business_entity_id")) != str(consumer.business_id) or
-            not (audiences == audience or isinstance(audiences, list) and audience in audiences) or
-            type(claims.get("exp")) is not int or claims["exp"] <= time.time() + 60):
-        raise EvidenceError("Reduced-scope token owner, audience, lifetime or exact scope is invalid")
+    side_effects = side_effecting_function_reads()
+    token, scopes = reduced_consumer_functions_token(deployment, consumer)
 
     functions = report.inventory.get("functions", [])
     names = [item.get("Name") for item in functions]
@@ -5314,7 +6921,9 @@ def functions_scope_read_denials(report, deployment, consumer):
         if (not is_reviewed_function_read(function, safe_reads) or policy.get("FunctionName") != name or
                 not isinstance(scope, str) or not re.fullmatch(r"[a-z][a-z0-9]*(?:[.:][a-z][a-z0-9]*)+", scope) or
                 scope in scopes):
+            reason = side_effecting_read_reason(function, side_effects)
             report.add("functions-scope:" + name, "live-denials", "BLOCKED",
+                       SIDE_EFFECT_DETAIL.format(reason) if reason else
                        "No exact reviewed read-only route and missing-scope policy; no request sent")
             continue
         obligations.append((name, scope, base + "/api/" + route_path(function["Route"])))
@@ -5344,6 +6953,85 @@ def functions_scope_read_denials(report, deployment, consumer):
     with ThreadPoolExecutor(max_workers=4) as executor:
         for name, status, detail in executor.map(probe, obligations):
             report.add("functions-scope:" + name, "live-denials", status, detail)
+
+
+def illustration_export_authorization(report, deployment, tokens, consumer):
+    name = "ExportManufacturingIllustrations"
+    matches = [item for item in report.inventory.get("functions", []) if item.get("Name") == name]
+    if (len(matches) != 1 or not is_reviewed_function_read(matches[0], reviewed_function_read_routes()) or
+            matches[0]["Policy"].get("RequiredScope") != "manufacturing.read"):
+        raise EvidenceError("Illustration export no longer matches the reviewed read-only binding")
+    url = https_url(deployment.required("API_FUNCTIONS_URL")) + "/api/" + matches[0]["Route"]
+    fixture = illustration_export_fixture()
+    status, _, raw = http("POST", url, token=tokens["functions"], data=fixture)
+    try:
+        document = json.loads(raw)
+        rows = document.get("illustrations") if isinstance(document, dict) else None
+        item = rows[0] if isinstance(rows, list) and len(rows) == 1 else None
+        svg = ET.fromstring(item["svg"]) if isinstance(item, dict) and isinstance(item.get("svg"), str) else None
+        paths = svg.findall(".//{http://www.w3.org/2000/svg}path") if svg is not None else []
+        valid = (status == 200 and isinstance(item, dict) and type(item.get("illustrationId")) is int and
+                 item["illustrationId"] == 1 and
+                 item.get("fileName") == "illustration-1.svg" and svg is not None and
+                 svg.tag == "{http://www.w3.org/2000/svg}svg" and len(paths) == 1 and
+                 paths[0].get("d") == "M 0,0 L 10,10" and paths[0].get("stroke") == "#000000")
+    except (ValueError, KeyError, ET.ParseError):
+        valid = False
+    report.check("illustration-export:post:authorized", "live-allows", valid,
+                 f"Supplied synthetic illustration converted without SQL writes; HTTP {status}")
+    if not valid:
+        raise EvidenceError("Illustration export positive control failed; scoped denials were not sent")
+    status, _, raw = http("GET", url, token=tokens["functions"])
+    try:
+        document = json.loads(raw)
+        rows = document.get("illustrations") if isinstance(document, dict) else None
+        ids = [row.get("illustrationId") for row in rows] if isinstance(rows, list) and all(
+            isinstance(row, dict) for row in rows) else []
+        valid = (status == 200 and isinstance(rows, list) and 1 <= len(rows) <= 500 and
+                 len(ids) == len(rows) and all(type(value) is int and value > 0 for value in ids) and
+                 ids == sorted(set(ids)) and all(
+                     row.get("fileName") == f"illustration-{row['illustrationId']}.svg" and
+                     isinstance(row.get("svg"), str) and
+                     ET.fromstring(row["svg"]).tag == "{http://www.w3.org/2000/svg}svg"
+                     for row in rows))
+    except (ValueError, KeyError, ET.ParseError):
+        valid = False
+    report.check("illustration-export:get:authorized", "live-allows", valid,
+                 f"Read-only database illustrations converted into valid SVG without exporting records; HTTP {status}")
+    if not valid:
+        raise EvidenceError("Illustration export GET positive control failed; scoped denials were not sent")
+    metadata = origin(deployment.required("API_MCP_URL")) + "/.well-known/oauth-protected-resource"
+    status, headers, raw = http("POST", url, token=tokens["dab"], data=fixture)
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        body = None
+    challenge = headers.get("WWW-Authenticate", "")
+    valid = (status == 401 and body == {
+        "error": "invalid_token", "error_description": "The access token is invalid.",
+    } and challenge.startswith("Bearer ") and
+        f'resource_metadata="{metadata}"' in challenge and 'error="invalid_token"' in challenge)
+    report.check("illustration-export:post:wrong-audience", "live-denials", valid,
+                 f"DAB-audience token requires the exact invalid-token denial; HTTP {status}")
+    if consumer is None:
+        report.add("illustration-export:post:reduced-scope", "live-denials", "BLOCKED",
+                   "A retained consumer is required to obtain a reduced-scope Functions token")
+        return
+    token, _ = reduced_consumer_functions_token(deployment, consumer)
+    status, headers, raw = http("POST", url, token=token, data=fixture)
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        body = None
+    challenge = headers.get("WWW-Authenticate", "")
+    valid = (status == 403 and body == {
+        "error": "insufficient_scope",
+        "error_description": "The token is missing the required scope 'manufacturing.read'.",
+    } and challenge.startswith("Bearer ") and
+        f'resource_metadata="{metadata}"' in challenge and 'error="insufficient_scope"' in challenge and
+        'scope="manufacturing.read"' in challenge)
+    report.check("illustration-export:post:reduced-scope", "live-denials", valid,
+                 f"Reduced-scope Functions token requires the exact manufacturing.read denial; HTTP {status}")
 
 
 def functions_host_read_denials(report, deployment, tokens, consumer=None):
@@ -5602,33 +7290,411 @@ def webpubsub_authorization(report, deployment, manufacturing_token, admin_token
     webpubsub_socket_controls(report, deployment.required("WEB_PUBSUB_HOST_NAME"), manufacturing_capability)
 
 
-def promotion_agent_authorization(report, deployment, admin_token, manufacturing_token, dab_token):
-    base = https_url(deployment.required("API_FUNCTIONS_URL")) + "/api/GeneratePromotion"
+def data_supplied_agent_denials(report, deployment, profile, base, request_data,
+                                manufacturing_token, dab_token, forbidden_fields):
     metadata = origin(deployment.required("API_MCP_URL")) + "/.well-known/oauth-protected-resource"
-    request_data = {"promotionType": "AuthAssurance", "offerCategory": "Customer", "categoryName": "Bikes"}
-    cases = [
+    for label, token, expected_status, expected_error in [
         ("anonymous", None, 401, "missing_token"),
         ("wrong-audience", dab_token, 401, "invalid_token"),
         ("insufficient-scope", manufacturing_token, 403, "insufficient_scope"),
-    ]
-    for label, token, expected_status, expected_error in cases:
+    ]:
         status, headers, raw = http("POST", base, token=token, data=request_data)
         try:
             body = json.loads(raw)
         except ValueError as error:
-            raise EvidenceError("Promotion agent denial returned invalid JSON") from error
+            raise EvidenceError(f"Data-supplied agent {label} denial returned HTTP {status} with invalid JSON") from error
         challenge = next((value for key, value in headers.items()
                           if key.lower() == "www-authenticate"), "")
         valid = (status == expected_status and isinstance(body, dict) and body.get("error") == expected_error and
-                 "suggestion" not in body and
+                 not any(key.lower() in forbidden_fields for key in body) and
                  f'resource_metadata="{metadata}"' in challenge and
                  f'error="{expected_error}"' in challenge)
-        report.check("agent:promotion-suggestion:deny-" + label, "agents", valid,
-                     f"Promotion agent denied {label} caller with HTTP {status}; no suggestion was returned")
+        report.check(f"agent:{profile}:deny-" + label, "agents", valid,
+                     f"Agent {label} control returned HTTP {status}; expected {expected_status} and no generated content")
         if not valid:
-            raise EvidenceError("Promotion denial was not established; remaining AI requests were not sent")
+            raise EvidenceError("Agent denial was not established; no authorized inference was sent")
 
-    status, _, raw = http("POST", base, token=admin_token, data=request_data)
+
+def reviewed_analysis_binding(report, name):
+    reviewed = {
+        "AnalyzeReviewsBatch": (
+            "review-analysis", "reviews/analyze-batch", "admin.write", "reviews", "analyses",
+            "reviews array is required and must not be empty"),
+        "AnalyzeCartRecovery": (
+            "cart-recovery", "carts/analyze-recovery", "admin.read", "carts", "strategies",
+            "carts array is required and must not be empty"),
+    }
+    if name not in reviewed:
+        raise EvidenceError("Unreviewed analysis route; no probes sent")
+    profile, route, scope, field, result_field, validation_error = reviewed[name]
+    matches = [item for item in report.inventory.get("functions", []) if item.get("Name") == name]
+    if len(matches) != 1:
+        raise EvidenceError("Expected one reviewed analysis binding; no probes sent")
+    function = matches[0]
+    policy = function.get("Policy")
+    if (function.get("Route") != route or function.get("Methods") != ["POST"] or
+            not isinstance(policy, dict) or policy.get("FunctionName") != name or
+            policy.get("IsAnonymous") is not False or policy.get("Tier") != "Internal" or
+            policy.get("Mode") != "InternalOnly" or policy.get("RequiredScope") != scope or
+            policy.get("OwnershipKey") is not None):
+        raise EvidenceError("Analysis binding or policy changed; no probes sent")
+    return profile, route, field, result_field, validation_error
+
+
+def analysis_empty_input_authorization(report, deployment, name, admin_token, manufacturing_token, dab_token,
+                                       *, add_valid_input_blocker=True):
+    profile, route, field, result_field, validation_error = reviewed_analysis_binding(report, name)
+
+    controls = {"allow:admin:dab", "allow:manufacturing:functions"}
+    matching = [item for item in report.checks if item["id"] in controls]
+    if (len(matching) != len(controls) or {item["id"] for item in matching} != controls or
+            any(item["status"] != "PASS" or item["group"] != "live-allows" for item in matching)):
+        raise EvidenceError("Positive DAB audience and manufacturing scope controls are incomplete; no probes sent")
+
+    url = https_url(deployment.required("API_FUNCTIONS_URL")) + "/api/" + route
+    data = {field: []}
+    status, _, raw = http("POST", url, token=admin_token, data=data)
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Analysis validation control returned invalid JSON; no denials sent") from error
+    valid = status == 400 and body == {"error": validation_error}
+    report.check(f"agent:{profile}:empty-input-control", "agents", valid,
+                 f"Authorized empty-input control returned HTTP {status}; exact pre-inference validation required.")
+    if not valid:
+        raise EvidenceError("The empty-input safety control failed; no denial requests were sent")
+
+    data_supplied_agent_denials(report, deployment, profile + ":empty-input", url, data,
+                               manufacturing_token, dab_token, {result_field})
+    status, headers, raw = http("POST", url, token="invalid-auth-validation-token", data=data)
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Forged analysis-token denial returned invalid JSON") from error
+    challenge = next((value for key, value in headers.items() if key.lower() == "www-authenticate"), "")
+    metadata = origin(deployment.required("API_MCP_URL")) + "/.well-known/oauth-protected-resource"
+    valid = (status == 401 and body == {
+        "error": "invalid_token", "error_description": "The access token is invalid.",
+    } and challenge.startswith("Bearer ") and
+        f'resource_metadata="{metadata}"' in challenge and 'error="invalid_token"' in challenge)
+    report.check(f"agent:{profile}:empty-input:deny-forged", "agents", valid,
+                 f"Forged token returned HTTP {status}; an exact invalid-token denial was required.")
+    if not valid:
+        raise EvidenceError("The forged-token denial was not established")
+    if add_valid_input_blocker:
+        report.add(f"agent:{profile}:valid-input", "agents", "BLOCKED",
+                   "Empty-input denials do not prove valid-input inference or its identity; "
+                   "per-request memory identifiers and deployed behavior require separate evidence.")
+
+
+def analysis_agent_authorization(report, deployment, name, admin_token, manufacturing_token, dab_token,
+                                 *, allow_agent_canary=False):
+    if not allow_agent_canary:
+        raise EvidenceError("Analysis inference is opt-in; no requests were sent")
+    profile, route, field, result_field, _ = reviewed_analysis_binding(report, name)
+    required = {
+        "allow:admin:dab": "live-allows",
+        "allow:manufacturing:functions": "live-allows",
+        f"agent:{profile}:empty-input-control": "agents",
+        **{f"agent:{profile}:empty-input:deny-{label}": "agents"
+           for label in ["anonymous", "wrong-audience", "insufficient-scope", "forged"]},
+    }
+    for check_id, group in required.items():
+        checks = [item for item in report.checks if item["id"] == check_id]
+        if len(checks) != 1 or checks[0]["group"] != group or checks[0]["status"] != "PASS":
+            raise EvidenceError("Analysis preflight controls are incomplete; no valid-input requests were sent")
+    if name == "AnalyzeReviewsBatch":
+        fixture_id = 2147483640
+        data = {field: [{"productReviewId": fixture_id, "rating": 5,
+                         "reviewerName": "AuthAssurance", "productName": "Synthetic test product",
+                         "comments": "Synthetic authentication test with no customer data."}]}
+    else:
+        fixture_id = "authassurance_" + uuid.uuid4().hex
+        data = {field: [{"cartId": fixture_id, "customerName": "AuthAssurance",
+                         "totalValue": 10, "daysStale": 1, "totalItems": 1,
+                         "productNames": ["Synthetic test product"]}]}
+    url = https_url(deployment.required("API_FUNCTIONS_URL")) + "/api/" + route
+    data_supplied_agent_denials(report, deployment, profile, url, data,
+                               manufacturing_token, dab_token, {result_field})
+    status, headers, raw = http("POST", url, token="invalid-auth-validation-token", data=data)
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Forged analysis-token denial returned invalid JSON") from error
+    challenge = next((value for key, value in headers.items() if key.lower() == "www-authenticate"), "")
+    metadata = origin(deployment.required("API_MCP_URL")) + "/.well-known/oauth-protected-resource"
+    valid = (status == 401 and body == {
+        "error": "invalid_token", "error_description": "The access token is invalid.",
+    } and challenge.startswith("Bearer ") and
+        f'resource_metadata="{metadata}"' in challenge and 'error="invalid_token"' in challenge)
+    report.check(f"agent:{profile}:deny-forged", "agents", valid,
+                 f"Forged valid-input control returned HTTP {status}; an exact invalid-token denial was required.")
+    if not valid:
+        raise EvidenceError("The forged-token denial was not established; no authorized inference was sent")
+
+    trace = uuid.uuid4().hex
+    trace_key = "reviewAnalysisTraceId" if name == "AnalyzeReviewsBatch" else "cartRecoveryTraceId"
+    report.inventory[trace_key] = trace
+    status, _, raw = http("POST", url, token=admin_token, data=data, timeout=300,
+                          headers={"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"})
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Analysis agent returned invalid JSON") from error
+    items = body.get(result_field) if isinstance(body, dict) else None
+    item = items[0] if isinstance(items, list) and len(items) == 1 else None
+    valid = status == 200 and isinstance(item, dict) and not item.get("error")
+    if valid and name == "AnalyzeReviewsBatch":
+        sentiment = item.get("sentiment")
+        valid = (item.get("productReviewId") == fixture_id and
+                 isinstance(sentiment, str) and sentiment in {"positive", "neutral", "negative"} and
+                 isinstance(item.get("flags"), list) and
+                 all(isinstance(flag, str) for flag in item["flags"]) and
+                 isinstance(item.get("suggestedResponse"), str) and bool(item["suggestedResponse"].strip()))
+    elif valid:
+        score = item.get("recoveryScore")
+        urgency = item.get("urgency")
+        valid = (item.get("cartId") == fixture_id and type(score) is int and 0 <= score <= 100 and
+                 isinstance(urgency, str) and urgency in {"low", "medium", "high"})
+    report.check(f"agent:{profile}:allow-admin", "agents", valid,
+                 f"One synthetic authorized analysis returned HTTP {status}; generated content is withheld.")
+
+
+def manufacturing_content_candidate(deployment, functions_token, dab_token):
+    dab = origin(deployment.required("API_URL"))
+    functions = https_url(deployment.required("API_FUNCTIONS_URL"))
+    role = load_auth_helper().IDENTITIES["manufacturing"][4]
+
+    def read(url, token=None, headers=None):
+        status, _, raw = http("GET", url, token=token, headers=headers)
+        try:
+            document = json.loads(raw)
+        except ValueError as error:
+            raise EvidenceError("Manufacturing content fixture discovery returned invalid JSON") from error
+        if status != 200:
+            raise EvidenceError(f"Manufacturing content fixture discovery returned HTTP {status}")
+        return document
+
+    query = urllib.parse.urlencode({
+        "$first": "100", "$select": "ProductID,MakeFlag,ProductModelID",
+        "$filter": "MakeFlag eq true and ProductModelID eq null",
+    })
+    document = read(dab + "/api/Product?" + query)
+    products = document.get("value") if isinstance(document, dict) else None
+    if not isinstance(products, list) or len(products) > 100 or any(
+            not isinstance(item, dict) or "ProductModelID" not in item or type(item.get("ProductID")) is not int or
+            not 1 <= item["ProductID"] <= 99999 or item.get("MakeFlag") is not True or
+            item.get("ProductModelID") is not None for item in products):
+        raise EvidenceError("Manufacturing content product discovery returned invalid rows")
+    if len({item["ProductID"] for item in products}) != len(products):
+        raise EvidenceError("Manufacturing content product discovery returned duplicate rows")
+
+    now = datetime.now(timezone.utc)
+    active_parts = 0
+    linked_sheets = 0
+    for product in products:
+        product_id = product["ProductID"]
+        query = urllib.parse.urlencode({
+            "$first": "100", "$select": "ProductAssemblyID,StartDate,EndDate",
+            "$filter": f"ProductAssemblyID eq {product_id}",
+        })
+        bom = read(dab + "/api/BillOfMaterials?" + query, token=dab_token,
+                   headers={"X-MS-API-ROLE": role})
+        edges = bom.get("value") if isinstance(bom, dict) else None
+        if not isinstance(edges, list) or len(edges) > 100:
+            raise EvidenceError("Manufacturing content BOM discovery returned invalid rows")
+        active = False
+        for edge in edges:
+            if (not isinstance(edge, dict) or type(edge.get("ProductAssemblyID")) is not int or
+                    edge["ProductAssemblyID"] != product_id or
+                    "EndDate" not in edge or not isinstance(edge.get("StartDate"), str) or
+                    edge.get("EndDate") is not None and not isinstance(edge["EndDate"], str)):
+                raise EvidenceError("Manufacturing content BOM discovery returned invalid rows")
+            try:
+                start = datetime.fromisoformat(edge["StartDate"].replace("Z", "+00:00"))
+                end = (datetime.fromisoformat(edge["EndDate"].replace("Z", "+00:00"))
+                       if edge["EndDate"] is not None else None)
+            except ValueError as error:
+                raise EvidenceError("Manufacturing content BOM discovery returned invalid dates") from error
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            if end is not None and end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
+            active |= start <= now and (end is None or end > now)
+        if not active:
+            if bom.get("nextLink") is not None:
+                raise EvidenceError("Manufacturing content BOM discovery exceeded its bounded page")
+            continue
+        active_parts += 1
+        documents = read(f"{functions}/api/manufacturing/parts/{product_id}/documents",
+                         token=functions_token)
+        if not isinstance(documents, list) or any(
+                not isinstance(item, dict) or type(item.get("generated")) is not bool for item in documents):
+            raise EvidenceError("Manufacturing content document discovery returned invalid rows")
+        if not any(item["generated"] for item in documents):
+            return product_id
+        linked_sheets += 1
+    raise EvidenceError(
+        "No usable manufacturing content candidate was found in the bounded discovery page "
+        f"({len(products)} parts, {active_parts} with an effective BOM, {linked_sheets} with linked sheets)")
+
+
+MANUFACTURING_MODEL_CANDIDATE_LIMIT = 8
+MANUFACTURING_INSTRUCTIONS_NAMESPACE = (
+    "http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions")
+
+
+def instructions_have_diagrams(document):
+    # Mirrors the service rule: unparsable or diagram-bearing originals are not supplement candidates.
+    if not isinstance(document, str) or not document.strip() or len(document) > 2_000_000 or "<!DOCTYPE" in document.upper():
+        return True
+    try:
+        root = ET.fromstring(document)
+    except ET.ParseError:
+        return True
+    return any(element.tag == "{" + MANUFACTURING_INSTRUCTIONS_NAMESPACE + "}diag" for element in root.iter())
+
+
+def manufacturing_model_candidate(deployment, dab_token):
+    dab = origin(deployment.required("API_URL"))
+    role = load_auth_helper().IDENTITIES["manufacturing"][4]
+    headers = {"X-MS-API-ROLE": role}
+
+    def rows(entity, query, fields):
+        status, _, raw = http("GET", dab + "/api/" + entity + "?" + urllib.parse.urlencode(query),
+                              token=dab_token, headers=headers)
+        try:
+            document = json.loads(raw)
+        except ValueError as error:
+            raise EvidenceError("Manufacturing model discovery returned invalid JSON") from error
+        values = document.get("value") if isinstance(document, dict) else None
+        if (status != 200 or not isinstance(values, list) or len(values) > 100 or
+                any(not isinstance(item, dict) or not fields <= set(item) for item in values)):
+            raise EvidenceError(f"Manufacturing model discovery returned HTTP {status} or invalid rows")
+        return values, document.get("nextLink") is not None
+
+    now = datetime.now(timezone.utc)
+
+    def eligible(model_id):
+        variants, more = rows("Product", {"$first": "100", "$select": "ProductID,MakeFlag,ProductModelID",
+                                          "$filter": f"ProductModelID eq {model_id} and MakeFlag eq true"},
+                              {"ProductID", "MakeFlag", "ProductModelID"})
+        if more or not variants or any(item["ProductModelID"] != model_id or item["MakeFlag"] is not True
+                                       for item in variants):
+            return False
+        cultures, _ = rows("ProductModelProductDescriptionCulture",
+                           {"$first": "100", "$select": "ProductModelID,CultureID",
+                            "$filter": f"ProductModelID eq {model_id}"}, {"ProductModelID", "CultureID"})
+        if not any(isinstance(item["CultureID"], str) and item["CultureID"].strip() == "en" for item in cultures):
+            return False
+        for variant in variants[:5]:
+            edges, _ = rows("BillOfMaterials", {"$first": "100", "$select": "ProductAssemblyID,StartDate,EndDate",
+                                                "$filter": f"ProductAssemblyID eq {variant['ProductID']}"},
+                            {"ProductAssemblyID", "StartDate", "EndDate"})
+            for edge in edges:
+                try:
+                    start = datetime.fromisoformat(str(edge["StartDate"]).replace("Z", "+00:00"))
+                    end = (datetime.fromisoformat(str(edge["EndDate"]).replace("Z", "+00:00"))
+                           if edge["EndDate"] is not None else None)
+                except ValueError as error:
+                    raise EvidenceError("Manufacturing model BOM discovery returned invalid dates") from error
+                start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+                end = end if end is None or end.tzinfo else end.replace(tzinfo=timezone.utc)
+                if start <= now and (end is None or end > now):
+                    return True
+        return False
+
+    models, _ = rows("ProductModel", {"$first": "100", "$select": "ProductModelID",
+                                      "$filter": "Instructions eq null"}, {"ProductModelID"})
+    model_ids = sorted({item["ProductModelID"] for item in models if type(item["ProductModelID"]) is int})
+    for model_id in model_ids[:MANUFACTURING_MODEL_CANDIDATE_LIMIT]:
+        if eligible(model_id):
+            return model_id, False
+
+    documented, _ = rows("ProductModel", {"$first": "100", "$select": "ProductModelID,Instructions",
+                                          "$filter": "Instructions ne null"}, {"ProductModelID", "Instructions"})
+    supplement_ids = sorted(item["ProductModelID"] for item in documented
+                            if type(item["ProductModelID"]) is int and not instructions_have_diagrams(item["Instructions"]))
+    for model_id in supplement_ids[:MANUFACTURING_MODEL_CANDIDATE_LIMIT]:
+        if eligible(model_id):
+            return model_id, True
+    raise EvidenceError("No usable manufacturing model candidate was found in the bounded discovery set")
+
+
+def manufacturing_content_agent_authorization(report, deployment, functions_token, reduced_token, dab_token):
+    functions = https_url(deployment.required("API_FUNCTIONS_URL"))
+    base = functions + "/api/manufacturing/content/parts/instructions/generate"
+    data_supplied_agent_denials(
+        report, deployment, "manufacturing-content", base, {"productId": 0}, reduced_token, dab_token,
+        {"draft", "grounding", "instructionsxml", "responseid", "diagramreservations"})
+    try:
+        subject_id = manufacturing_content_candidate(deployment, functions_token, dab_token)
+        subject_kind = "product"
+        report.add("agent:manufacturing-content:fixture", "agents", "PASS",
+                   "A manufactured part with an effective BOM and no linked generated sheet was discovered "
+                   "through read-only APIs; the generation endpoint checks remaining eligibility.")
+        request_data = {"productId": subject_id}
+    except EvidenceError as part_error:
+        if not str(part_error).startswith("No usable manufacturing content candidate"):
+            raise
+        subject_id, supplement = manufacturing_model_candidate(deployment, dab_token)
+        subject_kind = "model"
+        base = functions + "/api/manufacturing/content/instructions/generate"
+        report.add("agent:manufacturing-content:fixture", "agents", "PASS",
+                   "Every bounded part already has a generated sheet, so a product model "
+                   + ("whose original instructions lack diagrams (supplement mode)" if supplement else "without instructions")
+                   + " with a manufactured variant, English description and effective BOM was discovered through "
+                   "read-only DAB APIs. The same agent returns an unsaved draft and preserves originals.")
+        request_data = {"productModelId": subject_id}
+        if supplement:
+            request_data["supplementExistingInstructions"] = True
+
+    trace = uuid.uuid4().hex
+    report.inventory["manufacturingContentTraceId"] = trace
+    status, _, raw = http("POST", base, token=functions_token, data=request_data, timeout=300,
+                          headers={"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"})
+    if status == 409:
+        report.add("agent:manufacturing-content:allow-manufacturing", "agents", "BLOCKED",
+                   f"The selected {subject_kind} failed the generation endpoint's pre-inference eligibility check; "
+                   "no inference was sent and no other candidate was retried.")
+        return
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Manufacturing content generation returned invalid JSON") from error
+    response_id = body.get("responseId") if isinstance(body, dict) else None
+    grounding = body.get("grounding") if isinstance(body, dict) else None
+    subject = grounding.get(subject_kind) if isinstance(grounding, dict) else None
+    subject_key = "productId" if subject_kind == "product" else "productModelId"
+    valid = (status == 200 and isinstance(body, dict) and body.get("status") == "draft-awaiting-instruction-review" and
+             body.get("agentId") == deployment.required("AI_AGENT_MANUFACTURING_CONTENT_ID") and
+             isinstance(body.get("sourceFingerprint"), str) and
+             re.fullmatch(r"[a-f0-9]{64}", body["sourceFingerprint"]) is not None and
+             isinstance(response_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,256}", response_id) is not None and
+             isinstance(subject, dict) and type(subject.get(subject_key)) is int and subject[subject_key] == subject_id and
+             isinstance(body.get("draft"), dict) and isinstance(body.get("instructionsXml"), str) and
+             bool(body["instructionsXml"]) and isinstance(body.get("diagramReservations"), list))
+    if valid:
+        report._manufacturing_content_response_hash = hashlib.sha256(response_id.encode()).hexdigest()
+    report.check("agent:manufacturing-content:allow-manufacturing", "agents", valid,
+                 f"Manufacturing content generation returned HTTP {status}; the draft, grounding, "
+                 "response ID and product details are withheld.")
+
+
+def promotion_agent_authorization(report, deployment, admin_token, manufacturing_token, dab_token,
+                                  *, allow_agent_canary=False):
+    if not allow_agent_canary:
+        raise EvidenceError("Promotion inference is opt-in; no requests were sent")
+    base = https_url(deployment.required("API_FUNCTIONS_URL")) + "/api/GeneratePromotion"
+    request_data = {"promotionType": "AuthAssurance", "offerCategory": "Customer", "categoryName": "Bikes"}
+    data_supplied_agent_denials(report, deployment, "promotion-suggestion", base, request_data,
+                               manufacturing_token, dab_token, {"suggestion", "threadid"})
+
+    trace = uuid.uuid4().hex
+    report.inventory["promotionSuggestionTraceId"] = trace
+    report._promotion_response_hash = None
+    status, _, raw = http("POST", base, token=admin_token, data=request_data, timeout=300,
+                          headers={"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"})
     if status != 200:
         report.check("agent:promotion-suggestion:allow-admin", "agents", False,
                      f"Admin promotion agent request returned HTTP {status}")
@@ -5638,11 +7704,130 @@ def promotion_agent_authorization(report, deployment, admin_token, manufacturing
     except ValueError as error:
         raise EvidenceError("Promotion agent returned invalid JSON") from error
     suggestion = body.get("suggestion") if isinstance(body, dict) else None
+    response_id = body.get("threadId") if isinstance(body, dict) else None
     valid = (isinstance(suggestion, dict) and isinstance(suggestion.get("suggestedProducts"), list) and
-             isinstance(body.get("threadId"), str) and bool(body["threadId"]))
+             isinstance(response_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,256}", response_id) is not None)
+    if valid:
+        report._promotion_response_hash = hashlib.sha256(response_id.encode()).hexdigest()
     report.check("agent:promotion-suggestion:allow-admin", "agents", valid,
                  "One read-only Foundry suggestion completed using the admin Functions token; "
                  "generated content is omitted from evidence")
+
+
+def promotion_agent_scenario(report, deployment, admin_token, manufacturing_token, dab_token,
+                             *, allow_agent_canary=False):
+    if not allow_agent_canary:
+        report.add("agent:promotion-suggestion:canary", "agents", "BLOCKED",
+                   "Promotion inference is opt-in; no promotion-suggestion requests were sent.")
+        return
+    report.guarded("agent:promotion-suggestion:scenario", "agents", lambda: promotion_agent_authorization(
+        report, deployment, admin_token, manufacturing_token, dab_token, allow_agent_canary=True))
+    promotion_foundry_evidence(report, deployment)
+
+
+def email_content_agent_authorization(report, deployment, admin_token, manufacturing_token, dab_token):
+    base = https_url(deployment.required("API_FUNCTIONS_URL")) + "/api/email/generate-ai-content"
+    template = "authassurance_" + uuid.uuid4().hex
+    request_data = {"firstName": "Demo", "templateType": template}
+    data_supplied_agent_denials(report, deployment, "email-content", base, request_data,
+                               manufacturing_token, dab_token, {"subject", "body"})
+
+    trace = uuid.uuid4().hex
+    report.inventory["emailContentTraceId"] = trace
+    report._email_content_template = template
+    status, _, raw = http("POST", base, token=admin_token, data=request_data, timeout=300,
+                          headers={"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"})
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Email-content agent returned invalid JSON") from error
+    subject = body.get("subject", body.get("Subject")) if isinstance(body, dict) else None
+    content = body.get("body", body.get("Body")) if isinstance(body, dict) else None
+    error = body.get("error", body.get("Error")) if isinstance(body, dict) else None
+    valid = (status == 200 and isinstance(subject, str) and bool(subject.strip()) and
+             isinstance(content, str) and bool(content.strip()) and not error)
+    report.check("agent:email-content:allow-admin", "agents", valid,
+                 f"Admin email-content request returned HTTP {status}; generated content is omitted from evidence")
+
+
+def product_content_agent_authorization(report, deployment, admin_token, manufacturing_token, dab_token):
+    base = https_url(deployment.required("API_FUNCTIONS_URL"))
+    url = base + "/api/products/generate-content"
+    request_data = {"category": "Bikes", "subcategory": "authassurance_" + uuid.uuid4().hex}
+    data_supplied_agent_denials(report, deployment, "product-content", url, request_data,
+                               manufacturing_token, dab_token, {"productname", "productdescription", "threadid"})
+    trace = uuid.uuid4().hex
+    report.inventory["productContentTraceId"] = trace
+    report._product_content_response_hash = None
+    status, _, raw = http("POST", url, token=admin_token, data=request_data, timeout=300,
+                          headers={"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"})
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Product-content agent returned invalid JSON") from error
+    name = body.get("productName", body.get("ProductName")) if isinstance(body, dict) else None
+    description = body.get("productDescription", body.get("ProductDescription")) if isinstance(body, dict) else None
+    response_id = body.get("threadId", body.get("ThreadId")) if isinstance(body, dict) else None
+    valid = (status == 200 and isinstance(name, str) and bool(name.strip()) and
+             isinstance(description, str) and bool(description.strip()) and
+             isinstance(response_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,256}", response_id) is not None)
+    if valid:
+        report._product_content_response_hash = hashlib.sha256(response_id.encode()).hexdigest()
+    report.check("agent:product-content:allow-admin", "agents", valid,
+                 f"Admin product-content request returned HTTP {status}; generated content is omitted from evidence")
+    if not valid:
+        return
+
+    cross_request = {"promotionType": "AuthAssurance", "offerCategory": "Customer",
+                     "categoryName": "Bikes", "previousThreadId": response_id}
+    status, _, raw = http("POST", base + "/api/GeneratePromotion", token=admin_token,
+                          data=cross_request, timeout=300)
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Cross-agent continuation denial returned invalid JSON") from error
+    denied = (status == 403 and isinstance(body, dict) and body.get("error") == "conversation_not_available" and
+              not any(key.lower() in {"suggestion", "threadid"} for key in body))
+    report.check("agent:product-content:cross-agent-denial", "agents", denied,
+                 f"Cross-agent continuation returned HTTP {status}; a sanitized 403 was required")
+    if not denied:
+        raise EvidenceError("Cross-agent continuation denial was not established; no refinement was sent")
+
+    suffix_length = min(16, max(1, len(response_id) // 2))
+    replacement = uuid.uuid4().hex[:suffix_length]
+    if replacement == response_id[-suffix_length:]:
+        replacement = ("0" if replacement[0] != "0" else "1") + replacement[1:]
+    altered_id = response_id[:-suffix_length] + replacement
+    for kind, candidate in (
+        ("malformed", "resp_authassurance_" + uuid.uuid4().hex),
+        ("altered", altered_id),
+    ):
+        invalid_request = {**request_data, "previousResponseId": candidate}
+        status, _, raw = http("POST", url, token=admin_token, data=invalid_request, timeout=300)
+        try:
+            body = json.loads(raw)
+        except ValueError as error:
+            raise EvidenceError(f"{kind.capitalize()}-conversation denial returned invalid JSON") from error
+        denied = (status == 403 and isinstance(body, dict) and body.get("error") == "conversation_not_available" and
+                  not any(key.lower() in {"productname", "productdescription", "threadid"} for key in body))
+        report.check(f"agent:product-content:{kind}-conversation-denial", "agents", denied,
+                     f"{kind.capitalize()} conversation identifier returned HTTP {status}; a sanitized 403 was required")
+        if not denied:
+            raise EvidenceError(f"{kind.capitalize()}-conversation denial was not established; no refinement was sent")
+
+    continuation = {**request_data, "previousResponseId": response_id}
+    status, _, raw = http("POST", url, token=admin_token, data=continuation, timeout=300)
+    try:
+        body = json.loads(raw)
+    except ValueError as error:
+        raise EvidenceError("Product-content refinement returned invalid JSON") from error
+    name = body.get("productName", body.get("ProductName")) if isinstance(body, dict) else None
+    next_id = body.get("threadId", body.get("ThreadId")) if isinstance(body, dict) else None
+    valid = (status == 200 and isinstance(name, str) and bool(name.strip()) and
+             isinstance(next_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,256}", next_id) is not None and
+             next_id != response_id)
+    report.check("agent:product-content:owned-continuation", "agents", valid,
+                 f"Same-admin product-content continuation returned HTTP {status}; a new valid response was required")
 
 
 def subcategory_count_authorization(report, deployment, admin_token, tokens, consumers):
@@ -5749,6 +7934,36 @@ ADMIN_CHAT_TOOLS = frozenset({
     "get_categories_with_products", "get_products_for_promotion", "get_active_promotions",
     "analyze_product_reviews",
 })
+ADMIN_CHAT_SALES_TOOLS = frozenset({
+    "get_business_stats", "get_sales_report_by_status", "get_top_selling_products",
+})
+
+
+def guarded_agent_tool_definition_matches(definition, expected_tools, mcp_url):
+    if not isinstance(definition, dict) or not expected_tools:
+        return False
+    tools = definition.get("tools", [])
+    tool = tools[0] if isinstance(tools, list) and len(tools) == 1 and isinstance(tools[0], dict) else {}
+    names = tool.get("allowed_tools")
+    if isinstance(names, dict):
+        names = names.get("tool_names") if set(names) == {"tool_names"} else None
+    valid_names = (isinstance(names, list) and all(isinstance(name, str) for name in names) and
+                   len(names) == len(set(names)) and set(names) == expected_tools)
+    allowed_properties = {
+        "type", "server_label", "server_url", "allowed_tools", "require_approval", "server_description", "headers",
+    }
+    try:
+        target_matches = (agent_mcp_endpoint_identity(tool.get("server_url")) ==
+                          agent_mcp_endpoint_identity(mcp_url))
+    except EvidenceError:
+        target_matches = False
+    return (
+        definition.get("kind") == "prompt" and
+        isinstance(definition.get("instructions"), str) and bool(definition["instructions"].strip()) and
+        isinstance(tools, list) and len(tools) == 1 and tool.get("type") == "mcp" and
+        tool.get("server_label") == "adventureworks_mcp" and target_matches and valid_names and
+        set(tool).issubset(allowed_properties) and tool.get("headers") in (None, {})
+    )
 
 
 def guarded_chat_agent_definition(report, deployment, agent_key, expected_tools, label):
@@ -5767,29 +7982,14 @@ def guarded_chat_agent_definition(report, deployment, agent_key, expected_tools,
         document = json.loads(raw)
         latest = document["versions"]["latest"]
         definition = latest["definition"]
-        tools = definition.get("tools", [])
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise EvidenceError(f"{label} Foundry definition returned invalid JSON") from error
 
-    tool = tools[0] if isinstance(tools, list) and len(tools) == 1 and isinstance(tools[0], dict) else {}
-    names = tool.get("allowed_tools")
-    if isinstance(names, dict):
-        names = names.get("tool_names") if set(names) == {"tool_names"} else None
-    valid_names = (isinstance(names, list) and all(isinstance(name, str) for name in names) and
-                   len(names) == len(set(names)) and set(names) == expected_tools)
-    allowed_properties = {
-        "type", "server_label", "server_url", "allowed_tools", "require_approval", "server_description", "headers",
-    }
     valid = (
         status == 200 and isinstance(document, dict) and document.get("id") == agent_id and
         isinstance(latest, dict) and isinstance(latest.get("id"), str) and
         re.fullmatch(re.escape(agent_id) + r":[1-9][0-9]*", latest["id"]) is not None and
-        isinstance(definition, dict) and definition.get("kind") == "prompt" and
-        isinstance(definition.get("instructions"), str) and bool(definition["instructions"].strip()) and
-        isinstance(tools, list) and len(tools) == 1 and tool.get("type") == "mcp" and
-        tool.get("server_label") == "adventureworks_mcp" and
-        isinstance(tool.get("server_url"), str) and tool["server_url"].rstrip("/") == mcp_url and valid_names and
-        set(tool).issubset(allowed_properties) and tool.get("headers") in (None, {})
+        guarded_agent_tool_definition_matches(definition, expected_tools, mcp_url)
     )
     report.check(
         f"agent:{label}:definition", "agent-policy", valid,
@@ -5855,13 +8055,15 @@ def customer_chat_flow(report, deployment, consumer, product_id, *, allow_agent_
 def delegated_chat_correlated_tool(report, deployment, token_provider, profile):
     profiles = {
         "customer-chat": ("AI_AGENT_CHAT_ID", "customerChatTraceId", "customerChatCorrelatedTools",
-                          "get_product_availability", "products.read", "consumer", "adventureworks-eshop"),
+                          "get_product_availability", frozenset({"get_product_availability"}),
+                          "products.read", "consumer", "adventureworks-eshop"),
         "admin-chat": ("AI_AGENT_ADMIN_CHAT_ID", "adminChatTraceId", "adminChatCorrelatedTools",
-                       "get_business_stats", "sales.read", "employee", "adventureworks-admin"),
+                       "get_business_stats", ADMIN_CHAT_SALES_TOOLS, "sales.read", "employee",
+                       "adventureworks-admin"),
     }
     if profile not in profiles:
         raise ValueError("Unreviewed delegated chat correlation profile")
-    agent_key, trace_key, inventory_key, tool, scope, category, app = profiles[profile]
+    agent_key, trace_key, inventory_key, tool, target_tools, scope, category, app = profiles[profile]
     if getattr(deployment, "runtime", None):
         raise EvidenceError("Delegated chat telemetry inspection requires the local deployer")
     for check_id, group in [
@@ -5892,6 +8094,7 @@ def delegated_chat_correlated_tool(report, deployment, token_provider, profile):
     if (not isinstance(resources, list) or len(resources) != 1 or
             not isinstance(resources[0], str) or not resources[0]):
         raise EvidenceError("A unique selected-environment telemetry resource is required")
+    tool_list = ", ".join("'" + name + "'" for name in sorted(target_tools))
     query = (
         "let Completed = customEvents | where timestamp > ago(1h) "
         f"| where operation_Id == '{trace}' and name == 'Foundry.Responses.Completed' "
@@ -5899,7 +8102,7 @@ def delegated_chat_correlated_tool(report, deployment, token_provider, profile):
         f"| where tostring(customDimensions.ToolPolicy) == '{profile}' "
         "| extend AgentVersionId=tostring(customDimensions.AgentVersionId), "
         "Tool=split(tostring(customDimensions.CompletedMcpTools), ',') "
-        f"| mv-expand Tool to typeof(string) | where Tool == '{tool}' "
+        f"| mv-expand Tool to typeof(string) | where Tool in ({tool_list}) "
         "| project operation_Id, AgentVersionId, Tool; "
         "let Authorized = customEvents | where timestamp > ago(1h) "
         f"| where operation_Id == '{trace}' and name == 'McpToolAuthorization' "
@@ -5913,7 +8116,7 @@ def delegated_chat_correlated_tool(report, deployment, token_provider, profile):
         "Completed | join kind=inner Authorized on operation_Id, Tool "
         "| summarize Hits=count() by AgentVersionId, Tool | order by AgentVersionId asc"
     )
-    observed = []
+    observed = {}
     for delay in (0, 20, 20, 20):
         if delay:
             time.sleep(delay)
@@ -5929,21 +8132,29 @@ def delegated_chat_correlated_tool(report, deployment, token_provider, profile):
             for row in rows:
                 if (not isinstance(row, list) or len(row) != 3 or not isinstance(row[0], str) or
                         re.fullmatch(re.escape(agent_id) + r":[1-9][0-9]*", row[0]) is None or
-                        row[1] != tool or type(row[2]) is not int or row[2] <= 0 or
+                        row[1] not in target_tools or type(row[2]) is not int or row[2] <= 0 or
                         (row[0], row[1]) in seen):
                     raise ValueError("Unexpected telemetry row")
                 seen.add((row[0], row[1]))
-                observed.append({"version": row[0], "tool": row[1], "matches": row[2]})
+                previous = observed.get((row[0], row[1]), 0)
+                observed[(row[0], row[1])] = max(previous, row[2])
         except (KeyError, TypeError, ValueError) as error:
             raise EvidenceError("Delegated chat correlation telemetry has an unsupported shape") from error
-        if observed:
+        if {name for _, name in observed} == target_tools:
             break
-    report.inventory[inventory_key] = observed
+    report.inventory[inventory_key] = [
+        {"version": version, "tool": name, "matches": observed[(version, name)]}
+        for version, name in sorted(observed)
+    ]
+    primary_observed = any(name == tool for _, name in observed)
     report.add(
-        f"agent:{profile}:correlated-tool", "agents", "PASS" if observed else "BLOCKED",
-        f"The current trace joins the loaded guarded agent version's completed {tool} call "
+        f"agent:{profile}:correlated-tool", "agents", "PASS" if primary_observed else "BLOCKED",
+        (f"The current trace joins the loaded guarded agent version's completed {tool} call "
         f"to an allowed {scope} decision for the same delegated {category}; no token, subject, "
-        "model text or product data is exported. Other tools and downstream identities remain separate.",
+        "model text or product data is exported. Other tools and downstream identities remain separate.")
+        if primary_observed else
+        f"The current trace did not correlate a completed {tool} call to the delegated {category}'s "
+        f"allowed {scope} decision; other tools and downstream identities remain separate.",
     )
 
 
@@ -5952,15 +8163,104 @@ def customer_chat_correlated_tool(report, deployment, consumer):
         report, deployment, lambda: consumer.token("mcp", "mcp.access products.read"), "customer-chat")
 
 
-def internal_mcp_token(deployment, identity):
+LOGIN_LIMITER_WINDOW_SECONDS = 61
+LAST_HELPER_LOGIN = {"at": None}
+
+
+def await_login_limiter_window():
+    """Browser suites audit every paced login; start them after helper logins leave the fixed per-IP window."""
+    last = LAST_HELPER_LOGIN["at"]
+    if last is not None:
+        remaining = LOGIN_LIMITER_WINDOW_SECONDS - (time.monotonic() - last)
+        if remaining > 0:
+            time.sleep(remaining)
+
+
+def internal_token(deployment, identity, resource, *, scopes=None):
     helper = load_auth_helper()
     try:
-        base, audience = internal_token_target(deployment, "mcp")
+        if scopes is not None:
+            if not isinstance(scopes, str) or not scopes.strip():
+                raise EvidenceError("Requested internal token scopes are empty")
+            helper.SCOPES[identity] = scopes
+        base, audience = internal_token_target(deployment, resource)
         args = argparse.Namespace(identity=identity, command="token", timeout=120)
         opener = urllib.request.build_opener(helper.NoRedirect(), urllib.request.HTTPCookieProcessor())
+        LAST_HELPER_LOGIN["at"] = time.monotonic()
         return helper.session(opener, args, base, audience)["access_token"]
     except (helper.AuthError, ValueError, OSError, KeyError) as error:
-        raise EvidenceError(f"Could not authenticate the {identity} MCP control") from error
+        raise EvidenceError(f"Could not authenticate the {identity} {resource} control") from error
+
+
+def internal_mcp_token(deployment, identity):
+    return internal_token(deployment, identity, "mcp")
+
+
+def mcp_functions_proxy_tests(report, deployment):
+    url = origin(deployment.required("API_MCP_URL")) + "/mcp"
+    payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+               "params": {"name": "get_manufacturing_scrap_events", "arguments": {}}}
+
+    def request(token):
+        status, _, raw = http("POST", url, token=token, data=payload, timeout=120)
+        if status != 200:
+            return status, None
+        try:
+            return status, mcp_document(raw)
+        except EvidenceError:
+            return status, None
+
+    status, _ = request(None)
+    report.check("mcp-functions:anonymous", "live-denials", status == 401,
+                 f"Anonymous access to the proxied tool is denied with HTTP {status}.")
+    functions_token = internal_token(deployment, "manufacturing", "functions")
+    status, _ = request(functions_token)
+    report.check("mcp-functions:wrong-audience", "live-denials", status == 401,
+                 f"A Functions-audience user token is denied at MCP with HTTP {status}.")
+
+    policy = json.loads((Path(__file__).with_name("browser-policy.json")).read_text())
+    interval = policy["internalLoginMinimumIntervalMs"] / 1000
+    time.sleep(interval)
+    reduced = internal_token(deployment, "manufacturing", "mcp", scopes="mcp.access products.read")
+    helper = load_auth_helper()
+    try:
+        claims = helper.claims(reduced)
+    except helper.AuthError as error:
+        raise EvidenceError("Reduced-scope control token is malformed") from error
+    scope_claim = claims.get("scope")
+    scopes = (scope_claim.split() if isinstance(scope_claim, str) else scope_claim
+              if isinstance(scope_claim, list) and all(isinstance(item, str) for item in scope_claim) else [])
+    scope_valid = claims.get("category") == "manufacturing" and \
+        {"mcp.access", "products.read"} <= set(scopes) <= {"mcp.access", "products.read", "offline_access"}
+    report.check("mcp-functions:reduced-scope-token", "live-denials", scope_valid,
+                 "The signed-in manufacturing control lacks manufacturing.read but retains mcp.access.")
+    if scope_valid:
+        status, document = request(reduced)
+        result = document.get("result") if isinstance(document, dict) else None
+        report.check("mcp-functions:scope-denied", "live-denials",
+                     status == 200 and isinstance(document, dict) and document.get("jsonrpc") == "2.0" and
+                     document.get("id") == 1 and "error" not in document and isinstance(result, dict) and
+                     result.get("isError") is True and result.get("content") == [{"type": "text",
+                         "text": "This operation requires the 'manufacturing.read' scope, which your account does not have."}],
+                     "The reduced-scope token receives the exact MCP manufacturing.read denial.")
+    else:
+        report.add("mcp-functions:scope-denied", "live-denials", "BLOCKED",
+                   "The token was not a valid reduced-scope control; no scope-denial request was made.")
+
+    time.sleep(interval)
+    full = internal_token(deployment, "manufacturing", "mcp")
+    status, document = request(full)
+    result = document.get("result") if isinstance(document, dict) else None
+    content = result.get("content") if isinstance(result, dict) else None
+    valid_content = (isinstance(content, list) and len(content) == 1 and isinstance(content[0], dict) and
+                     content[0].get("type") == "text" and isinstance(content[0].get("text"), str) and
+                     re.match(r"^## Scrap Events\r?\nTotal events: [0-9]+(?:\r?\n|$)", content[0]["text"]) is not None)
+    report.check("mcp-functions:authorized-read", "live-allows",
+                 status == 200 and isinstance(document, dict) and document.get("jsonrpc") == "2.0" and
+                 document.get("id") == 1 and "error" not in document and isinstance(result, dict) and
+                 (result.get("isError") is None or result.get("isError") is False) and valid_content,
+                 "A manufacturing user's MCP tool returns the reviewed read-only Functions result; "
+                 "business records and bearer tokens are withheld.")
 
 
 def admin_chat_direct_controls(report, deployment, admin_token, manufacturing_token):
@@ -5978,6 +8278,8 @@ def admin_chat_direct_controls(report, deployment, admin_token, manufacturing_to
 def admin_chat_flow(report, deployment, token, *, allow_agent_canary=False):
     if not allow_agent_canary:
         raise EvidenceError("Admin-chat inference is opt-in and requires the deployed tool guard")
+    if not ADMIN_CHAT_SALES_TOOLS.issubset(ADMIN_CHAT_TOOLS):
+        raise EvidenceError("Admin sales canary tools do not match the reviewed read-only guard")
     for check_id, group in [
             ("agent:admin-chat:definition", "agent-policy"),
             ("agent:admin-chat:direct-allow", "live-allows"),
@@ -5990,7 +8292,9 @@ def admin_chat_flow(report, deployment, token, *, allow_agent_canary=False):
     status, _, raw = http(
         "POST", https_url(deployment.required("API_FUNCTIONS_URL")) + "/api/agent/chat",
         token=token, timeout=300,
-        data={"message": "Show a brief business dashboard using the get_business_stats tool.",
+        data={"message": "Show a brief business dashboard, sales grouped by order status and the three "
+                         "top-selling products. Use get_business_stats, get_sales_report_by_status and "
+                         "get_top_selling_products for the respective figures.",
               "isAdmin": True, "cultureId": "en"},
         headers={"traceparent": f"00-{trace}-{uuid.uuid4().hex[:16]}-01"},
     )
@@ -6017,18 +8321,31 @@ def admin_chat_flow(report, deployment, token, *, allow_agent_canary=False):
                "The model did not select the business dashboard tool; narrative alone is not execution evidence.")
 
 
+def report_admin_chat_tool_observations(report):
+    observations = report.inventory.get("adminChatCorrelatedTools", [])
+    controls = [item for item in report.checks if item["id"] == "agent:admin-chat:correlated-tool"]
+    correlated = len(controls) == 1 and controls[0]["group"] == "agents" and controls[0]["status"] == "PASS"
+    tools = {item["tool"] for item in observations} if correlated and isinstance(observations, list) else set()
+    for tool in sorted(ADMIN_CHAT_SALES_TOOLS):
+        report.add("agent:admin-chat:tool:" + tool, "agents", "PASS" if tool in tools else "BLOCKED",
+                   "Current-run trace correlated this sales tool to the loaded version and delegated employee."
+                   if tool in tools else
+                   "This sales tool was not observed on an authorized current-run trace.")
+
+
 def admin_chat_live(report, deployment, *, allow_agent_canary=False):
     if not allow_agent_canary:
         return
     report.add("scope:admin-chat", "scope", "PASS",
-               "One opt-in paid admin chat inference and read-only MCP controls; "
-               "no orders, email or simulator mutations.")
+               "One opt-in admin chat request and read-only MCP controls; Foundry may perform multiple "
+               "paid inference/tool rounds. No orders, email or simulator mutations.")
     report.guarded("agent:admin-chat:definition", "agent-policy",
                    lambda: admin_chat_agent_definition(report, deployment))
     definitions = [item for item in report.checks if item["id"] == "agent:admin-chat:definition"]
     if len(definitions) != 1 or definitions[0]["status"] != "PASS":
         report.add("agent:admin-chat:canary", "agents", "BLOCKED",
                    "The selected admin agent definition is not verified; no inference was sent.")
+        report_admin_chat_tool_observations(report)
         return
     tokens = {}
 
@@ -6042,6 +8359,7 @@ def admin_chat_live(report, deployment, *, allow_agent_canary=False):
     if set(tokens) != {"admin", "manufacturing"}:
         report.add("agent:admin-chat:canary", "agents", "BLOCKED",
                    "Both internal controls are required; no inference was sent.")
+        report_admin_chat_tool_observations(report)
         return
     report.guarded("agent:admin-chat:direct-controls", "agents", lambda: admin_chat_direct_controls(
         report, deployment, tokens["admin"], tokens["manufacturing"]))
@@ -6049,6 +8367,9 @@ def admin_chat_live(report, deployment, *, allow_agent_canary=False):
         report, deployment, tokens["admin"], allow_agent_canary=True))
     report.guarded("agent:admin-chat:correlation", "agents", lambda: delegated_chat_correlated_tool(
         report, deployment, lambda: tokens["admin"], "admin-chat"))
+    report.guarded("agent:admin-chat:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, deployment, "admin-chat"))
+    report_admin_chat_tool_observations(report)
 
 
 def customer_chat_live(report, deployment, consumers, available_products, *, allow_agent_canary=False):
@@ -6067,6 +8388,8 @@ def customer_chat_live(report, deployment, consumers, available_products, *, all
         report, deployment, consumer, available_products.get(consumer.label), allow_agent_canary=True))
     report.guarded("agent:customer-chat:correlation", "agents",
                    lambda: customer_chat_correlated_tool(report, deployment, consumer))
+    report.guarded("agent:customer-chat:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, deployment, "customer-chat"))
 
 
 def help_me_choose_agent_definition(report, deployment):
@@ -6170,7 +8493,8 @@ def help_me_choose_public_flow(report, deployment, *, allow_agent_canary=False):
 
     recommendation_payload = {
         "answers": [
-            {"questionId": 1, "question": "Where will it be used?", "answer": "Mountain trails"},
+            {"questionId": 1, "question": "What are you looking for?",
+             "answer": "An overview of all product categories, then gear for mountain trails"},
             {"questionId": 2, "question": "Experience level?", "answer": "Beginner"},
             {"questionId": 3, "question": "Budget?", "answer": "Under $1,000"},
         ],
@@ -6200,6 +8524,333 @@ def help_me_choose_public_flow(report, deployment, *, allow_agent_canary=False):
         "agent:helpme-choose:anonymous-recommendations", "agents", valid_recommendations,
         f"Anonymous recommendations returned HTTP {status}, live search terms, and no caller identity or Foundry ID",
     )
+
+
+def email_content_operation_selector(report):
+    template = report._email_content_template
+    if not isinstance(template, str) or re.fullmatch(r"authassurance_[a-f0-9]{32}", template) is None:
+        raise EvidenceError("The current isolated email-content template is unavailable")
+    return (
+        "let EmailContentOperations = requests | where timestamp > ago(1h) "
+        "| where name == 'EmailContentAgent.Generate' and success == true "
+        f"and tostring(customDimensions.TemplateType) == '{template}' "
+        "| distinct operation_Id; "
+    ), "operation_Id in (EmailContentOperations)"
+
+
+def foundry_response_identity(report, deployment, profile):
+    profiles = {
+        "helpme-choose": ("AI_AGENT_HELP_ME_CHOOSE_ID", "public-catalog",
+                          ["agent:helpme-choose:anonymous-questions",
+                           "agent:helpme-choose:anonymous-recommendations"],
+                          report.inventory.get("helpMeChooseTraceIds")),
+        "customer-chat": ("AI_AGENT_CHAT_ID", "customer-chat", ["agent:customer-chat:response"],
+                          {"chat": report.inventory.get("customerChatTraceId")}),
+        "admin-chat": ("AI_AGENT_ADMIN_CHAT_ID", "admin-chat", ["agent:admin-chat:response"],
+                       {"chat": report.inventory.get("adminChatTraceId")}),
+        "promotion-suggestion": ("AI_AGENT_PROMOTION_ID", "none",
+                                 ["agent:promotion-suggestion:allow-admin"],
+                                 {"suggestion": report.inventory.get("promotionSuggestionTraceId")}),
+        "email-content": ("AI_AGENT_EMAIL_CONTENT_ID", "none",
+                          ["agent:email-content:allow-admin"],
+                          {"content": report.inventory.get("emailContentTraceId")}),
+        "product-content": ("AI_AGENT_PRODUCT_CONTENT_ID", "none",
+                            ["agent:product-content:allow-admin"],
+                            {"content": report.inventory.get("productContentTraceId")}),
+        "manufacturing-content": ("AI_AGENT_MANUFACTURING_CONTENT_ID", "none",
+                                  ["agent:manufacturing-content:allow-manufacturing"],
+                                  {"content": report.inventory.get("manufacturingContentTraceId")}),
+        "review-analysis": ("AI_AGENT_REVIEW_ANALYSIS_ID", "none",
+                            ["agent:review-analysis:allow-admin"],
+                            {"analysis": report.inventory.get("reviewAnalysisTraceId")}),
+        "cart-recovery": ("AI_AGENT_CART_RECOVERY_ID", "none",
+                          ["agent:cart-recovery:allow-admin"],
+                          {"analysis": report.inventory.get("cartRecoveryTraceId")}),
+    }
+    if profile not in profiles:
+        raise ValueError("Unreviewed Foundry identity profile")
+    agent_key, policy, control_ids, traces = profiles[profile]
+    if getattr(deployment, "runtime", None):
+        raise EvidenceError("Foundry identity inspection requires the local deployer")
+    for check_id in control_ids:
+        checks = [item for item in report.checks if item["id"] == check_id]
+        if len(checks) != 1 or checks[0]["group"] != "agents" or checks[0]["status"] != "PASS":
+            raise EvidenceError("Successful current-run agent responses are required for identity correlation")
+    expected_phases = ({"questions", "recommendations"} if profile == "helpme-choose" else
+                       {"suggestion"} if profile == "promotion-suggestion" else
+                       {"content"} if profile in {"email-content", "product-content", "manufacturing-content"} else
+                       {"analysis"} if profile in {"review-analysis", "cart-recovery"} else {"chat"})
+    if (not isinstance(traces, dict) or set(traces) != expected_phases or
+            any(not isinstance(value, str) or re.fullmatch(r"[a-f0-9]{32}", value) is None
+                or value == "0" * 32 for value in traces.values()) or
+            len(set(traces.values())) != len(traces)):
+        raise EvidenceError("Run-specific Foundry identity traces are missing or invalid")
+    response_hash = (report._promotion_response_hash if profile == "promotion-suggestion" else
+                     report._product_content_response_hash if profile == "product-content" else
+                     report._manufacturing_content_response_hash if profile == "manufacturing-content" else None)
+    if profile in {"promotion-suggestion", "product-content", "manufacturing-content"} and (
+            not isinstance(response_hash, str) or re.fullmatch(r"[a-f0-9]{64}", response_hash) is None):
+        raise EvidenceError("The current data-supplied response is unavailable for identity correlation")
+    agent_id = deployment.required(agent_key)
+    if re.fullmatch(r"[A-Za-z0-9_-]+", agent_id) is None:
+        raise EvidenceError("The selected Foundry agent ID is invalid")
+
+    group = deployment.required("AZURE_RESOURCE_GROUP")
+    function_name = deployment.required("SERVICE_API_FUNCTIONS_NAME")
+    function_app = deployment.azure("functionapp", "show", "-g", group, "-n", function_name,
+                                    "--query", "{defaultHostName:properties.defaultHostName,identity:identity}")
+    identity = deployment.azure("identity", "show", "-g", group,
+                                "-n", deployment.required("USER_MANAGED_IDENTITY_NAME"),
+                                "--query", "{id:id,clientId:clientId}")
+    setting_names = ["AZURE_CLIENT_ID", "AzureWebJobsStorage__clientId",
+                     "AI_FOUNDRY_PROJECT_ENDPOINT", agent_key]
+    query = "[?" + " || ".join("name=='" + name + "'" for name in setting_names) + "].{name:name,value:value}"
+    settings_list = deployment.azure("functionapp", "config", "appsettings", "list",
+                                     "-g", group, "-n", function_name, "--query", query)
+    if (not isinstance(settings_list, list) or len(settings_list) != len(setting_names) or
+            any(not isinstance(item, dict) or item.get("name") not in setting_names or
+                not isinstance(item.get("value"), str) for item in settings_list)):
+        raise EvidenceError("The selected Functions identity and Foundry settings are incomplete")
+    settings = {item["name"]: item["value"] for item in settings_list}
+    if set(settings) != set(setting_names):
+        raise EvidenceError("The selected Functions identity and Foundry settings are duplicated or incomplete")
+    try:
+        client_id = str(uuid.UUID(identity["clientId"]))
+        host = function_app["defaultHostName"]
+        binding_valid = (
+            isinstance(host, str) and
+            https_root_endpoints_match(deployment.required("API_FUNCTIONS_URL"), "https://" + host) and
+            function_identity_binding_is_valid(function_app, settings, identity) and
+            https_url(settings["AI_FOUNDRY_PROJECT_ENDPOINT"]) ==
+            https_url(deployment.required("AI_FOUNDRY_PROJECT_ENDPOINT")) and
+            settings[agent_key] == agent_id
+        )
+    except (KeyError, TypeError, ValueError, EvidenceError) as error:
+        raise EvidenceError("The selected Functions identity or Foundry binding is invalid") from error
+    check_id = f"agent:{profile}:foundry-identity"
+    if not binding_valid:
+        report.add(check_id, "agents", "FAIL",
+                   "The selected Functions host, identity, Foundry project or agent binding does not match azd.")
+        return
+    expected_hash = hashlib.sha256(client_id.encode()).hexdigest()
+    resources = deployment.azure("resource", "list", "--resource-group", group,
+                                 "--resource-type", "Microsoft.Insights/components", "--query", "[].id")
+    if (not isinstance(resources, list) or len(resources) != 1 or
+            not isinstance(resources[0], str) or not resources[0]):
+        raise EvidenceError("A unique selected-environment telemetry resource is required")
+    query_prefix = ""
+    if profile in {"promotion-suggestion", "product-content", "manufacturing-content"}:
+        selector = f"hash_sha256(tostring(customDimensions.ResponseId)) == '{response_hash}'"
+        trace_expression = "'response-hash-match'"
+        trace_phases = {"response-hash-match": "suggestion" if profile == "promotion-suggestion" else "content"}
+    elif profile == "email-content":
+        query_prefix, selector = email_content_operation_selector(report)
+        trace_expression = "'email-content-operation-match'"
+        trace_phases = {"email-content-operation-match": "content"}
+    else:
+        trace_list = ", ".join("'" + value + "'" for value in traces.values())
+        selector = f"operation_Id in ({trace_list})"
+        trace_expression = "operation_Id"
+        trace_phases = {trace: phase for phase, trace in traces.items()}
+    query = (
+        query_prefix + "customEvents | where timestamp > ago(1h) "
+        f"| where {selector} and name == 'Foundry.Responses.Completed' "
+        f"| where tostring(customDimensions.AgentId) == '{agent_id}' "
+        f"and tostring(customDimensions.ToolPolicy) == '{policy}' "
+        f"| extend TraceId={trace_expression}, AgentVersionId=tostring(customDimensions.AgentVersionId), "
+        "ClientMatch=tostring(customDimensions.CredentialClientMatch), "
+        "ClientHash=tostring(customDimensions.CredentialExpectedClientHash) "
+        "| summarize Hits=count() by TraceId, AgentVersionId, ClientMatch, ClientHash "
+        "| order by TraceId asc, AgentVersionId asc"
+    )
+    observed = {}
+    for delay in (0, 20, 20, 20):
+        if delay:
+            time.sleep(delay)
+        result = deployment.azure("monitor", "app-insights", "query", "--app", resources[0],
+                                  "--analytics-query", query)
+        try:
+            table, = result["tables"]
+            names = [column["name"] for column in table["columns"]]
+            rows = table["rows"]
+            if names != ["TraceId", "AgentVersionId", "ClientMatch", "ClientHash", "Hits"] or not isinstance(rows, list):
+                raise ValueError("Unexpected telemetry columns")
+            seen = set()
+            for row in rows:
+                if (not isinstance(row, list) or len(row) != 5 or row[0] not in trace_phases or
+                        not isinstance(row[1], str) or
+                        (row[1] != "unknown" and
+                         re.fullmatch(re.escape(agent_id) + r":[1-9][0-9]*", row[1]) is None) or
+                        row[2] not in {"match", "mismatch", "unverifiable", "unconfigured", ""} or
+                        not isinstance(row[3], str) or
+                        (row[3] not in {"", "unconfigured"} and
+                         re.fullmatch(r"[a-f0-9]{64}", row[3]) is None) or
+                        type(row[4]) is not int or row[4] <= 0):
+                    raise ValueError("Unexpected telemetry row")
+                key = tuple(row[:4])
+                if key in seen:
+                    raise ValueError("Duplicate telemetry row")
+                seen.add(key)
+                observed[key] = max(observed.get(key, 0), row[4])
+        except (KeyError, TypeError, ValueError) as error:
+            raise EvidenceError("Foundry identity telemetry has an unsupported shape") from error
+        mismatch = any((state == "mismatch" and client_hash == expected_hash) or
+                       (re.fullmatch(r"[a-f0-9]{64}", client_hash) is not None and
+                        client_hash != expected_hash)
+                       for _, _, state, client_hash in observed)
+        complete = set(trace for trace, _, _, _ in observed) == set(trace_phases)
+        verified = all(version != "unknown" and state == "match" and client_hash == expected_hash
+                       for _, version, state, client_hash in observed)
+        if mismatch or (complete and verified):
+            break
+    report.inventory[profile + "FoundryIdentity"] = [
+        {"phase": trace_phases[trace], "version": version, "credentialClientMatch": state, "matches": hits}
+        for (trace, version, state, _), hits in sorted(observed.items())
+    ]
+    report.add(
+        check_id, "agents", "FAIL" if mismatch else "PASS" if complete and verified else "BLOCKED",
+        "Sampled completed response rounds reported whether their accepted bearer token's client ID "
+        "matches the configured identity; its hash was matched to the selected attached UAMI. "
+        "The Functions host, project and agent settings were checked independently. This is sampled "
+        "in-process telemetry, not independent token inspection or proof of every response round. " +
+        "An unknown fetched version is incomplete evidence. " +
+        ("The data-supplied response is matched by its transient ID hash, not by the request trace."
+         if profile in {"promotion-suggestion", "product-content", "manufacturing-content"} else
+         "Email content is matched through its unique template and sampled worker operation, not the request trace."
+         if profile == "email-content" else "The current request traces are matched directly."),
+    )
+
+
+def data_supplied_tool_suppression(report, deployment, profile):
+    profiles = {
+        "promotion-suggestion": ("AI_AGENT_PROMOTION_ID", "promotionToolSuppression"),
+        "email-content": ("AI_AGENT_EMAIL_CONTENT_ID", "emailContentToolSuppression"),
+        "product-content": ("AI_AGENT_PRODUCT_CONTENT_ID", "productContentToolSuppression"),
+        "manufacturing-content": ("AI_AGENT_MANUFACTURING_CONTENT_ID", "manufacturingContentToolSuppression"),
+        "review-analysis": ("AI_AGENT_REVIEW_ANALYSIS_ID", "reviewAnalysisToolSuppression"),
+        "cart-recovery": ("AI_AGENT_CART_RECOVERY_ID", "cartRecoveryToolSuppression"),
+    }
+    if profile not in profiles:
+        raise ValueError("Unreviewed data-supplied Foundry profile")
+    check_id = f"agent:{profile}:foundry-identity"
+    identity_checks = [item for item in report.checks
+                       if item["id"] == check_id]
+    if len(identity_checks) != 1 or identity_checks[0]["status"] != "PASS":
+        raise EvidenceError("The current response's Foundry identity must be verified first")
+    observations = report.inventory.get(profile + "FoundryIdentity")
+    if (not isinstance(observations, list) or not observations or
+            any(not isinstance(item, dict) or not isinstance(item.get("version"), str) for item in observations)):
+        raise EvidenceError("Current response and version evidence is unavailable")
+    versions = {item["version"] for item in observations}
+    agent_key, inventory_key = profiles[profile]
+    agent_id = deployment.required(agent_key)
+    if re.fullmatch(r"[A-Za-z0-9_-]+", agent_id) is None:
+        raise EvidenceError("The selected Foundry agent ID is invalid")
+    query_prefix = ""
+    if profile in {"promotion-suggestion", "product-content", "manufacturing-content"}:
+        response_hash = (report._promotion_response_hash if profile == "promotion-suggestion"
+                         else report._product_content_response_hash if profile == "product-content"
+                         else report._manufacturing_content_response_hash)
+        if not isinstance(response_hash, str) or re.fullmatch(r"[a-f0-9]{64}", response_hash) is None:
+            raise EvidenceError("The current data-supplied response is unavailable for correlation")
+        selector = f"hash_sha256(tostring(customDimensions.ResponseId)) == '{response_hash}'"
+    elif profile == "email-content":
+        query_prefix, selector = email_content_operation_selector(report)
+    else:
+        trace_key = "reviewAnalysisTraceId" if profile == "review-analysis" else "cartRecoveryTraceId"
+        trace = report.inventory.get(trace_key)
+        if not isinstance(trace, str) or re.fullmatch(r"[a-f0-9]{32}", trace) is None or trace == "0" * 32:
+            raise EvidenceError("The current analysis trace is unavailable")
+        selector = f"operation_Id == '{trace}'"
+    resources = deployment.azure("resource", "list", "--resource-group",
+                                 deployment.required("AZURE_RESOURCE_GROUP"),
+                                 "--resource-type", "Microsoft.Insights/components", "--query", "[].id")
+    if (not isinstance(resources, list) or len(resources) != 1 or
+            not isinstance(resources[0], str) or not resources[0]):
+        raise EvidenceError("A unique selected-environment telemetry resource is required")
+    query = (
+        query_prefix + "customEvents | where timestamp > ago(1h) "
+        f"| where {selector} "
+        "and name == 'Foundry.Responses.Completed' "
+        f"| where tostring(customDimensions.AgentId) == '{agent_id}' "
+        "and tostring(customDimensions.ToolPolicy) == 'none' "
+        "| extend AgentVersionId=tostring(customDimensions.AgentVersionId), "
+        "DefinitionFallback=tostring(customDimensions.AgentDefinitionFallback), "
+        "ToolChoice=tostring(customDimensions.RequestToolChoice), "
+        "ToolsOffered=tostring(customDimensions.RequestToolsOffered), "
+        "ToolCallCount=tostring(customDimensions.ToolCallCount) "
+        "| summarize Hits=count() by AgentVersionId, DefinitionFallback, ToolChoice, ToolsOffered, ToolCallCount "
+        "| order by AgentVersionId asc"
+    )
+    observed = {}
+    for delay in (0, 20, 20, 20):
+        if delay:
+            time.sleep(delay)
+        result = deployment.azure("monitor", "app-insights", "query", "--app", resources[0],
+                                  "--analytics-query", query)
+        try:
+            table, = result["tables"]
+            names = [column["name"] for column in table["columns"]]
+            rows = table["rows"]
+            if names != ["AgentVersionId", "DefinitionFallback", "ToolChoice",
+                         "ToolsOffered", "ToolCallCount", "Hits"] or not isinstance(rows, list):
+                raise ValueError("Unexpected telemetry columns")
+            seen = set()
+            for row in rows:
+                if (not isinstance(row, list) or len(row) != 6 or not isinstance(row[0], str) or
+                        (row[0] != "unknown" and
+                         re.fullmatch(re.escape(agent_id) + r":[1-9][0-9]*", row[0]) is None) or
+                        row[1] not in {"true", "false", ""} or
+                        not isinstance(row[2], str) or
+                        (row[2] != "" and re.fullmatch(r"[A-Za-z0-9_-]+", row[2]) is None) or
+                        row[3] not in {"true", "false", ""} or not isinstance(row[4], str) or
+                        (row[4] != "" and re.fullmatch(r"0|[1-9][0-9]*", row[4]) is None) or
+                        type(row[5]) is not int or row[5] <= 0):
+                    raise ValueError("Unexpected telemetry row")
+                key = tuple(row[:5])
+                if key in seen:
+                    raise ValueError("Duplicate telemetry row")
+                seen.add(key)
+                observed[key] = max(observed.get(key, 0), row[5])
+        except (KeyError, TypeError, ValueError) as error:
+            raise EvidenceError("Data-supplied tool-suppression telemetry has an unsupported shape") from error
+        violated = any((choice not in {"", "none"}) or offered == "true" or
+                       (calls != "" and int(calls) > 0)
+                       for _, _, choice, offered, calls in observed)
+        verified = bool(observed) and all(
+            version in versions and version != "unknown" and fallback in {"true", "false"} and
+            choice == "none" and offered == "false" and calls == "0"
+            for version, fallback, choice, offered, calls in observed)
+        if violated or verified:
+            break
+    report.inventory[inventory_key] = [
+        {"version": version, "definitionFallback": fallback, "requestToolChoice": choice,
+         "requestToolsOffered": offered, "toolCallCount": calls, "matches": hits}
+        for (version, fallback, choice, offered, calls), hits in sorted(observed.items())
+    ]
+    detail = (
+        "Current response telemetry contradicts tool suppression. " if violated else
+        "The current completed response reported tool_choice=none, no offered tools and no tool calls. "
+        if verified else "Current tool-suppression telemetry is missing, incomplete or version-inconsistent. "
+    )
+    report.add(
+        f"agent:{profile}:tool-suppression", "agents",
+        "FAIL" if violated else "PASS" if verified else "BLOCKED",
+        detail + "The definition-fallback flag marks an augmented or fallback cache, not an unmodified definition; "
+        "the fetched version alone does not establish the entire effective configuration. "
+        "This is sampled in-process telemetry, not independent inspection of Foundry's execution.",
+    )
+
+
+def promotion_tool_suppression(report, deployment):
+    data_supplied_tool_suppression(report, deployment, "promotion-suggestion")
+
+
+def promotion_foundry_evidence(report, deployment):
+    report.guarded("agent:promotion-suggestion:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, deployment, "promotion-suggestion"))
+    report.guarded("agent:promotion-suggestion:tool-suppression", "agents",
+                   lambda: promotion_tool_suppression(report, deployment))
 
 
 def help_me_choose_correlated_tools(report, deployment):
@@ -6249,7 +8900,7 @@ def help_me_choose_correlated_tools(report, deployment):
         "Completed | join kind=inner Authorized on operation_Id, Tool "
         "| summarize Hits=count() by AgentVersionId, Tool | order by AgentVersionId asc, Tool asc"
     )
-    observed = []
+    observed = {}
     for delay in (0, 20, 20, 20):
         if delay:
             time.sleep(delay)
@@ -6270,12 +8921,16 @@ def help_me_choose_correlated_tools(report, deployment):
                         (row[0], row[1]) in seen):
                     raise ValueError("Unexpected telemetry row")
                 seen.add((row[0], row[1]))
-                observed.append({"version": row[0], "tool": row[1], "matches": row[2]})
+                previous = observed.get((row[0], row[1]), 0)
+                observed[(row[0], row[1])] = max(previous, row[2])
         except (KeyError, TypeError, ValueError) as error:
             raise EvidenceError("Agent correlation telemetry has an unsupported shape") from error
-        if observed:
+        if {tool for _, tool in observed} == PUBLIC_CATALOG_TOOLS:
             break
-    report.inventory["helpMeChooseCorrelatedTools"] = observed
+    report.inventory["helpMeChooseCorrelatedTools"] = [
+        {"version": version, "tool": tool, "matches": observed[(version, tool)]}
+        for version, tool in sorted(observed)
+    ]
     report.add(
         "agent:helpme-choose:correlated-tools", "agents", "PASS" if observed else "BLOCKED",
         "Run-specific trace joins a completed catalog MCP result to an allowed products.read decision "
@@ -6293,7 +8948,9 @@ def reconcile_correlated_agent_tool_paths(report, deployment, agent_id, allowed_
     if not all(isinstance(value, list) and value and all(isinstance(item, dict) for item in value)
                for value in (observations, versions, edges)):
         raise EvidenceError("Current-run agent versions, tool edges and correlated observations are required")
-    expected_origin = origin(deployment.required("MCP_SERVICE_URL"))
+    expected_endpoint = agent_mcp_endpoint_identity(deployment.required("MCP_SERVICE_URL"))
+    expected_origin = agent_mcp_endpoint_origin(expected_endpoint)
+    expected_digest = agent_mcp_endpoint_digest(expected_endpoint)
     seen = set()
     for observation in observations:
         version = observation.get("version")
@@ -6318,6 +8975,7 @@ def reconcile_correlated_agent_tool_paths(report, deployment, agent_id, allowed_
                           for item in version_summary.get("tools", []) if isinstance(item, dict)
                           and item.get("type") == "mcp" and item.get("server") == "adventureworks_mcp"
                           and item.get("resource") == "custom-mcp" and item.get("targetOrigin") == expected_origin
+                          and item.get("targetEndpointSha256") == expected_digest
                           and isinstance(item.get("surfaceIds"), list) and isinstance(item.get("allowedTools"), list)
                           and surface in item.get("surfaceIds", []) and tool in item.get("allowedTools", [])]
         if (len(matching_versions) != 1 or len(matching_edges) != 1 or
@@ -6325,6 +8983,7 @@ def reconcile_correlated_agent_tool_paths(report, deployment, agent_id, allowed_
                 matching_versions[0].get("name") != agent_id or
                 matching_edges[0].get("kind") != "mcp-tool" or matching_edges[0].get("from") != version_id or
                 matching_edges[0].get("tool") != tool or matching_edges[0].get("toOrigin") != expected_origin or
+                matching_edges[0].get("toEndpointSha256") != expected_digest or
                 matching_checks[0]["group"] != "agents" or matching_checks[0]["status"] != "BLOCKED" or
                 matching_checks[0]["detail"] != AGENT_TOOL_RUNTIME_BLOCKED_DETAIL):
             unresolved.append(surface)
@@ -6396,9 +9055,9 @@ def reconcile_admin_chat_tool_paths(report, deployment):
         if len(checks) != 1 or checks[0]["group"] != group or checks[0]["status"] != "PASS":
             raise EvidenceError("Current-run admin chat definition, controls and correlation evidence are required")
     reconcile_correlated_agent_tool_paths(
-        report, deployment, deployment.required("AI_AGENT_ADMIN_CHAT_ID"), {"get_business_stats"},
+        report, deployment, deployment.required("AI_AGENT_ADMIN_CHAT_ID"), ADMIN_CHAT_SALES_TOOLS,
         "adminChatCorrelatedTools",
-        "This version's business dashboard call returned a completed MCP result and joined an "
+        "This version's sales-analysis call returned a completed MCP result and joined an "
         "allowed sales.read decision for the delegated employee on the same trace. "
         "Other caller modes and downstream SQL identity remain separate obligations.",
         "agent:admin-chat:inventory-reconciliation",
@@ -6454,8 +9113,19 @@ def reconcile_mcp_task_requirement(report):
     })
 
 
+def run_order_canary(report, deployment, allow_orders):
+    # The canary imports this module by name; share one instance so EvidenceError matches.
+    sys.modules.setdefault("validate", sys.modules[__name__])
+    import order_canary
+    run_id = uuid.uuid4().hex[:16]
+    report.provenance["orderCanaryRunId"] = run_id
+    order_canary.OrderCanary(report, deployment, run_id).run(allow_orders)
+
+
 def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_canary=False,
-         allow_admin_agent_canary=False):
+         allow_admin_agent_canary=False, allow_email_content_agent_canary=False,
+         allow_product_content_agent_canary=False, allow_promotion_agent_canary=False,
+         allow_order_canary=False):
     d = deployment
     functions_base = https_url(d.required("API_FUNCTIONS_URL"))
     mcp_base = origin(d.required("API_MCP_URL"))
@@ -6575,6 +9245,7 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
                 opener = urllib.request.build_opener(
                     helper.NoRedirect(), urllib.request.HTTPCookieProcessor())
                 try:
+                    LAST_HELPER_LOGIN["at"] = time.monotonic()
                     session = helper.session(opener, args, base, audience)
                 except (helper.AuthError, ValueError, OSError) as error:
                     raise EvidenceError(f"Authentication helper could not obtain {identity}/{resource} session") from error
@@ -6662,6 +9333,8 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
                                report, d, admin_dab_token, manufacturing_tokens["dab"], consumers))
         report.guarded("functions-host:scenario", "live-denials", lambda: functions_host_read_denials(
             report, d, manufacturing_tokens, consumers[0] if consumers else None))
+        report.guarded("illustration-export:scenario", "live-denials", lambda: illustration_export_authorization(
+            report, d, manufacturing_tokens, consumers[0] if consumers else None))
         if consumers:
             report.guarded("mcp-consumer:owner-denials", "live-denials",
                            lambda: available_products.update(consumer_mcp_owner_denials(report, d, consumers)))
@@ -6672,15 +9345,30 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
         report.guarded("webpubsub:authorization", "live-denials", lambda: webpubsub_authorization(
             report, d, manufacturing_tokens["functions"], admin_functions_token,
             admin_dab_token, consumers[0] if consumers else None))
-        report.guarded("agent:promotion-suggestion:scenario", "agents", lambda: promotion_agent_authorization(
-            report, d, admin_functions_token, manufacturing_tokens["functions"], admin_dab_token))
+        for name in ["AnalyzeReviewsBatch", "AnalyzeCartRecovery"]:
+            report.guarded("analysis-empty-input:" + name, "agents",
+                           lambda name=name: analysis_empty_input_authorization(
+                               report, d, name, admin_functions_token,
+                               manufacturing_tokens["functions"], admin_dab_token))
+        promotion_agent_scenario(report, d, admin_functions_token, manufacturing_tokens["functions"], admin_dab_token,
+                                 allow_agent_canary=allow_promotion_agent_canary)
         report.guarded("subcategory-count:scenario", "live-denials", lambda: subcategory_count_authorization(
             report, d, admin_functions_token, manufacturing_tokens, consumers))
     report.guarded("live:authenticated-paths", "live-allows", authenticated)
+    if len(consumers) == 2:
+        # Runs after the shared ten-minute tokens are no longer needed and renews its own.
+        report.guarded("dab:write-role:matrix", "live-denials", lambda: dab_write_role_matrix(
+            report, d, *renewing_internal_tokens(d, ["admin", "manufacturing"], "dab"), consumers))
     customer_chat_live(report, d, consumers, available_products, allow_agent_canary=allow_customer_agent_canary)
     admin_chat_live(report, d, allow_agent_canary=allow_admin_agent_canary)
+    if allow_email_content_agent_canary:
+        email_content_agent_tests(report, d, allow_agent_canary=True)
+    if allow_product_content_agent_canary:
+        product_content_agent_tests(report, d, allow_agent_canary=True)
     report.guarded("agent:helpme-choose:correlated-tools", "agents",
                    lambda: help_me_choose_correlated_tools(report, d))
+    report.guarded("agent:helpme-choose:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, d, "helpme-choose"))
     if "agentDependencyEdges" in report.inventory:
         report.guarded("agent:helpme-choose:inventory-reconciliation", "agents",
                        lambda: reconcile_help_me_choose_tool_paths(report, d))
@@ -6699,8 +9387,13 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
     report.add("live:dab-native-mcp", "live-allows", "BLOCKED",
                "Native handshake/read/role/audience/origin checks have individual evidence; "
                "complete entity/action/field/owner policies and mutation tool dispatch remain required")
+    if allow_order_canary:
+        report.guarded("order:scenario", "orders", lambda: run_order_canary(report, d, True))
     reconcile_browser_auth_requirement(report)
     reconcile_mcp_task_requirement(report)
+    reconcile_dab_operation_requirement(report)
+    reconcile_ownership_handlers_requirement(report)
+    reconcile_session_transition_requirement(report)
 
 
 def browser_tests(report, deployment):
@@ -6725,7 +9418,8 @@ def browser_tests(report, deployment):
 def customer_chat_tests(report, deployment, *, allow_agent_canary=False, allow_admin_agent_canary=False):
     report.add("scope:customer-chat", "scope", "PASS",
                "Retained-consumer MCP reads only; no new accounts, orders or email. "
-               "A single paid chat inference is opt-in and stores its normal Foundry response.")
+               "One chat request is opt-in; its normal Foundry response is stored and it may "
+               "perform multiple paid inference/tool rounds.")
     consumers = []
     report.guarded("consumer-fixtures:setup", "fixtures",
                    lambda: consumers.extend(retained_consumer_fixtures(report, deployment)))
@@ -6737,28 +9431,298 @@ def customer_chat_tests(report, deployment, *, allow_agent_canary=False, allow_a
     admin_chat_live(report, deployment, allow_agent_canary=allow_admin_agent_canary)
 
 
+def catalog_agent_tests(report, deployment, *, allow_agent_canary=False):
+    report.add("scope:catalog-agent", "scope", "PASS",
+               "Selected public catalog agent definition and telemetry only; two read-only wizard requests "
+               "are opt-in and may perform multiple paid Foundry/tool rounds. "
+               "No orders, email, simulator or consumer fixtures.")
+    report.guarded("agent:helpme-choose:definition", "agent-policy",
+                   lambda: help_me_choose_agent_definition(report, deployment))
+    report.guarded("agent:helpme-choose:public-flow", "agents",
+                   lambda: help_me_choose_public_flow(report, deployment, allow_agent_canary=allow_agent_canary))
+    report.guarded("agent:helpme-choose:correlated-tools", "agents",
+                   lambda: help_me_choose_correlated_tools(report, deployment))
+    report.guarded("agent:helpme-choose:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, deployment, "helpme-choose"))
+    correlated = any(item["id"] == "agent:helpme-choose:correlated-tools" and item["status"] == "PASS"
+                     for item in report.checks)
+    observations = report.inventory.get("helpMeChooseCorrelatedTools", [])
+    tools = {item["tool"] for item in observations} if correlated and isinstance(observations, list) else set()
+    for tool in sorted(PUBLIC_CATALOG_TOOLS):
+        report.add("agent:helpme-choose:tool:" + tool, "agents", "PASS" if tool in tools else "BLOCKED",
+                   "Current-run trace correlated this catalog tool to the loaded version and runtime principal."
+                   if tool in tools else
+                   "This catalog tool was not observed on an authorized current-run trace.")
+
+
+def data_supplied_agent_control_tokens(report, deployment, profile, *, pace=False):
+    tokens = {}
+
+    def authenticate():
+        if getattr(deployment, "runtime", None):
+            raise EvidenceError("The data-supplied agent canary requires the local deployer and telemetry access")
+        interval = json.loads((Path(__file__).with_name("browser-policy.json")).read_text())[
+            "internalLoginMinimumIntervalMs"] / 1000 if pace else 0
+        for index, (identity, resource) in enumerate(
+                [("admin", "functions"), ("manufacturing", "functions"), ("admin", "dab")]):
+            if index and interval:
+                time.sleep(interval)
+            tokens[(identity, resource)] = internal_token(deployment, identity, resource)
+
+    report.guarded(f"agent:{profile}:authentication", "agents", authenticate)
+    if set(tokens) != {("admin", "functions"), ("manufacturing", "functions"), ("admin", "dab")}:
+        report.add(f"agent:{profile}:canary", "agents", "BLOCKED",
+                   "All three authorization controls are required; no inference was sent.")
+        return {}
+    return tokens
+
+
+def analysis_agent_tests(report, deployment, *, allow_agent_canary=False):
+    report.add("scope:analysis-agent", "scope", "PASS",
+               "After the matching Functions source is deployed, up to two opt-in synthetic analyses follow "
+               "positive token controls and exact authorization denials. Foundry responses and random "
+               "per-request memory scopes may persist; no review, cart, order or email mutation is requested. "
+               "An incorrectly accepted denial may also invoke inference.")
+    if not allow_agent_canary:
+        report.add("agent:analysis:canary", "agents", "BLOCKED",
+                   "Potentially billable analysis inference is opt-in; no requests were sent.")
+        return
+    tokens = data_supplied_agent_control_tokens(report, deployment, "analysis", pace=True)
+    if not tokens:
+        return
+
+    def positive_controls():
+        base = https_url(deployment.required("API_FUNCTIONS_URL"))
+        url = reviewed_function_read_url(report, base, "GetManufacturingAgentQueueStatus")
+        status, _, raw = http("GET", url, token=tokens[("manufacturing", "functions")])
+        try:
+            body = json.loads(raw)
+        except ValueError as error:
+            raise EvidenceError("Manufacturing positive control returned invalid JSON") from error
+        valid = status == 200 and isinstance(body, dict) and bool(body) and "error" not in body
+        report.check("allow:manufacturing:functions", "live-allows", valid,
+                     f"Manufacturing Functions positive control returned HTTP {status}.")
+        if not valid:
+            raise EvidenceError("The manufacturing Functions positive control failed")
+
+        dab = origin(deployment.required("API_URL"))
+        role = load_auth_helper().IDENTITIES["admin"][4]
+        status, _, raw = http("POST", dab + "/graphql", token=tokens[("admin", "dab")],
+                              headers={"X-MS-API-ROLE": role},
+                              data={"query": "{ products(first: 1) { items { ProductID } } }"})
+        try:
+            body = json.loads(raw)
+        except ValueError as error:
+            raise EvidenceError("DAB positive control returned invalid JSON") from error
+        data = body.get("data") if isinstance(body, dict) else None
+        products = data.get("products") if isinstance(data, dict) else None
+        items = products.get("items") if isinstance(products, dict) else None
+        valid = (status == 200 and isinstance(body, dict) and not body.get("errors") and
+                 isinstance(items, list) and bool(items) and isinstance(items[0], dict) and
+                 type(items[0].get("ProductID")) is int)
+        report.check("allow:admin:dab", "live-allows", valid,
+                     f"Admin DAB positive control returned HTTP {status} with a product ID.")
+        if not valid:
+            raise EvidenceError("The admin DAB positive control failed")
+
+    report.guarded("agent:analysis:positive-controls", "agents", positive_controls)
+    controls = {"allow:admin:dab", "allow:manufacturing:functions"}
+    if {item["id"] for item in report.checks if item["id"] in controls and item["status"] == "PASS"} != controls:
+        report.add("agent:analysis:canary", "agents", "BLOCKED",
+                   "Both positive authorization controls are required; no analysis requests were sent.")
+        return
+
+    for name, profile in [("AnalyzeReviewsBatch", "review-analysis"), ("AnalyzeCartRecovery", "cart-recovery")]:
+        report.guarded(f"agent:{profile}:empty-input-scenario", "agents",
+                       lambda name=name: analysis_empty_input_authorization(
+                           report, deployment, name, tokens[("admin", "functions")],
+                           tokens[("manufacturing", "functions")], tokens[("admin", "dab")],
+                           add_valid_input_blocker=False))
+        required = {f"agent:{profile}:empty-input-control"} | {
+            f"agent:{profile}:empty-input:deny-{label}"
+            for label in ["anonymous", "wrong-audience", "insufficient-scope", "forged"]}
+        passed = {item["id"] for item in report.checks if item["id"] in required and item["status"] == "PASS"}
+        if passed != required:
+            report.add(f"agent:{profile}:valid-input", "agents", "BLOCKED",
+                       "The empty-input safety and denial controls are incomplete; no valid-input request was sent.")
+            continue
+        report.guarded(f"agent:{profile}:scenario", "agents",
+                       lambda name=name: analysis_agent_authorization(
+                           report, deployment, name, tokens[("admin", "functions")],
+                           tokens[("manufacturing", "functions")], tokens[("admin", "dab")],
+                           allow_agent_canary=True))
+        report.guarded(f"agent:{profile}:foundry-identity", "agents",
+                       lambda profile=profile: foundry_response_identity(report, deployment, profile))
+        report.guarded(f"agent:{profile}:tool-suppression", "agents",
+                       lambda profile=profile: data_supplied_tool_suppression(report, deployment, profile))
+
+
+def promotion_agent_tests(report, deployment, *, allow_agent_canary=False):
+    report.add("scope:promotion-agent", "scope", "PASS",
+               "One opt-in promotion suggestion after three authorization denials; it reads product data, "
+               "stores a Foundry response and uses the dedicated AuthAssurance memory scope. "
+               "No promotion, order, email or simulator mutation is requested.")
+    if not allow_agent_canary:
+        report.add("agent:promotion-suggestion:canary", "agents", "BLOCKED",
+                   "The potentially billable promotion inference is opt-in; no requests were sent.")
+        return
+    tokens = data_supplied_agent_control_tokens(report, deployment, "promotion-suggestion")
+    if not tokens:
+        return
+    promotion_agent_scenario(
+        report, deployment, tokens[("admin", "functions")], tokens[("manufacturing", "functions")],
+        tokens[("admin", "dab")], allow_agent_canary=True)
+
+
+def email_content_agent_tests(report, deployment, *, allow_agent_canary=False):
+    report.add("scope:email-content-agent", "scope", "PASS",
+               "One opt-in email-content inference after three authorization denials. "
+               "It uses a synthetic name and unique template marker, with a random per-request memory scope; "
+               "the Foundry response and scope may persist. "
+               "No email, order or campaign is sent or created.")
+    if not allow_agent_canary:
+        report.add("agent:email-content:canary", "agents", "BLOCKED",
+                   "The potentially billable content inference is opt-in; no requests were sent.")
+        return
+    tokens = data_supplied_agent_control_tokens(report, deployment, "email-content")
+    if not tokens:
+        return
+    report.guarded("agent:email-content:scenario", "agents", lambda: email_content_agent_authorization(
+        report, deployment, tokens[("admin", "functions")], tokens[("manufacturing", "functions")],
+        tokens[("admin", "dab")]))
+    report.guarded("agent:email-content:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, deployment, "email-content"))
+    report.guarded("agent:email-content:tool-suppression", "agents",
+                   lambda: data_supplied_tool_suppression(report, deployment, "email-content"))
+
+
+def product_content_agent_tests(report, deployment, *, allow_agent_canary=False):
+    report.add("scope:product-content-agent", "scope", "PASS",
+               "One opt-in product-content inference after authorization denials; a second follows only after "
+               "continuation denials. An incorrectly accepted cross-agent control may invoke a promotion inference. "
+               "It uses a unique synthetic subcategory memory scope; Foundry responses and scope may persist. "
+               "No product, promotion, order or email is created.")
+    if not allow_agent_canary:
+        report.add("agent:product-content:canary", "agents", "BLOCKED",
+                   "The potentially billable content inferences are opt-in; no requests were sent.")
+        return
+    tokens = data_supplied_agent_control_tokens(report, deployment, "product-content")
+    if not tokens:
+        return
+    report.guarded("agent:product-content:scenario", "agents", lambda: product_content_agent_authorization(
+        report, deployment, tokens[("admin", "functions")], tokens[("manufacturing", "functions")],
+        tokens[("admin", "dab")]))
+    report.guarded("agent:product-content:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, deployment, "product-content"))
+    report.guarded("agent:product-content:tool-suppression", "agents",
+                   lambda: data_supplied_tool_suppression(report, deployment, "product-content"))
+
+
+def manufacturing_content_agent_tests(report, deployment, *, allow_agent_canary=False):
+    report.add("scope:manufacturing-content-agent", "scope", "PASS",
+               "One opt-in part-sheet generation request after three authorization denials. "
+               "The endpoint reads SQL and can issue up to two validated draft attempts, with bounded "
+               "transient retries; Foundry responses may persist. It does not publish a sheet or send email.")
+    if not allow_agent_canary:
+        report.add("agent:manufacturing-content:canary", "agents", "BLOCKED",
+                   "The potentially billable content generation is opt-in; no requests were sent.")
+        return
+    tokens = {}
+
+    def authenticate():
+        if getattr(deployment, "runtime", None):
+            raise EvidenceError("The manufacturing content canary requires the local deployer and telemetry access")
+        policy = json.loads((Path(__file__).with_name("browser-policy.json")).read_text())
+        interval = policy["internalLoginMinimumIntervalMs"] / 1000
+        tokens["functions"] = internal_token(deployment, "manufacturing", "functions")
+        time.sleep(interval)
+        tokens["dab"] = internal_token(deployment, "manufacturing", "dab")
+        time.sleep(interval)
+        tokens["reduced"] = internal_token(deployment, "manufacturing", "functions", scopes="manufacturing.read")
+        helper = load_auth_helper()
+        try:
+            claims = helper.claims(tokens["reduced"])
+        except helper.AuthError as error:
+            raise EvidenceError("The reduced-scope manufacturing control is malformed") from error
+        _, audience = internal_token_target(deployment, "functions")
+        scope = claims.get("scope")
+        scopes = set(scope.split()) if isinstance(scope, str) else set()
+        audiences = claims.get("aud")
+        valid = (claims.get("category") == "manufacturing" and
+                 (audiences == audience or audiences == [audience]) and
+                 "manufacturing.read" in scopes and "manufacturing.write" not in scopes and
+                 scopes <= {"manufacturing.read", "offline_access"})
+        report.check("agent:manufacturing-content:reduced-scope-token", "agents", valid,
+                     "The Functions-audience manufacturing control has read scope but lacks manufacturing.write.")
+        if not valid:
+            raise EvidenceError("The reduced-scope control is invalid; no inference was sent")
+
+    report.guarded("agent:manufacturing-content:authentication", "agents", authenticate)
+    if (set(tokens) != {"functions", "dab", "reduced"} or not any(
+            item["id"] == "agent:manufacturing-content:reduced-scope-token" and item["status"] == "PASS"
+            for item in report.checks)):
+        report.add("agent:manufacturing-content:canary", "agents", "BLOCKED",
+                   "All scoped controls are required; no inference was sent.")
+        return
+    report.guarded("agent:manufacturing-content:scenario", "agents",
+                   lambda: manufacturing_content_agent_authorization(
+                       report, deployment, tokens["functions"], tokens["reduced"], tokens["dab"]))
+    report.guarded("agent:manufacturing-content:foundry-identity", "agents",
+                   lambda: foundry_response_identity(report, deployment, "manufacturing-content"))
+    report.guarded("agent:manufacturing-content:tool-suppression", "agents",
+                   lambda: data_supplied_tool_suppression(report, deployment, "manufacturing-content"))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     profile = parser.add_mutually_exclusive_group(required=True)
-    for name in ["offline", "infra", "live", "all", "browsers", "chat"]:
+    profiles = ["offline", "infra", "live", "all", "browsers", "chat", "mcp-functions", "catalog-agent",
+                "promotion-agent", "email-content-agent", "product-content-agent", "manufacturing-content-agent",
+                "analysis-agent", "order-canary"]
+    for name in profiles:
         profile.add_argument("--" + name, action="store_true")
     parser.add_argument("--environment", help="azd environment; otherwise use current selection")
     parser.add_argument("--output", type=Path, help="New evidence directory; defaults to ignored .auth-results/<run-id>")
     parser.add_argument("--public-agent-canary", action="store_true",
                         help="After deploying the matching Functions catalog guard, explicitly allow bounded paid AI requests")
     parser.add_argument("--customer-agent-canary", action="store_true",
-                        help="After deploying the matching MCP and Functions guards, allow one paid customer-chat inference")
+                        help="After deploying the matching MCP and Functions guards, allow one paid customer-chat request")
     parser.add_argument("--admin-agent-canary", action="store_true",
-                        help="After deploying the Functions admin-chat guard, allow one paid read-only admin-chat inference")
+                        help="After deploying the Functions admin-chat guard, allow one paid read-only admin-chat request")
+    parser.add_argument("--promotion-agent-canary", action="store_true",
+                        help="Allow one paid promotion suggestion in the focused, live or all profile")
+    parser.add_argument("--email-content-agent-canary", action="store_true",
+                        help="Allow one paid content-only inference in --email-content-agent, --live or --all")
+    parser.add_argument("--product-content-agent-canary", action="store_true",
+                        help="Allow up to two paid content inferences in --product-content-agent, --live or --all")
+    parser.add_argument("--manufacturing-content-agent-canary", action="store_true",
+                        help="Allow one bounded paid part-sheet request in --manufacturing-content-agent")
+    parser.add_argument("--analysis-agent-canary", action="store_true",
+                        help="After deploying the matching Functions source, allow two synthetic analyses")
+    parser.add_argument("--order-cancellation-canary", action="store_true",
+                        help="With --order-canary or --all, create one storefront and one store order and "
+                             "cancel both via the admin DAB path")
     parser.add_argument("--functions-host", action="store_true",
                         help="Also test the actual Functions worker in a loopback-only local namespace")
     args = parser.parse_args(argv)
-    if args.public_agent_canary and not (args.live or args.all):
-        parser.error("--public-agent-canary requires --live or --all")
+    if args.public_agent_canary and not (args.live or args.all or args.catalog_agent):
+        parser.error("--public-agent-canary requires --catalog-agent, --live or --all")
     if args.customer_agent_canary and not (args.live or args.all or args.chat):
         parser.error("--customer-agent-canary requires --chat, --live or --all")
     if args.admin_agent_canary and not (args.live or args.all or args.chat):
         parser.error("--admin-agent-canary requires --chat, --live or --all")
+    if args.promotion_agent_canary and not (args.promotion_agent or args.live or args.all):
+        parser.error("--promotion-agent-canary requires --promotion-agent, --live or --all")
+    if args.email_content_agent_canary and not (args.live or args.all or args.email_content_agent):
+        parser.error("--email-content-agent-canary requires --email-content-agent, --live or --all")
+    if args.product_content_agent_canary and not (args.live or args.all or args.product_content_agent):
+        parser.error("--product-content-agent-canary requires --product-content-agent, --live or --all")
+    if args.manufacturing_content_agent_canary and not args.manufacturing_content_agent:
+        parser.error("--manufacturing-content-agent-canary requires --manufacturing-content-agent")
+    if args.analysis_agent_canary and not args.analysis_agent:
+        parser.error("--analysis-agent-canary requires --analysis-agent")
+    if args.order_cancellation_canary and not (args.order_canary or args.all):
+        parser.error("--order-cancellation-canary requires --order-canary or --all")
     if args.functions_host and not (args.offline or args.all):
         parser.error("--functions-host requires --offline or --all")
     output = (args.output or ROOT / ".auth-results" / str(uuid.uuid4())).resolve()
@@ -6775,17 +9739,37 @@ def main(argv=None):
         name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
         for name in untracked.split("\0") if name and (ROOT / name).is_file()
     }
-    report.provenance["profile"] = next(name for name in ["offline", "infra", "live", "all", "browsers", "chat"]
-                                      if getattr(args, name))
-    if args.browsers or args.chat:
+    report.provenance["profile"] = next(name for name in profiles if getattr(args, name.replace("-", "_")))
+    if args.order_canary:
+        deployment = runtime or Deployment(args.environment)
+        report.provenance["azdEnvironment"] = deployment.values.get("AZURE_ENV_NAME")
+        report.guarded("order:scenario", "orders",
+                       lambda: run_order_canary(report, deployment, args.order_cancellation_canary))
+        return report.save()
+    if (args.browsers or args.chat or args.mcp_functions or args.catalog_agent or args.promotion_agent or
+            args.email_content_agent or args.product_content_agent or args.manufacturing_content_agent):
         deployment = runtime or Deployment(args.environment)
         report.provenance["azdEnvironment"] = deployment.values.get("AZURE_ENV_NAME")
         record_deployment_origin_inventory(report, deployment)
         if args.browsers:
             browser_tests(report, deployment)
-        else:
+        elif args.chat:
             customer_chat_tests(report, deployment, allow_agent_canary=args.customer_agent_canary,
                                 allow_admin_agent_canary=args.admin_agent_canary)
+        elif args.mcp_functions:
+            report.guarded("mcp-functions:scenario", "live-allows",
+                           lambda: mcp_functions_proxy_tests(report, deployment))
+        elif args.catalog_agent:
+            catalog_agent_tests(report, deployment, allow_agent_canary=args.public_agent_canary)
+        elif args.promotion_agent:
+            promotion_agent_tests(report, deployment, allow_agent_canary=args.promotion_agent_canary)
+        elif args.email_content_agent:
+            email_content_agent_tests(report, deployment, allow_agent_canary=args.email_content_agent_canary)
+        elif args.product_content_agent:
+            product_content_agent_tests(report, deployment, allow_agent_canary=args.product_content_agent_canary)
+        else:
+            manufacturing_content_agent_tests(
+                report, deployment, allow_agent_canary=args.manufacturing_content_agent_canary)
         return report.save()
     try:
         # All profiles build the same assemblies. Serialize across invocations to avoid
@@ -6799,6 +9783,12 @@ def main(argv=None):
             lock.close()
             raise EvidenceError("Another authentication validation run is active") from error
         export_inventory(report, args.offline or args.all)
+        if args.analysis_agent:
+            deployment = runtime or Deployment(args.environment)
+            report.provenance["azdEnvironment"] = deployment.values.get("AZURE_ENV_NAME")
+            record_deployment_origin_inventory(report, deployment)
+            analysis_agent_tests(report, deployment, allow_agent_canary=args.analysis_agent_canary)
+            return report.save()
         if args.offline or args.all:
             offline_tests(report)
         contracts(report)
@@ -6815,7 +9805,11 @@ def main(argv=None):
             if args.live or args.all:
                 live(report, deployment, allow_agent_canary=args.public_agent_canary,
                      allow_customer_agent_canary=args.customer_agent_canary,
-                     allow_admin_agent_canary=args.admin_agent_canary)
+                     allow_admin_agent_canary=args.admin_agent_canary,
+                     allow_email_content_agent_canary=args.email_content_agent_canary,
+                     allow_product_content_agent_canary=args.product_content_agent_canary,
+                     allow_promotion_agent_canary=args.promotion_agent_canary,
+                     allow_order_canary=args.all and args.order_cancellation_canary)
     except (EvidenceError, KeyError, ValueError) as error:
         # Only known, non-sensitive discovery/shape errors. Unexpected programming errors remain visible.
         detail = str(error) if isinstance(error, EvidenceError) else "Unsupported inventory/configuration shape"

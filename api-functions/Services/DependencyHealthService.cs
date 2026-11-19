@@ -44,6 +44,13 @@ public sealed class SelectedIdentityCredential(TokenCredential inner, Guid expec
 
     private AccessToken Check(AccessToken token)
     {
+        VerifyToken(token, expectedClientId);
+        Interlocked.Exchange(ref _verified, 1);
+        return token;
+    }
+
+    internal static void VerifyToken(AccessToken token, Guid expectedClientId)
+    {
         JsonWebToken jwt;
         try
         {
@@ -59,8 +66,6 @@ public sealed class SelectedIdentityCredential(TokenCredential inner, Guid expec
             throw new UnverifiableIdentityTokenException();
         if (claims.Any(claim => Guid.Parse(claim.Value) != expectedClientId))
             throw new IdentityTokenMismatchException();
-        Interlocked.Exchange(ref _verified, 1);
-        return token;
     }
 }
 

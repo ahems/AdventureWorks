@@ -59,12 +59,19 @@ class WorkloadProbeTests(unittest.TestCase):
             if url.endswith("/token"):
                 form = kwargs["form"]
                 self.assertEqual(form["assertion"], "secret-entra-assertion")
-                self.assertEqual(form["scope"], "mcp.access products.read")
                 self.assertNotIn("token", kwargs)
                 if form["resource"] != configuration["values"]["MCP_RESOURCE_IDENTIFIER"]:
+                    self.assertEqual(form["scope"], "mcp.access products.read")
                     if scenario == "wrong-target-allowed":
                         return 200, {}, b'{"access_token":"secret-unexpected-token"}'
                     return 400, {}, b'{"error":"invalid_target"}'
+                if form["scope"] != "mcp.access products.read":
+                    self.assertIn(form["scope"], ["mcp.access mcp.admin", "mcp.access manufacturing.write"])
+                    if ((scenario == "admin-grant-allowed" and form["scope"].endswith("mcp.admin")) or
+                            (scenario == "manufacturing-grant-allowed" and
+                             form["scope"].endswith("manufacturing.write"))):
+                        return 200, {}, b'{"access_token":"secret-unexpected-token"}'
+                    return 400, {}, b'{"error":"invalid_scope"}'
                 if scenario == "grant-denied":
                     return 400, {}, b'{"error":"invalid_grant","error_description":"secret-values"}'
                 if scenario == "grant-malformed":
@@ -85,6 +92,17 @@ class WorkloadProbeTests(unittest.TestCase):
                     result = {"content": [{"type": "text", "text": text}]}
                     if scenario == "catalogue-invalid-error-type":
                         result["isError"] = 0
+                elif name == "get_product_availability":
+                    self.assertEqual(payload["params"]["arguments"], {"productId": 0})
+                    if scenario == "profile-tool-malformed":
+                        return 200, {}, b"invalid"
+                    if scenario == "profile-tool-leak":
+                        result = {"content": [{"type": "text", "text": "private values must not escape"}]}
+                    elif scenario == "profile-task-created":
+                        result = {"taskId": "unexpected-task"}
+                    else:
+                        result = {"isError": True, "content": [{"type": "text",
+                            "text": "This service is not authorized to call this tool."}]}
                 elif scenario == "scope-leak":
                     result = {"content": [{"type": "text", "text": "private values must not escape"}]}
                 else:
@@ -108,14 +126,15 @@ class WorkloadProbeTests(unittest.TestCase):
     def test_real_identity_scope_and_resource_contract_uses_only_read_only_probes(self):
         document, requests, scopes = self.run_probe()
         self.assertEqual(scopes, ["api://AzureADTokenExchange/.default"])
-        self.assertEqual(len(document["checks"]), 11)
+        self.assertEqual(len(document["checks"]), 14)
         self.assertTrue(all(check["status"] == "PASS" for check in document["checks"]))
-        self.assertEqual(len(requests), 10)
+        self.assertEqual(len(requests), 13)
         self.assertEqual({request[1].split("/")[2] for request in requests},
                          {"mcp.example.invalid", "functions.example.invalid", "dab.example.invalid"})
         self.assertEqual({request[2]["data"]["params"]["name"] for request in requests
                           if request[1].endswith("/mcp")},
-                         {"get_categories_with_products", "get_personalized_recommendations", "get_business_stats"})
+                         {"get_categories_with_products", "get_product_availability",
+                          "get_personalized_recommendations", "get_business_stats"})
         self.assertIn("not proof", document["provenance"]["identityOrigin"])
 
     def test_wrong_identity_never_exchanges_and_wrong_grants_never_dispatch(self):
@@ -131,12 +150,14 @@ class WorkloadProbeTests(unittest.TestCase):
 
     def test_normalized_entra_exchange_application_id_is_accepted_without_broadening_scopes(self):
         document, requests, _ = self.run_probe("normalized-exchange-audience")
-        self.assertEqual(len(requests), 10)
+        self.assertEqual(len(requests), 13)
         self.assertTrue(all(check["status"] == "PASS" for check in document["checks"]))
 
     def test_empty_positive_scope_leaks_and_other_resource_acceptance_cannot_pass(self):
         for scenario in ["empty-catalogue", "scope-leak", "other-resource-allowed", "wrong-target-allowed",
-                         "catalogue-http-failure", "catalogue-malformed", "catalogue-invalid-error-type"]:
+                         "catalogue-http-failure", "catalogue-malformed", "catalogue-invalid-error-type",
+                         "admin-grant-allowed", "manufacturing-grant-allowed", "profile-tool-leak",
+                         "profile-tool-malformed", "profile-task-created"]:
             with self.subTest(scenario=scenario):
                 document, _, _ = self.run_probe(scenario)
                 self.assertTrue(any(check["status"] == "FAIL" for check in document["checks"]))

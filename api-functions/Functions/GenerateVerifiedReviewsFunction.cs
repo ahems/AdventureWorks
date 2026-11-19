@@ -322,7 +322,7 @@ public class GenerateVerifiedReviewsFunction
                                 reviewId, customer.CustomerID, product.ProductID);
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (ex is not FoundryToolPolicyException)
                     {
                         _logger.LogError(ex, "Error generating review for CustomerID={cid}, ProductID={pid}",
                             customer.CustomerID, product.ProductID);
@@ -359,7 +359,7 @@ public class GenerateVerifiedReviewsFunction
                             await _reviewService.SaveReviewReplyAsync(reviewId, reply);
                         _logger.LogInformation("Saved {count} replies for productId={pid}", replies.Count, product.ProductID);
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (ex is not FoundryToolPolicyException)
                     {
                         _logger.LogWarning(ex, "Failed to generate replies for productId={pid}", product.ProductID);
                     }

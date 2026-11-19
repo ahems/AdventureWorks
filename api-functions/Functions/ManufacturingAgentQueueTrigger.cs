@@ -52,6 +52,7 @@ public class ManufacturingAgentQueueTrigger
     private readonly TokenCredential                         _credential;
     private readonly WebPubSubService                        _webPubSub;
     private readonly string                                  _agentEndpoint;
+    private readonly string                                  _projectEndpoint;
     private readonly string                                  _functionsBaseUrl;
     private readonly string                                  _queueServiceUri;
 
@@ -75,6 +76,7 @@ public class ManufacturingAgentQueueTrigger
         _webPubSub         = webPubSub;
 
         _agentEndpoint  = configuration["MANUFACTURING_AGENT_ENDPOINT"] ?? string.Empty;
+        _projectEndpoint = configuration["AI_FOUNDRY_PROJECT_ENDPOINT"] ?? string.Empty;
         _functionsBaseUrl = (configuration["API_FUNCTIONS_URL"] ?? string.Empty).TrimEnd('/');
 
         var accountName = configuration["AzureWebJobsStorage:accountName"] ?? string.Empty;
@@ -190,11 +192,10 @@ public class ManufacturingAgentQueueTrigger
         }
         catch (Exception ex)
         {
-            // Treat all other failures as throttle/transient for robustness
-            _logger.LogWarning(ex,
-                "[AgentQueue] Transient failure for RunId={RunId} (attempt {Attempt}). Will retry.",
-                msg.RunId, msg.RetryCount + 1);
-            await HandleThrottleAsync(msg, ex.Message);
+            _logger.LogWarning(
+                "[AgentQueue] Transient failure for RunId={RunId} (attempt {Attempt}, type {ErrorType}). Will retry.",
+                msg.RunId, msg.RetryCount + 1, ex.GetType().Name);
+            await HandleThrottleAsync(msg, "Unexpected hosted-agent processing failure.");
         }
     }
 
@@ -227,15 +228,24 @@ public class ManufacturingAgentQueueTrigger
             stream = false
         };
 
-        using var http    = _httpClientFactory.CreateClient();
-        http.Timeout      = TimeSpan.FromMinutes(5);
-        var json          = JsonSerializer.Serialize(requestBody, JsonOpts);
+        var json = JsonSerializer.Serialize(requestBody, JsonOpts);
+        return await SendHostedResponseAsync(_httpClientFactory, _credential, _projectEndpoint,
+            _agentEndpoint, json, CancellationToken.None);
+    }
+
+    internal static async Task<AgentInvocationResult> SendHostedResponseAsync(
+        IHttpClientFactory factory, TokenCredential credential, string projectEndpoint, string agentEndpoint,
+        string json, CancellationToken cancellationToken)
+    {
+        var endpoint = ValidateHostedAgentEndpoint(projectEndpoint, agentEndpoint);
+        using var http = factory.CreateClient(AgentHttpClients.HostedManufacturing);
+        http.Timeout = TimeSpan.FromMinutes(5);
 
         // Acquire a Foundry bearer token — hosted agent endpoints require auth
-        var token = await _credential.GetTokenAsync(
-            new TokenRequestContext([FoundryTokenScope]), CancellationToken.None);
+        var token = await credential.GetTokenAsync(
+            new TokenRequestContext([FoundryTokenScope]), cancellationToken);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _agentEndpoint)
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
@@ -244,30 +254,42 @@ public class ManufacturingAgentQueueTrigger
         HttpResponseMessage response;
         try
         {
-            response = await http.SendAsync(request);
+            response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             throw new ManufacturingAgentThrottledException("Hosted agent HTTP request timed out.");
         }
 
-        var responseBody = await response.Content.ReadAsStringAsync();
-
-        if (response.StatusCode == HttpStatusCode.TooManyRequests ||
-            response.StatusCode == HttpStatusCode.ServiceUnavailable)
+        using (response)
         {
-            var retryAfterHeader = response.Headers.RetryAfter?.Delta?.TotalSeconds;
-            var msg429 = $"Rate limited ({(int)response.StatusCode}). RetryAfter={retryAfterHeader}s. Body={responseBody[..Math.Min(200, responseBody.Length)]}";
-            throw new ManufacturingAgentThrottledException(msg429);
-        }
+            if (response.StatusCode == HttpStatusCode.TooManyRequests ||
+                response.StatusCode == HttpStatusCode.ServiceUnavailable)
+            {
+                var retryAfterHeader = response.Headers.RetryAfter?.Delta?.TotalSeconds;
+                throw new ManufacturingAgentThrottledException(
+                    $"Hosted agent returned HTTP {(int)response.StatusCode}; RetryAfter={retryAfterHeader}s.");
+            }
 
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ManufacturingAgentThrottledException(
-                $"Hosted agent returned {(int)response.StatusCode}: {responseBody[..Math.Min(200, responseBody.Length)]}");
-        }
+            if (!response.IsSuccessStatusCode)
+                throw new ManufacturingAgentThrottledException($"Hosted agent returned HTTP {(int)response.StatusCode}.");
 
-        return ParseAgentResponse(responseBody);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            return ParseAgentResponse(responseBody);
+        }
+    }
+
+    internal static Uri ValidateHostedAgentEndpoint(string projectEndpoint, string agentEndpoint)
+    {
+        const string query = "?api-version=v1";
+        const string path = "/agents/manufacturing-agent/endpoint/protocols/openai/responses";
+        if (!McpServiceTokenProvider.MatchesEndpoint(projectEndpoint, projectEndpoint) ||
+            projectEndpoint.EndsWith("//", StringComparison.Ordinal) ||
+            !agentEndpoint.EndsWith(query, StringComparison.Ordinal) ||
+            !McpServiceTokenProvider.MatchesEndpoint(
+                projectEndpoint.TrimEnd('/') + path, agentEndpoint[..^query.Length]))
+            throw new InvalidOperationException("Hosted agent endpoint does not match the configured Foundry project.");
+        return new Uri(agentEndpoint, UriKind.Absolute);
     }
 
     internal static AgentInvocationResult ParseAgentResponse(string responseBody)
@@ -371,9 +393,13 @@ public class ManufacturingAgentQueueTrigger
                     DeserializeStringArray(inner, "actionsExecuted"), DeserializeRecommendedActions(inner));
             }
         }
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or OverflowException)
+        catch (InvalidOperationException ex)
         {
             throw new ManufacturingAgentThrottledException($"Hosted agent response rejected: {ex.Message}");
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException or OverflowException)
+        {
+            throw new ManufacturingAgentThrottledException("Hosted agent response rejected: invalid response.");
         }
     }
 
@@ -385,6 +411,9 @@ public class ManufacturingAgentQueueTrigger
             var code = error.ValueKind == JsonValueKind.Object &&
                 error.TryGetProperty("code", out var errorCode) && errorCode.ValueKind == JsonValueKind.String
                     ? errorCode.GetString() : "unspecified";
+            if (code is not ("server_error" or "unauthorized" or "invalid_scope" or "tool_failure" or
+                "rate_limit_exceeded" or "invalid_request_error" or "authentication_error" or "permission_denied"))
+                code = "unrecognized";
             throw new InvalidOperationException($"Hosted agent reported an error ({code}).");
         }
         if (value.TryGetProperty("incomplete_details", out var details) && details.ValueKind != JsonValueKind.Null)

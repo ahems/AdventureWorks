@@ -33,6 +33,8 @@ var openAiEndpoint = builder.Configuration["AZURE_OPENAI_ENDPOINT"]
 var apiFunctionsUrl = builder.Configuration["API_FUNCTIONS_URL"]
 	?? Environment.GetEnvironmentVariable("API_FUNCTIONS_URL")
 	?? throw new InvalidOperationException("API_FUNCTIONS_URL configuration is required for manufacturing and supply chain tools");
+var functionsEndpoint = new FunctionsEndpoint(apiFunctionsUrl);
+builder.Services.AddSingleton(functionsEndpoint);
 
 // Register AdventureWorks services with localization
 builder.Services.AddScoped<OrderService>(sp =>
@@ -67,6 +69,7 @@ builder.Services.AddTransient<AdventureWorks.Auth.FunctionsServiceTokenHandler>(
 AddFunctionsClient<ManufacturingService>(90);
 AddFunctionsClient<SupplyChainService>(90);
 AddFunctionsClient<BankService>(90);
+AddFunctionsClient<ManufacturingAutonomyGuard>(10);
 // Reset runs manufacturing, supply, bank, and shopping resets sequentially; stay below the ~230s Functions HTTP limit.
 AddFunctionsClient<SimulatorService>(200);
 
@@ -75,8 +78,9 @@ void AddFunctionsClient<TService>(int timeoutSeconds) where TService : class
 #pragma warning disable EXTEXP0001 // Required to replace Aspire's default resilience pipeline for these clients only.
 	builder.Services.AddHttpClient<TService>(client =>
 	{
-		client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
+		client.BaseAddress = functionsEndpoint.Address;
 	}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>()
+		.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
 		.RemoveAllResilienceHandlers()
 		.AddStandardResilienceHandler(options =>
 		{
@@ -91,9 +95,10 @@ void AddFunctionsClient<TService>(int timeoutSeconds) where TService : class
 }
 
 // Resolve task store: durable Azure Table Storage when a storage account is configured, else in-memory
+var authOptions = builder.AddMcpAuthorization(connectionString ?? string.Empty);
 var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"]
 	?? Environment.GetEnvironmentVariable("STORAGE_ACCOUNT_NAME");
-var taskOwnership = new McpTaskOwnership();
+var taskOwnership = new McpTaskOwnership(authOptions);
 builder.Services.AddSingleton(taskOwnership);
 IMcpTaskStore taskStore = !string.IsNullOrEmpty(storageAccountName)
 	? new AzureTableMcpTaskStore(storageAccountName, taskOwnership)
@@ -121,6 +126,17 @@ builder.Services
 	   .WithTasks(taskStore)
 	   .WithRequestFilters(filters =>
 	   {
+		   // Task execution can begin after the pre-creation authorization check.
+		   filters.AddCallToolFilter(next => async (context, ct) =>
+		   {
+			   if (ManufacturingAutonomyGuard.IsAction(context.Params?.Name))
+			   {
+				   var denial = await McpToolAuthorizationFilter.AuthorizeAsync(context, ct);
+				   if (denial is not null) return denial;
+			   }
+			   return await next(context, ct);
+		   });
+
 		   // Centralized Application Insights telemetry for every tool call
 		   filters.AddCallToolFilter(next => async (context, ct) =>
 		   {
@@ -167,9 +183,6 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 	o.KnownNetworks.Clear();
 	o.KnownProxies.Clear();
 });
-
-// Self-contained OAuth authorization server + resource-server validation for MCP.
-var authOptions = builder.AddMcpAuthorization(connectionString ?? string.Empty);
 
 var app = builder.Build();
 

@@ -6,6 +6,7 @@ using System.Net;
 using System.Text.Json;
 using api_functions.Models;
 using api_functions.Services;
+using ApiFunctions.Auth;
 
 namespace api_functions.Functions;
 
@@ -48,6 +49,14 @@ public class GenerateProductContentFunction
 
         try
         {
+            var caller = FunctionUser.Current(req.FunctionContext);
+            if (!caller.IsAuthenticated || string.IsNullOrWhiteSpace(caller.SubjectId))
+            {
+                var unauthorized = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await unauthorized.WriteAsJsonAsync(new { error = "authentication_required" });
+                return unauthorized;
+            }
+
             var body = await new StreamReader(req.Body).ReadToEndAsync();
             var request = JsonSerializer.Deserialize<GenerateProductContentRequest>(body,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -69,7 +78,7 @@ public class GenerateProductContentFunction
             });
 
             var (result, threadId) = await _productContentService.GenerateProductContentAsync(
-                request, request.PreviousResponseId);
+                request, request.PreviousResponseId, caller.SubjectId);
 
             // Attach the Foundry response ID so the wizard can chain subsequent products.
             result.ThreadId = threadId;
@@ -77,6 +86,16 @@ public class GenerateProductContentFunction
             var ok = req.CreateResponse(HttpStatusCode.OK);
             await ok.WriteAsJsonAsync(result);
             return ok;
+        }
+        catch (ChatConversationException)
+        {
+            var forbidden = req.CreateResponse(HttpStatusCode.Forbidden);
+            await forbidden.WriteAsJsonAsync(new
+            {
+                error = "conversation_not_available",
+                message = "Start a new conversation and try again."
+            });
+            return forbidden;
         }
         catch (Exception ex)
         {

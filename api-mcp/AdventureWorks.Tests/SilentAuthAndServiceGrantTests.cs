@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AdventureWorks.Auth;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace AdventureWorks.Tests;
@@ -294,6 +295,86 @@ public class SilentAuthAndServiceGrantTests : IClassFixture<OAuthTestFactory>
 
             var response = await PostAsync(client, form);
             Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+        }
+    }
+
+    [Theory]
+    [InlineData("functions", "products.read", true)]
+    [InlineData("functions", "mcp.access admin.write", true)]
+    [InlineData("functions", "mcp.access manufacturing.write", false)]
+    [InlineData("functions", "mcp.access mcp.admin", false)]
+    [InlineData("functions", "products.read mcp.admin", false)]
+    [InlineData("hosted", "mcp.access manufacturing.read manufacturing.write", true)]
+    [InlineData("hosted", "mcp.access admin.write", false)]
+    [InlineData("hosted", "mcp.access mcp.admin", false)]
+    [InlineData("unprofiled", "mcp.access products.read", false)]
+    public async Task Service_grant_enforces_the_validated_principals_scope_profile(
+        string profile, string scopes, bool allowed)
+    {
+        var assertion = profile switch
+        {
+            "functions" => OAuthTestFactory.ValidServiceAssertion,
+            "hosted" => OAuthTestFactory.ValidHostedAssertion,
+            _ => OAuthTestFactory.ValidUnprofiledAssertion,
+        };
+        using var factory = new OAuthTestFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+        var response = await PostAsync(client, new()
+        {
+            ["grant_type"] = ManagedIdentityGrant.GrantType,
+            ["client_id"] = AuthorizationServerOptions.ServiceClientId,
+            ["assertion"] = assertion,
+            ["resource"] = OAuthTestFactory.ResourceIdentifier,
+            ["scope"] = scopes,
+        });
+
+        Assert.Equal(allowed ? HttpStatusCode.OK : HttpStatusCode.BadRequest, response.StatusCode);
+        if (allowed)
+        {
+            var actual = DecodeJwtPayload(response.RootElement.GetProperty("access_token").GetString()!)
+                .GetProperty("scope").GetString()!.Split(' ').OrderBy(scope => scope);
+            Assert.Equal(scopes.Split(' ').Append(OAuthScopes.McpAccess).Distinct().OrderBy(scope => scope), actual);
+        }
+        else
+        {
+            Assert.Equal("invalid_scope", response.RootElement.GetProperty("error").GetString());
+            Assert.False(response.RootElement.TryGetProperty("access_token", out _));
+        }
+    }
+
+    [Fact]
+    public async Task Service_grant_fails_closed_when_principal_profiles_overlap()
+    {
+        using var factory = new OAuthTestFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+        var options = factory.Services.GetRequiredService<AuthorizationServerOptions>();
+        var original = options.HostedManufacturingServicePrincipalId;
+        options.HostedManufacturingServicePrincipalId = options.FunctionsServicePrincipalId;
+        try
+        {
+            var response = await PostAsync(client, new()
+            {
+                ["grant_type"] = ManagedIdentityGrant.GrantType,
+                ["client_id"] = AuthorizationServerOptions.ServiceClientId,
+                ["assertion"] = OAuthTestFactory.ValidServiceAssertion,
+                ["resource"] = OAuthTestFactory.ResourceIdentifier,
+                ["scope"] = "products.read",
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("invalid_scope", response.RootElement.GetProperty("error").GetString());
+            Assert.False(response.RootElement.TryGetProperty("access_token", out _));
+        }
+        finally
+        {
+            options.HostedManufacturingServicePrincipalId = original;
         }
     }
 

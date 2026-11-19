@@ -468,7 +468,8 @@ class Mutations:
         for protocol in ["rest", "graphql"]:
             for role in ["consumer", "authenticated"]:
                 for caller, other in [(callers[0], callers[1]), (callers[1], callers[0])]:
-                    credentials = [("cross-owner", caller.token("dab"), other)]
+                    credentials = [("cross-owner", caller.token("dab"), other),
+                                   ("store-field", caller.token("dab"), caller)]
                     if role == "consumer":
                         credentials += [("anonymous", None, caller),
                                         ("forged", "invalid-auth-validation-token", caller),
@@ -478,6 +479,8 @@ class Mutations:
                         self.require(check + "-baseline", self.customer_states(callers, territory) == [empty, empty],
                                      "Private SQL must find neither owner's Customer rows before the create attempt.")
                         item = {"PersonID": target.business_id, "TerritoryID": territory}
+                        if label == "store-field":
+                            item["StoreID"] = None
                         payload = item if protocol == "rest" else {"query": query, "variables": {"item": item}}
                         residual = {"kind": "customer-create-denial", "entity": "Customer",
                                     "owner": target.business_id, "label": check, "state": "creation-requested"}
@@ -492,7 +495,7 @@ class Mutations:
                             body = None
                         if label in {"forged", "functions-audience"}:
                             denied = status == 401
-                        elif label == "anonymous" and protocol == "rest":
+                        elif label in {"anonymous", "store-field"} and protocol == "rest":
                             error = body.get("error") if isinstance(body, dict) else None
                             denied = (status == 403 and isinstance(error, dict) and error.get("status") == 403 and
                                       error.get("code") == "AuthorizationCheckFailed" and
@@ -508,6 +511,8 @@ class Mutations:
                             message, code = (
                                 ("The current user is not authorized to access this resource.", "AUTH_NOT_AUTHENTICATED")
                                 if label == "anonymous" else
+                                ("Unauthorized due to one or more fields in this mutation.", "AuthorizationCheckFailed")
+                                if label == "store-field" else
                                 ("Could not insert row with given values.", "DatabasePolicyFailure"))
                             denied = (status == 200 and isinstance(errors, list) and bool(errors) and
                                       all(isinstance(error, dict) and error.get("message") == message and
@@ -614,7 +619,7 @@ class Mutations:
         for protocol in ["rest", "graphql"]:
             for role in ["consumer", "authenticated"]:
                 for owner in ["A", "B"]:
-                    labels = ["cross-owner"] + (
+                    labels = ["cross-owner", "store-field"] + (
                         ["anonymous", "forged", "functions-audience"] if role == "consumer" else [])
                     for label in labels:
                         name = f"customer-create-{protocol}-{role}-{owner}-{label}"

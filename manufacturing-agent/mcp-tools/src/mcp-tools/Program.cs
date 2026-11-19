@@ -6,9 +6,9 @@
 // proposal or action IDs.
 //
 // Behaviour is controlled by the `mode` field in the incoming message:
-//   ReadOnly (0)        — analyse and report only; never take autonomous actions
-//   ProposePending (1)  — propose actions via ProposeManufacturingRun / ProposeSupplyOrder
-//   FullyAutonomous (2) — execute actions directly via BeginManufacturingRun / PlaceSupplyOrder
+//   ReadOnly (1)        — analyse and report only; never take autonomous actions
+//   ProposePending (2)  — propose actions via ProposeManufacturingRun / ProposeSupplyOrder
+//   FullyAutonomous (3) — execute actions directly via BeginManufacturingRun / PlaceSupplyOrder
 
 #pragma warning disable MEAI001 // HostedMcpServerTool is experimental
 
@@ -35,7 +35,7 @@ var mcpServiceUrl = Environment.GetEnvironmentVariable("MCP_SERVICE_URL")
 // ── Server-side MCP: AdventureWorks manufacturing + supply chain tools ────────
 // The Foundry Responses API calls the MCP server on behalf of the agent —
 // no local MCP connection or tool-call approval loop needed.
-HostedMcpServerTool CreateMcpTool(string authorization) => new(
+HostedMcpServerTool CreateMcpTool(string authorization, string mode) => new(
     serverName: "adventureworks_mcp",
     serverAddress: mcpServiceUrl)
 {
@@ -44,26 +44,7 @@ HostedMcpServerTool CreateMcpTool(string authorization) => new(
     {
         ["Authorization"] = authorization
     },
-    // Restrict to manufacturing, supply chain, and order/inventory tools only.
-    AllowedTools =
-    [
-        // Manufacturing analysis
-        "get_manufacturing_status", "get_active_manufacturing_operations",
-        "get_production_feasibility", "get_all_products_feasibility",
-        "get_manufacturing_catalog_snapshot", "get_overstock_items",
-        "get_thin_margin_products", "get_component_shortage_forecast",
-        "get_reorder_recommendations",
-        // Manufacturing execute (FullyAutonomous mode only)
-        "begin_manufacturing_run",
-        // Supply chain analysis
-        "get_supply_chain_vendors", "get_vendor_details",
-        "get_supply_catalog", "get_supply_quote",
-        "get_active_supply_orders", "get_supply_order_history",
-        // Supply chain execute (FullyAutonomous mode only)
-        "place_supply_order",
-        // Order and inventory context
-        "get_order_details", "check_inventory_availability", "get_product_details",
-    ]
+    AllowedTools = McpServiceAuthentication.GetToolsForMode(mode)
 };
 
 // ── Agent instructions ────────────────────────────────────────────────────────
@@ -175,7 +156,7 @@ AIAgent agent = new AIProjectClient(projectEndpoint, credential)
                 ResponseFormat = options?.ResponseFormat
             };
         runOptions.ChatOptions = runOptions.ChatOptions?.Clone() ?? new ChatOptions();
-        runOptions.ChatOptions.Tools = [CreateMcpTool(authorization)];
+        runOptions.ChatOptions.Tools = [CreateMcpTool(authorization, mode)];
         await next(messages, session, runOptions, cancellationToken);
     })
     .Build();

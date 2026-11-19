@@ -46,6 +46,7 @@ public class ReviewAnalysisAgentService
         operation.Telemetry.Properties["ReviewCount"] = reviews.Count.ToString();
 
         var results = new List<ReviewAnalysisResult>();
+        var memoryUserId = $"review-analysis-{Guid.NewGuid():N}";
         const int batchSize = 10;
 
         for (int i = 0; i < reviews.Count; i += batchSize)
@@ -53,8 +54,13 @@ public class ReviewAnalysisAgentService
             var batch = reviews.Skip(i).Take(batchSize).ToList();
             try
             {
-                var batchResults = await AnalyzeBatchAsync(batch);
+                var batchResults = await AnalyzeBatchAsync(batch, memoryUserId);
                 results.AddRange(batchResults);
+            }
+            catch (FoundryToolPolicyException)
+            {
+                operation.Telemetry.Success = false;
+                throw;
             }
             catch (Exception ex)
             {
@@ -74,7 +80,8 @@ public class ReviewAnalysisAgentService
         return results;
     }
 
-    private async Task<List<ReviewAnalysisResult>> AnalyzeBatchAsync(List<ReviewInput> reviews)
+    private async Task<List<ReviewAnalysisResult>> AnalyzeBatchAsync(
+        List<ReviewInput> reviews, string memoryUserId)
     {
         var reviewsJson = JsonSerializer.Serialize(reviews.Select(r => new
         {
@@ -101,7 +108,7 @@ public class ReviewAnalysisAgentService
         var agentResponse = await _foundryClient.InvokeAsync(
             agentId: _agentId,
             userMessage: userMessage,
-            userId: "review-analysis",
+            userId: memoryUserId,
             toolChoice: "none");
 
         var content = StripMarkdownFences(agentResponse.ResponseText ?? "[]");

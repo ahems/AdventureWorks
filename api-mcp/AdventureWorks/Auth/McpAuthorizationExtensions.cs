@@ -284,6 +284,7 @@ public static class McpAuthorizationExtensions
                 ". Every tool must be classified with a required scope and access mode.");
         }
 
+        ServicePrincipalPolicy.Validate();
         logger.LogInformation("MCP tool authorization coverage validated: {Count} tools mapped to scopes.", toolNames.Count);
     }
 
@@ -306,6 +307,8 @@ public static class McpAuthorizationExtensions
         };
 
         options.EntraTenantId = Get("MCP_ENTRA_TENANT_ID");
+        options.FunctionsServicePrincipalId = Get("MCP_FUNCTIONS_PRINCIPAL_ID");
+        options.HostedManufacturingServicePrincipalId = Get("MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID");
         var trustedPrincipals = Get("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS");
         if (!string.IsNullOrWhiteSpace(trustedPrincipals))
         {

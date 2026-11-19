@@ -63,7 +63,13 @@ class MutationTests(unittest.TestCase):
             else:
                 self.assertIn(headers, [{"X-MS-API-ROLE": "consumer"}, {"X-MS-API-ROLE": "authenticated"}])
             wrong_audience = token is not None and not str(token).startswith("dab:")
-            denied = token is None or wrong_audience or item["PersonID"] != owner
+            forbidden_field = "StoreID" in item
+            if forbidden_field:
+                self.assertIsNone(item["StoreID"])
+                self.assertEqual(item["PersonID"], owner)
+            denied = (token is None or wrong_audience or item["PersonID"] != owner or
+                      forbidden_field and defect != "customer-store-field-accepted" and
+                      not (defect == "customer-store-field-graphql-accepted" and graphql))
             if defect == "customer-request-timeout":
                 raise suite.auth.EvidenceError("Customer create transport failed; result is unknown")
             if defect in {"customer-accepted", "customer-accepted-but-written"} and denied:
@@ -79,13 +85,15 @@ class MutationTests(unittest.TestCase):
                     return 200, {}, b'{"ok":true}'
                 if wrong_audience:
                     return 401, {}, b'{"error":"invalid_token"}'
-                if token is None and not graphql:
+                if (token is None or forbidden_field) and not graphql:
                     error = {"status": 403, "code": "AuthorizationCheckFailed",
                              "message": "Authorization Failure: Access Not Allowed."}
-                    if defect == "customer-anonymous-constraint-error":
+                    if defect == "customer-anonymous-constraint-error" and token is None:
                         error["code"] = "DatabaseOperationFailed"
-                    if defect == "customer-anonymous-malformed-error":
+                    if defect == "customer-anonymous-malformed-error" and token is None:
                         error.pop("status")
+                    if defect == "customer-store-field-constraint" and forbidden_field:
+                        error["code"] = "DatabaseOperationFailed"
                     return 403, {}, json.dumps({"error": error}).encode()
                 if not graphql:
                     error = {"status": 403, "code": "DatabasePolicyFailure",
@@ -95,8 +103,12 @@ class MutationTests(unittest.TestCase):
                     return 403, {}, json.dumps({"error": error}).encode()
                 message, code = (
                     ("The current user is not authorized to access this resource.", "AUTH_NOT_AUTHENTICATED")
-                    if token is None else ("Could not insert row with given values.", "DatabasePolicyFailure"))
+                    if token is None else
+                    ("Unauthorized due to one or more fields in this mutation.", "AuthorizationCheckFailed")
+                    if forbidden_field else ("Could not insert row with given values.", "DatabasePolicyFailure"))
                 if defect == "customer-constraint-error" and token:
+                    code = "DatabaseOperationFailed"
+                if defect == "customer-store-field-graphql-constraint" and forbidden_field:
                     code = "DatabaseOperationFailed"
                 return 200, {}, json.dumps({"data": {"createCustomer": None}, "errors": [{
                     "message": message, "path": ["createCustomer"], "extensions": {"code": code}}]}).encode()
@@ -491,9 +503,9 @@ class MutationTests(unittest.TestCase):
             self.assertEqual(len(accounts), 4)
             self.assertEqual(len(addresses), 0)
             self.assertEqual(len(reviews), 4)
-            self.assertEqual(len(report.inventory["mutationResiduals"]), 72)
+            self.assertEqual(len(report.inventory["mutationResiduals"]), 80)
             self.assertEqual(sum(item["state"] == "retained" for item in report.inventory["mutationResiduals"]), 12)
-            self.assertEqual(sum(item["state"] == "verified-absent" for item in report.inventory["mutationResiduals"]), 60)
+            self.assertEqual(sum(item["state"] == "verified-absent" for item in report.inventory["mutationResiduals"]), 68)
             self.assertEqual(sum(method == "POST" and path == "/api/signup" for method, path in calls), 4)
             self.assertTrue(all("orders" not in path and "simulator" not in path and "agent" not in path
                                 and "email" not in path for _, path in calls))
@@ -514,7 +526,7 @@ class MutationTests(unittest.TestCase):
         for protocol in ["rest", "graphql"]:
             for role in ["consumer", "authenticated"]:
                 for owner in ["A", "B"]:
-                    labels = ["cross-owner"]
+                    labels = ["cross-owner", "store-field"]
                     if role == "consumer":
                         labels += ["anonymous", "forged", "functions-audience"]
                     for label in labels:
@@ -624,7 +636,21 @@ class MutationTests(unittest.TestCase):
                 residual = next(item for item in report.inventory["mutationResiduals"]
                                 if item.get("label") == name.removeprefix("mutation:"))
                 self.assertEqual(residual["state"], "creation-requested")
-                self.assertEqual(sum(call == ("POST", "/api/Customer") for call in calls), 2)
+                self.assertEqual(sum(call == ("POST", "/api/Customer") for call in calls), 3)
+
+    def test_customer_store_field_requires_authorization_denial_and_no_row(self):
+        for defect in ["customer-store-field-accepted", "customer-store-field-constraint",
+                       "customer-store-field-graphql-accepted", "customer-store-field-graphql-constraint"]:
+            with self.subTest(defect=defect):
+                report, *_ = self.run_suite(defect)
+                checks = {item["id"]: item for item in report.checks}
+                protocol = "graphql" if "-graphql-" in defect else "rest"
+                name = f"mutation:customer-create-{protocol}-consumer-A-store-field"
+                self.assertEqual(checks[name]["status"], "FAIL")
+                self.assertEqual(checks["mutation:customer-create-evidence"]["status"], "BLOCKED")
+                residual = next(item for item in report.inventory["mutationResiduals"]
+                                if item.get("label") == name.removeprefix("mutation:"))
+                self.assertEqual(residual["state"], "creation-requested")
 
     def test_customer_denied_write_is_retained_with_its_observed_owner_and_id(self):
         report, *_ = self.run_suite("customer-denied-but-written")

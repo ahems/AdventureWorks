@@ -62,25 +62,25 @@ print(json.dumps({
 }))
 " "$INTENT_AGENT_NAME" "$CHAT_GPT_DEPLOYMENT" "$INTENT_AGENT_INSTRUCTIONS")
 
-INTENT_GET=$(curl -s -o /tmp/_order_intent_get.json -w "%{http_code}" \
+INTENT_GET=$(curl -s -o "$AGENT_TEMP_DIR/intent-get.json" -w "%{http_code}" \
     -H "Authorization: Bearer $TOKEN_INTENT" \
     "${PROJECT_ENDPOINT}/agents/${INTENT_AGENT_NAME}?api-version=${API_VERSION}" 2>/dev/null)
 
 if [ "$INTENT_GET" = "200" ]; then
-    INTENT_HTTP=$(curl -s -o /tmp/_order_intent_resp.json -w "%{http_code}" -X POST \
+    INTENT_HTTP=$(curl -s -o "$AGENT_TEMP_DIR/intent-response.json" -w "%{http_code}" -X POST \
         -H "Authorization: Bearer $TOKEN_INTENT" \
         -H "Content-Type: application/json" \
         -d "$INTENT_BODY" \
         "${PROJECT_ENDPOINT}/agents/${INTENT_AGENT_NAME}?api-version=${API_VERSION}" 2>/dev/null)
 else
-    INTENT_HTTP=$(curl -s -o /tmp/_order_intent_resp.json -w "%{http_code}" -X POST \
+    INTENT_HTTP=$(curl -s -o "$AGENT_TEMP_DIR/intent-response.json" -w "%{http_code}" -X POST \
         -H "Authorization: Bearer $TOKEN_INTENT" \
         -H "Content-Type: application/json" \
         -d "$INTENT_BODY" \
         "${PROJECT_ENDPOINT}/agents?api-version=${API_VERSION}" 2>/dev/null)
 fi
 
-INTENT_RESPONSE=$(cat /tmp/_order_intent_resp.json 2>/dev/null || true)
+INTENT_RESPONSE=$(cat "$AGENT_TEMP_DIR/intent-response.json" 2>/dev/null || true)
 if ! echo "$INTENT_RESPONSE" | python3 -c "import json,sys; json.load(sys.stdin)" > /dev/null 2>&1; then
     error "API call failed for $INTENT_AGENT_NAME (HTTP $INTENT_HTTP). Response: $INTENT_RESPONSE"
     exit 1
@@ -143,7 +143,7 @@ print(json.dumps({
 }))
 " "$YAML_CONTENT" "$AGENT_NAME" "$DESCRIPTION" "$DISPLAY_NAME")
 
-GET_STATUS=$(curl -s -o /tmp/_order_wf_get.json -w "%{http_code}" \
+GET_STATUS=$(curl -s -o "$AGENT_TEMP_DIR/workflow-get.json" -w "%{http_code}" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Foundry-Features: WorkflowAgents=V1Preview" \
     "${BASE_URL}/${AGENT_NAME}?${API_QS}" 2>/dev/null)
@@ -162,14 +162,14 @@ print(json.dumps({
     }
 }))
 " "$YAML_CONTENT" "$DESCRIPTION" "$DISPLAY_NAME")
-    HTTP_CODE=$(curl -s -o /tmp/_order_wf_resp.json -w "%{http_code}" -X POST \
+    HTTP_CODE=$(curl -s -o "$AGENT_TEMP_DIR/workflow-response.json" -w "%{http_code}" -X POST \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -H "Foundry-Features: WorkflowAgents=V1Preview" \
         -d "$UPDATE_BODY" \
         "${BASE_URL}/${AGENT_NAME}?${API_QS}" 2>/dev/null)
 else
-    HTTP_CODE=$(curl -s -o /tmp/_order_wf_resp.json -w "%{http_code}" -X POST \
+    HTTP_CODE=$(curl -s -o "$AGENT_TEMP_DIR/workflow-response.json" -w "%{http_code}" -X POST \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -H "Foundry-Features: WorkflowAgents=V1Preview" \
@@ -177,7 +177,7 @@ else
         "${BASE_URL}?${API_QS}" 2>/dev/null)
 fi
 
-RESPONSE=$(cat /tmp/_order_wf_resp.json 2>/dev/null || true)
+RESPONSE=$(cat "$AGENT_TEMP_DIR/workflow-response.json" 2>/dev/null || true)
 
 if ! echo "$RESPONSE" | python3 -c "import json,sys; json.load(sys.stdin)" > /dev/null 2>&1; then
     error "API call failed for $AGENT_NAME (HTTP $HTTP_CODE). Response: $RESPONSE"

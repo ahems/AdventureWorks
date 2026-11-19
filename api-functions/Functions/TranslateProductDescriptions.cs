@@ -333,9 +333,7 @@ public class TranslateProductDescriptions
         {
             try
             {
-                var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
-                    ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
-                var productService = new ProductService(connectionString);
+                var productService = _serviceProvider.GetRequiredService<ProductService>();
 
                 var allCultures = await productService.GetAllCulturesAsync();
                 var nonEnglish = allCultures.Where(c => !c.CultureID.TrimEnd().Equals("en", StringComparison.OrdinalIgnoreCase) && !c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -369,6 +367,10 @@ public class TranslateProductDescriptions
 
                     _logger.LogInformation("Saved {count} product name translations for ProductID {ProductID}", namesToSave.Count, targetProductId);
                 }
+            }
+            catch (FoundryToolPolicyException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

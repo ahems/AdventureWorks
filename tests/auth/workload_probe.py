@@ -100,6 +100,17 @@ def workload_checks(configuration, credential=None):
                      "Service grant preserves the actual principal, service category, MCP audience and exact two scopes; tokens withheld.")
         if not valid:
             raise auth.EvidenceError("Issued service token is broader or differently bound than requested")
+        for label, scope in [("admin", "mcp.admin"), ("manufacturing-write", "manufacturing.write")]:
+            status, _, raw = auth.http("POST", mcp + "/token",
+                                       form={**form, "scope": "mcp.access " + scope})
+            try:
+                denied = json.loads(raw)
+            except ValueError:
+                denied = None
+            report.check("workload:mcp:profile-scope-denial:" + label, "private-workload",
+                         status == 400 and isinstance(denied, dict) and
+                         denied.get("error") == "invalid_scope" and "access_token" not in denied,
+                         f"Shared runtime identity cannot mint {scope}; HTTP {status}; values withheld.")
         deployment = SimpleNamespace(required=values.__getitem__)
         status, _, raw = auth.http(
             "POST", mcp + "/mcp", token=token,
@@ -129,6 +140,22 @@ def workload_checks(configuration, credential=None):
                      f"Catalogue-only real UAMI token reads SQL-backed catalogue output; HTTP {status}; records withheld.")
         if not valid:
             raise auth.EvidenceError("Workload catalogue positive control failed; output withheld")
+        status, _, raw = auth.http(
+            "POST", mcp + "/mcp", token=token,
+            data={"jsonrpc": "2.0", "id": 44, "method": "tools/call",
+                  "params": {"name": "get_product_availability", "arguments": {"productId": 0}}})
+        try:
+            document = auth.mcp_document(raw) if status == 200 else {}
+        except auth.EvidenceError:
+            document = {}
+        result = document.get("result")
+        report.check("workload:mcp:profile-tool-denial", "private-workload",
+                     status == 200 and document.get("jsonrpc") == "2.0" and document.get("id") == 44 and
+                     "error" not in document and isinstance(result, dict) and "taskId" not in result and
+                     result.get("isError") is True and result.get("content") == [{
+                         "type": "text", "text": "This service is not authorized to call this tool.",
+                     }],
+                     "Matching products.read is insufficient for this read-only, non-profile tool; values withheld.")
         for tool, scope in [("get_personalized_recommendations", "orders.read"),
                             ("get_business_stats", "sales.read")]:
             for task in [False, True]:

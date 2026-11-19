@@ -59,7 +59,8 @@ public class ProductContentAgentService
     /// </returns>
     public async Task<(GenerateProductContentResponse Result, string? ThreadId)> GenerateProductContentAsync(
         GenerateProductContentRequest request,
-        string? previousResponseId = null)
+        string? previousResponseId = null,
+        string? conversationOwner = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("ProductContentAgent.Generate");
         operation.Telemetry.Properties["Category"] = request.Category;
@@ -109,7 +110,8 @@ public class ProductContentAgentService
                 userMessage: userMessage,
                 userId: memoryUserId,
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
-                toolChoice: "none");
+                toolChoice: "none",
+                conversationOwner: conversationOwner);
 
             _logger.LogInformation(
                 "ProductContentAgent: Category={Category}, Subcategory={Subcategory}, ResponseLength={Length}",

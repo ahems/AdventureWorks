@@ -41,6 +41,7 @@ public class CartRecoveryAnalysisFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "carts/analyze-recovery")]
         HttpRequestData req)
     {
+        using var activity = InvocationActivity.Start(req.FunctionContext.TraceContext, "CartRecoveryAnalysis");
         _logger.LogInformation("AnalyzeCartRecovery called");
 
         try

@@ -19,7 +19,7 @@ OPTIONAL = {
 
 @unittest.skipUnless(shutil.which("bash") and shutil.which("jq"), "Bash and jq are required")
 class HealthDiagnosticsScriptTests(unittest.TestCase):
-    def run_script(self, checks):
+    def run_script(self, checks, mcp_checks=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "functions.json").write_text(json.dumps({
@@ -27,7 +27,7 @@ class HealthDiagnosticsScriptTests(unittest.TestCase):
             }))
             (root / "mcp.json").write_text(json.dumps({
                 "status": "healthy", "checkedAt": "2026-01-01T00:00:00Z",
-                "checks": [{"id": name, "status": "healthy", "message": "ok"} for name in ["sql", "tasks"]],
+                "checks": mcp_checks if mcp_checks is not None else self.mcp_checks(),
             }))
             curl = root / "curl"
             curl.write_text("""#!/usr/bin/env python3
@@ -69,10 +69,16 @@ else:
         return [{"id": name, "status": "healthy", "message": "ok", "required": name in REQUIRED}
                 for name in sorted(REQUIRED | OPTIONAL)]
 
+    def mcp_checks(self):
+        return [{"id": name, "status": "healthy", "message": "ok", "required": name != "sql-identity"}
+                for name in ["sql", "sql-identity", "tasks"]]
+
     def test_accepts_complete_contract_with_optional_identity_failure(self):
         checks = self.checks()
         next(item for item in checks if item["id"] == "blob-identity")["status"] = "timeout"
-        result = self.run_script(checks)
+        mcp_checks = self.mcp_checks()
+        next(item for item in mcp_checks if item["id"] == "sql-identity")["status"] = "timeout"
+        result = self.run_script(checks, mcp_checks)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_rejects_missing_duplicate_extra_and_misclassified_checks(self):
@@ -88,6 +94,20 @@ else:
         for checks in [missing, duplicate, extra, misclassified, unhealthy]:
             with self.subTest(checks=checks):
                 self.assertNotEqual(self.run_script(checks).returncode, 0)
+
+    def test_rejects_invalid_mcp_identity_contract(self):
+        original = self.mcp_checks()
+        missing = [item for item in original if item["id"] != "sql-identity"]
+        duplicate = copy.deepcopy(original) + [copy.deepcopy(original[1])]
+        extra = copy.deepcopy(original) + [{"id": "unreviewed", "status": "healthy",
+                                           "message": "ok", "required": False}]
+        misclassified = copy.deepcopy(original)
+        next(item for item in misclassified if item["id"] == "sql-identity")["required"] = True
+        unhealthy = copy.deepcopy(original)
+        next(item for item in unhealthy if item["id"] == "sql")["status"] = "unhealthy"
+        for checks in [missing, duplicate, extra, misclassified, unhealthy]:
+            with self.subTest(checks=checks):
+                self.assertNotEqual(self.run_script(self.checks(), checks).returncode, 0)
 
 
 if __name__ == "__main__":

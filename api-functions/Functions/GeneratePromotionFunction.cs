@@ -6,6 +6,7 @@ using Microsoft.ApplicationInsights.DataContracts;
 using System.Net;
 using System.Text.Json;
 using api_functions.Services;
+using ApiFunctions.Auth;
 
 namespace api_functions.Functions;
 
@@ -39,6 +40,14 @@ public class GeneratePromotionFunction
 
         try
         {
+            var caller = FunctionUser.Current(req.FunctionContext);
+            if (!caller.IsAuthenticated || string.IsNullOrWhiteSpace(caller.SubjectId))
+            {
+                var unauthorized = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await unauthorized.WriteAsJsonAsync(new { error = "authentication_required" });
+                return unauthorized;
+            }
+
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var request = JsonSerializer.Deserialize<GeneratePromotionRequest>(requestBody,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -67,7 +76,8 @@ public class GeneratePromotionFunction
                 request.CategoryName,
                 request.SubcategoryId,
                 request.SubcategoryName,
-                request.PreviousThreadId
+                request.PreviousThreadId,
+                caller.SubjectId
             );
 
             var duration = DateTimeOffset.UtcNow - requestStartTime;
@@ -83,6 +93,16 @@ public class GeneratePromotionFunction
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(responsePayload);
             return response;
+        }
+        catch (ChatConversationException)
+        {
+            var forbidden = req.CreateResponse(HttpStatusCode.Forbidden);
+            await forbidden.WriteAsJsonAsync(new
+            {
+                error = "conversation_not_available",
+                message = "Start a new conversation and try again."
+            });
+            return forbidden;
         }
         catch (Exception ex)
         {

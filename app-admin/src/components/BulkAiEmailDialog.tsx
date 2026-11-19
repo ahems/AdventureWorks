@@ -114,6 +114,8 @@ interface BulkAiEmailDialogProps {
   onComplete: () => void;
 }
 
+class AgentToolPolicyError extends Error {}
+
 // AI content generation via Azure Functions endpoint
 const generateAIEmailContent = async (
   template: EmailTemplate,
@@ -143,7 +145,20 @@ const generateAIEmailContent = async (
     },
   );
 
-  if (!response.ok) throw new Error(`AI generation failed: ${response.status}`);
+  if (!response.ok) {
+    if (response.status === 502) {
+      const error: unknown = await response.json();
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "agent_tool_policy_violation"
+      ) {
+        throw new AgentToolPolicyError("Agent tool-policy violation");
+      }
+    }
+    throw new Error(`AI generation failed: ${response.status}`);
+  }
   const data = await response.json();
   if (data.error) throw new Error(data.error);
   return { subject: data.subject ?? "", body: data.body ?? "" };
@@ -220,6 +235,26 @@ const BulkAiEmailDialog: React.FC<BulkAiEmailDialogProps> = ({
           ),
         );
       } catch (error) {
+        if (error instanceof AgentToolPolicyError) {
+          newEmails.clear();
+          setGeneratedEmails(newEmails);
+          setPreviewCustomerId(null);
+          setEmailStatuses((prev) =>
+            prev.map((s) => ({
+              ...s,
+              subject: undefined,
+              preview: undefined,
+              status: s.customerId === customer.CustomerID ? "failed" : s.status,
+              error:
+                s.customerId === customer.CustomerID
+                  ? "Agent policy violation; generation stopped"
+                  : s.error,
+            })),
+          );
+          setIsGenerating(false);
+          toast.error("Generation stopped due to an agent policy violation. Generated content was discarded; no emails were sent during generation.");
+          return;
+        }
         setEmailStatuses((prev) =>
           prev.map((s) =>
             s.customerId === customer.CustomerID
@@ -318,9 +353,9 @@ const BulkAiEmailDialog: React.FC<BulkAiEmailDialogProps> = ({
     (t) => t.id === selectedTemplate,
   )!;
   const allGenerated = generatedEmails.size === selectedCustomers.length;
-  const allSent = emailStatuses.every(
-    (s) => s.status === "success" || s.status === "failed",
-  );
+  const allSent =
+    generatedEmails.size > 0 &&
+    emailStatuses.every((s) => s.status === "success" || s.status === "failed");
   const successCount = emailStatuses.filter(
     (s) => s.status === "success",
   ).length;

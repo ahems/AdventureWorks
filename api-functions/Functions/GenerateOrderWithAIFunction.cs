@@ -6,6 +6,7 @@ using Microsoft.ApplicationInsights.DataContracts;
 using System.Net;
 using System.Text.Json;
 using api_functions.Services;
+using ApiFunctions.Auth;
 
 namespace api_functions.Functions;
 
@@ -40,6 +41,14 @@ public class GenerateOrderWithAIFunction
 
         try
         {
+            var caller = FunctionUser.Current(req.FunctionContext);
+            if (!caller.IsAuthenticated || string.IsNullOrWhiteSpace(caller.SubjectId))
+            {
+                var unauthorized = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await unauthorized.WriteAsJsonAsync(new { error = "authentication_required" });
+                return unauthorized;
+            }
+
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var request = JsonSerializer.Deserialize<GenerateOrderWithAIRequest>(requestBody,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -64,7 +73,8 @@ public class GenerateOrderWithAIFunction
                 request.PersonaType,
                 request.CustomPersona,
                 seedCustomerId: request.SeedCustomerId,
-                previousResponseId: request.PreviousThreadId);
+                previousResponseId: request.PreviousThreadId,
+                conversationOwner: caller.SubjectId);
 
             var duration = DateTimeOffset.UtcNow - requestStartTime;
             _telemetryClient.TrackRequest("GenerateOrderWithAI", requestStartTime, duration,
@@ -73,6 +83,16 @@ public class GenerateOrderWithAIFunction
             var response = req.CreateResponse(result.Success ? HttpStatusCode.OK : HttpStatusCode.InternalServerError);
             await response.WriteAsJsonAsync(result);
             return response;
+        }
+        catch (ChatConversationException)
+        {
+            var forbidden = req.CreateResponse(HttpStatusCode.Forbidden);
+            await forbidden.WriteAsJsonAsync(new
+            {
+                error = "conversation_not_available",
+                message = "Start a new conversation and try again."
+            });
+            return forbidden;
         }
         catch (Exception ex)
         {

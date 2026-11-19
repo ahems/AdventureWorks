@@ -104,8 +104,8 @@ public class ReviewAgentService
 
             if (jsonStart == -1 || jsonEnd <= jsonStart)
             {
-                _logger.LogWarning("ReviewAgent response contains no JSON object for ProductID={ProductID}: {Response}",
-                    product.ProductID, responseText);
+                _logger.LogWarning("ReviewAgent response contains no JSON object for ProductID={ProductID}; response length={Length}",
+                    product.ProductID, responseText.Length);
                 operation.Telemetry.Success = false;
                 return null;
             }

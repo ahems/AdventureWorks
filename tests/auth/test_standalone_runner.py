@@ -188,6 +188,40 @@ class StandaloneRunnerTests(unittest.TestCase):
             self.assertEqual(documents[1][1]["checks"][0]["id"], "effective-permissions-incomplete")
             self.assertEqual(documents[1][1]["checks"][0]["status"], "BLOCKED")
 
+    def test_private_host_gate_uses_local_evidence_without_hiding_failed_or_unconfirmed_attempts(self):
+        host_id = "required:functions-middleware-host-denials"
+        def check(status, detail="Required coverage obligation is not established by registry or helper tests"):
+            return {"id": host_id, "group": "required", "status": status, "detail": detail}
+
+        for scenario in ["pass", "local-fail", "local-blocked", "private-fail", "private-attempt-blocked",
+                         "missing-local", "duplicate-local", "duplicate-private", "wrong-group"]:
+            with self.subTest(scenario=scenario):
+                local = {"checks": [check("PASS", "Exact current-run isolated cases passed.")]}
+                suite = {"checks": [check("BLOCKED")]}
+                if scenario == "local-fail":
+                    local["checks"][0]["status"] = "FAIL"
+                elif scenario == "local-blocked":
+                    local["checks"][0]["status"] = "BLOCKED"
+                elif scenario == "private-fail":
+                    suite["checks"][0]["status"] = "FAIL"
+                elif scenario == "private-attempt-blocked":
+                    suite["checks"][0]["detail"] = "The attempted host could not establish namespace isolation."
+                elif scenario == "missing-local":
+                    local["checks"] = []
+                elif scenario == "duplicate-local":
+                    local["checks"] *= 2
+                elif scenario == "duplicate-private":
+                    suite["checks"] *= 2
+                elif scenario == "wrong-group":
+                    local["checks"][0]["group"] = "offline"
+                original = copy.deepcopy(suite)
+                entrypoint.reconcile_unit_evidence(local, suite)
+                if scenario == "pass":
+                    self.assertEqual(suite["checks"][0]["status"], "NOT_APPLICABLE")
+                    self.assertEqual(local["checks"][0]["status"], "PASS")
+                else:
+                    self.assertEqual(suite, original)
+
     def test_browser_only_dispatch_does_not_run_dotnet_or_sql_probes(self):
         with patch.object(entrypoint, "execute") as execute, \
                 patch.object(entrypoint.socket, "getaddrinfo") as dns:
@@ -416,12 +450,12 @@ class StandaloneRunnerTests(unittest.TestCase):
             self.assertEqual(len(list(output.iterdir())), 5)
             self.assertTrue(all(path.stat().st_mode & 0o777 == 0o600 for path in output.iterdir()))
 
-    def test_recovery_transfer_bound_accepts_one_mib_and_rejects_one_byte_more(self):
+    def test_recovery_transfer_bound_accepts_four_mib_and_rejects_one_byte_more(self):
         for extra in [0, 1]:
             with self.subTest(extra=extra), tempfile.TemporaryDirectory() as directory:
                 document, ledger = self.recovery_fixture()
                 others = sum(value["bytes"] for name, value in document["artifacts"].items() if name != "report.pdf")
-                data = b"%PDF-" + b"x" * (1024 * 1024 + extra - others - 5)
+                data = b"%PDF-" + b"x" * (4 * 1024 * 1024 + extra - others - 5)
                 document["artifacts"]["report.pdf"] = {
                     "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
                     "content": base64.b64encode(data).decode()}
@@ -649,7 +683,8 @@ class StandaloneRunnerTests(unittest.TestCase):
             self.assertEqual([call[1] for call in calls], ["test"])
 
     def test_controller_cleans_exact_job_after_success_or_partial_provision_and_execution_failure(self):
-        for failure in [None, "provision", "execution", "cleanup", "browser", "sql", "mutations", "address"]:
+        for failure in [None, "provision", "execution", "cleanup", "browser", "sql", "mutations", "address",
+                        "host-blocked", "host-failed"]:
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 jobs = []
@@ -714,7 +749,14 @@ class StandaloneRunnerTests(unittest.TestCase):
                 def result(*args):
                     if failure == "execution":
                         raise runner.RunnerError("No complete report")
+                    if failure == "host-failed":
+                        return {"outcome": "FAIL", "counts": {"FAIL": 1}}
                     return {"outcome": "BLOCKED", "counts": {"BLOCKED": 1}}
+
+                host_status = "BLOCKED" if failure == "host-blocked" else "FAIL" if failure == "host-failed" else "PASS"
+                def host_checks(report):
+                    report.add("required:functions-middleware-host-denials", "required", host_status,
+                               "Local loopback-only worker evidence; no deployed triggers.")
 
                 with patch.object(runner, "ROOT", root), \
                         patch.object(runner.shutil, "which", return_value="/tool"), \
@@ -722,6 +764,7 @@ class StandaloneRunnerTests(unittest.TestCase):
                         patch.object(runner, "discover", return_value=resources), \
                         patch.object(runner.auth, "export_inventory") as inventory, \
                         patch.object(runner.auth, "contracts") as contracts, \
+                        patch.object(runner.auth, "functions_host_tests", side_effect=host_checks) as host, \
                         patch.object(runner.auth, "infra") as infra, \
                         patch.object(runner.auth, "consumer_fixtures") as consumers, \
                         patch.object(runner, "context_files", return_value=[]), \
@@ -738,6 +781,12 @@ class StandaloneRunnerTests(unittest.TestCase):
                     inventory.assert_not_called()
                     contracts.assert_not_called()
                     infra.assert_not_called()
+                    host.assert_not_called()
+                else:
+                    host.assert_called_once()
+                    host_check, = configurations[0]["localReport"]["checks"]
+                    self.assertEqual(host_check["status"], host_status)
+                    self.assertEqual(host_check["id"], "required:functions-middleware-host-denials")
                 if failure in {"sql", "mutations"}:
                     consumers.assert_not_called()
                 build_arguments = build_command.call_args.args[0]
@@ -759,8 +808,10 @@ class StandaloneRunnerTests(unittest.TestCase):
                     self.assertNotIn("temporaryTableName", final)
                     self.assertNotIn("mutationTableName", configurations[0]["storage"])
                     self.assertNotIn("tableEndpoint", configurations[0]["storage"])
-                self.assertEqual(code, 2 if failure in {None, "browser", "sql", "mutations", "address"} else 3)
-                self.assertEqual(final["uploaded"], failure in {None, "cleanup", "browser", "sql", "mutations", "address"})
+                self.assertEqual(code, 1 if failure == "host-failed" else
+                                 2 if failure in {None, "browser", "sql", "mutations", "address", "host-blocked"} else 3)
+                self.assertEqual(final["uploaded"], failure in {
+                    None, "cleanup", "browser", "sql", "mutations", "address", "host-blocked", "host-failed"})
                 if failure == "cleanup":
                     self.assertIn("unverified", final["computeCleanup"])
                     self.assertEqual(final["cleanupError"]["detail"], "Deletion failed")
@@ -806,6 +857,8 @@ class StandaloneRunnerTests(unittest.TestCase):
         self.assertIn(Path("seed-job/dockerfile"), paths)
         self.assertIn(Path("scripts/hooks/postprovision.sh"), paths)
         self.assertIn(Path("tests/scripts/test_keyvault_firewall.py"), paths)
+        self.assertIn(Path("tests/scripts/test-seed-sql-identity.py"), paths)
+        self.assertIn(Path("tests/scripts/seed-sql-identity-probe.cjs"), paths)
         self.assertIn(Path("mcp-inspector/gateway.mjs"), paths)
         self.assertIn(Path("mcp-inspector/package-lock.json"), paths)
         for path in paths:

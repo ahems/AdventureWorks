@@ -15,6 +15,22 @@ Tool allowlists and model instructions use the MCP SDK's case-sensitive
 **snake_case wire names** (for example `get_order_details`), not C# method names
 (`GetOrderDetails`). PascalCase filtering removes all exposed tools and can
 produce a model `tool_failure` even after authentication succeeds.
+ReadOnly and ProposePending receive only read scopes and read-named tools;
+FullyAutonomous additionally receives `manufacturing.write` and the two action
+tools. An omitted token-response scope means the requested set, as permitted by
+OAuth; an explicitly different or malformed scope is rejected.
+
+The mode is parsed from invocation text. The normal Functions trigger obtains it
+from the persisted configuration, but a direct authorized Foundry caller can
+supply different text. MCP independently checks the persisted mode before
+task creation and immediately before dispatching either service-category action
+tool. The check is not atomic with the downstream mutation; changing mode cannot
+guarantee cancellation of work already authorized. Direct invocation provenance
+and hosted runtime identity remain unverified. ReadOnly also
+does not guarantee side-effect-free execution: some underlying supply/planning
+GETs lazily initialize stock and purchase-order processing. See the
+[authentication guide](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md)
+before running agent canaries.
 
 The grant, client ID, and resource match Functions'
 `api-functions/Services/McpServiceTokenProvider.cs`. The hosted implementation lives
@@ -40,16 +56,17 @@ using the same Container App environment-update pattern as OAuth redirect wiring
    `blueprint.principal_id`, `instance_identity.client_id`, or the project identity.
 3. Read the existing api-mcp `MCP_TRUSTED_SERVICE_PRINCIPAL_IDS` and
    `MCP_ENTRA_TENANT_ID`. Require a configured service grant and existing shared
-   identity trust; append the hosted principal without discarding any existing IDs.
-4. Update only the named trust/redirect environment variables in the same
+   identity trust. Resolve distinct runtime and hosted principals for the
+   server-owned scope/tool profiles.
+4. Update the named trust, principal-profile and redirect environment variables in the same
    `az containerapp update --set-env-vars` call, then wire Functions' agent endpoint.
 
 The read-only resolver is `scripts/utilities/hosted-agent-mcp-trust.py`. It rejects
 unexpected endpoints, prompt agents, missing instance identity, or invalid existing
 grant configuration rather than silently reporting successful wiring. Repeated
-deployments deduplicate IDs; identity rotation adds the current principal but does
-not revoke old identities or unrelated explicit trust. Revocation is a separate
-administrator policy decision.
+deployments deduplicate IDs. Identity rotation removes the previously configured
+hosted principal and adds the current one while preserving unrelated explicit
+trust; those other principals are denied unless they have a server-owned profile.
 
 **Deployment order:** deploy `manufacturing-agent` from the repository root with
 the normal `azd deploy manufacturing-agent --no-prompt` workflow. Its root
@@ -70,10 +87,11 @@ remains an explicit invocation/deployment blocker, not an anonymous fallback.
 
 No hosted `environmentVariables` grant configuration is missing: the caller uses
 `MCP_SERVICE_URL`, and the assertion audience/grant/client ID are protocol constants.
-`MCP_ENTRA_TENANT_ID` and `MCP_TRUSTED_SERVICE_PRINCIPAL_IDS` belong to **api-mcp**,
-not the hosted agent; existing Bicep supplies the tenant/shared trust and the root
-hook adds the deployed instance principal. Do not work around auth errors with a
-stored token, anonymous MCP access, or a startup-time token.
+`MCP_ENTRA_TENANT_ID`, `MCP_TRUSTED_SERVICE_PRINCIPAL_IDS`,
+`MCP_FUNCTIONS_PRINCIPAL_ID` and `MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID` belong
+to **api-mcp**, not the hosted agent; Bicep supplies the tenant/shared trust and
+the root hook binds both deployed principal profiles. Do not work around auth
+errors with a stored token, anonymous MCP access, or a startup-time token.
 
 The Functions response-validation fix can be deployed independently of this agent.
 HTTP 200 is not sufficient: the Responses envelope must be completed, error-free,

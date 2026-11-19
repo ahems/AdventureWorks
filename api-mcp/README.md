@@ -24,6 +24,10 @@ The MCP server is implemented as an ASP.NET Core service with SSE transport and 
   MCP catalog SQL read and task-store read checks pass, 503 otherwise. With no
   configured storage account, the existing local in-memory task store is valid
   but explicitly reported as non-durable.
+- Its optional `sql-identity` check compares the current SQL connection's external
+  principal with `AZURE_CLIENT_ID`. It does not expose either identifier or affect
+  core readiness; missing local configuration is reported as `not-configured`.
+  This samples one connection, not every MCP tool or SQL permission.
 - Results are cached per process for 60 seconds; checks are bounded to 12 seconds.
   No tasks or infrastructure are created. A read pass does not prove write
   permission, authenticated tool execution, or model/agent runtime health.
@@ -101,6 +105,13 @@ Key configuration is in `AdventureWorks/Program.cs`:
   - MCP endpoint exposed at `/mcp` via `app.MapMcp("/mcp");`.
 
 The Functions project (`api-functions`) uses `MCP_SERVICE_URL` (set by azd) to point to this `/mcp` endpoint.
+
+For MCP tools that proxy Functions, `API_FUNCTIONS_URL` must be an HTTPS origin
+without a path, credentials, query or fragment. HTTP is supported only on
+loopback for local development. The proxy binds its signed service token to that
+origin, rejects caller-supplied authorization or Host headers, and does not
+follow redirects. Without an OAuth issuer, only a loopback proxy may call Functions
+without a token; missing signing credentials otherwise fail closed.
 
 ---
 

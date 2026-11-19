@@ -35,6 +35,13 @@ public class EmailService
     }
 
     /// <summary>
+    /// The only Azure Communication Services client factory; callers must apply
+    /// <see cref="EmailRecipientPolicy"/> first.
+    /// </summary>
+    protected virtual EmailClient CreateEmailClient() =>
+        new(new Uri(_communicationServiceEndpoint), _credential);
+
+    /// <summary>
     /// Creates a SQL connection with Azure AD authentication via connection string
     /// </summary>
     private async Task<SqlConnection> CreateConnectionAsync()
@@ -314,6 +321,14 @@ public class EmailService
                 return false;
             }
 
+            if (EmailRecipientPolicy.IsReservedNonDeliverable(emailAddress))
+            {
+                _logger.LogInformation(
+                    "[EmailSuppressed] Reserved non-deliverable recipient domain for customer {CustomerId}; no email sent.",
+                    customerId);
+                return false;
+            }
+
             // Get customer name
             var customerInfo = await GetCustomerInfoAsync(customerId);
             if (customerInfo == null)
@@ -322,8 +337,7 @@ public class EmailService
                 return false;
             }
 
-            // Create Email Client with managed identity
-            var emailClient = new EmailClient(new Uri(_communicationServiceEndpoint), _credential);
+            var emailClient = CreateEmailClient();
 
             // Build HTML email content with DoodleCSS styling
             var htmlContent = GenerateHtmlContent(subject, emailContent, customerInfo.Value.FirstName);
@@ -435,9 +449,13 @@ public class EmailService
     {
         try
         {
-            var emailClient = new EmailClient(
-                new Uri(_communicationServiceEndpoint),
-                _credential);
+            if (EmailRecipientPolicy.IsReservedNonDeliverable(toEmail))
+            {
+                _logger.LogInformation("[EmailSuppressed] Reserved non-deliverable recipient domain; no direct email sent.");
+                return false;
+            }
+
+            var emailClient = CreateEmailClient();
 
             var senderAddress = $"donotreply@{_senderDomain}";
 

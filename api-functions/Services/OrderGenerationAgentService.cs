@@ -72,7 +72,8 @@ public class OrderGenerationAgentService
         Action<string, string>? onLog = null,
         string? previousResponseId = null,
         string? orderMode = null,
-        int? storeId = null)
+        int? storeId = null,
+        string? conversationOwner = null)
     {
         var result = new OrderGenerationResult();
         var startTime = DateTimeOffset.UtcNow;
@@ -192,6 +193,7 @@ public class OrderGenerationAgentService
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
                 toolChoice: "required",
+                conversationOwner: conversationOwner,
                 mcpServiceScopes:
                 [
                     McpServiceTokenProvider.ProductsReadScope,
@@ -199,7 +201,8 @@ public class OrderGenerationAgentService
                     McpServiceTokenProvider.CustomersReadScope,
                     McpServiceTokenProvider.OrdersReadScope,
                     McpServiceTokenProvider.AdminWriteScope,
-                ]);
+                ],
+                requireOrderGenerationTools: true);
             rawResponse = agentResponse.ResponseText ?? string.Empty;
 
             if (agentResponse.ToolsUsed?.Count > 0)
@@ -381,6 +384,11 @@ public class OrderGenerationAgentService
 
             return result;
         }
+        catch (ChatConversationException)
+        {
+            operation.Telemetry.Success = false;
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Order generation failed for persona={Persona}", personaType);
@@ -395,8 +403,8 @@ public class OrderGenerationAgentService
 
             if (!string.IsNullOrWhiteSpace(rawResponse))
             {
-                var preview = rawResponse.Length > 400 ? rawResponse[..400] + "..." : rawResponse;
-                _logger.LogWarning("AI order plan failure code={FailureCode}; raw response preview: {Preview}", failureCode, preview);
+                _logger.LogWarning("AI order plan failure code={FailureCode}; response body omitted (length={Length})",
+                    failureCode, rawResponse.Length);
             }
 
             _telemetryClient.TrackException(ex, new Dictionary<string, string>

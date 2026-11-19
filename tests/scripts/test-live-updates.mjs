@@ -113,6 +113,202 @@ test("job events filter instance identity; reconnect and visible focus recover m
   stop();
 });
 
+test("review moderation reports stopped jobs without claiming completion", async () => {
+  const source = await readFile(new URL("../../app-admin/src/pages/ReviewsPage.tsx", import.meta.url), "utf8");
+  const file = ts.createSourceFile("ReviewsPage.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  const visit = node => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === "refreshReviewModerationStatus") {
+      assert.ok(ts.isCallExpression(node.initializer));
+      callback = node.initializer.arguments[0].getText(file);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(callback);
+  const code = ts.transpileModule(`globalThis.refresh = ${callback};`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  const run = async status => {
+    const notifications = [];
+    const invalidations = [];
+    const context = {
+      getReviewModerationStatus: async () => status,
+      startingModerationRef: { current: false },
+      activeModerationJobIdRef: { current: "job-1" },
+      notifyModerationCompletionRef: { current: true },
+      setIsAnalyzeApproveAllRunning: () => {},
+      setAnalyzeApproveAllProgress: () => {},
+      queryClient: { invalidateQueries: value => invalidations.push(value) },
+      toast: value => notifications.push(value),
+      console,
+    };
+    vm.runInNewContext(code, context);
+    await context.refresh();
+    assert.equal(invalidations.length, 1);
+    assert.equal(notifications.length, 1);
+    return notifications[0];
+  };
+  const stopped = await run({
+    isRunning: false, jobId: "job-1", queuedCount: 3, processedCount: 2,
+    successCount: 1, failedCount: 1, skippedCount: 0, lastError: "Policy violation.",
+  });
+  assert.equal(stopped.title, "Analyze & Approve Stopped");
+  assert.equal(stopped.variant, "destructive");
+  assert.match(stopped.description, /1 completed, 1 failed, 0 skipped\. Policy violation\./);
+
+  const completed = await run({
+    isRunning: false, jobId: "job-1", queuedCount: 2, processedCount: 2,
+    successCount: 2, failedCount: 0, skippedCount: 0, lastError: null,
+  });
+  assert.equal(completed.title, "Analyze & Approve Complete");
+  assert.match(completed.description, /2 reviews analyzed, replied, and approved\./);
+});
+
+test("bulk email generation stops and discards content after an agent policy violation", async () => {
+  const source = await readFile(new URL("../../app-admin/src/components/BulkAiEmailDialog.tsx", import.meta.url), "utf8");
+  const file = ts.createSourceFile("BulkAiEmailDialog.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const fragments = {};
+  const visit = node => {
+    if (ts.isClassDeclaration(node) && node.name?.text === "AgentToolPolicyError")
+      fragments.error = node.getText(file);
+    if (ts.isVariableDeclaration(node) &&
+        ["generateAIEmailContent", "handleGenerateAll", "allSent"].includes(node.name.getText(file)))
+      fragments[node.name.getText(file)] = node.initializer.getText(file);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(fragments.error && fragments.generateAIEmailContent && fragments.handleGenerateAll && fragments.allSent);
+  const code = ts.transpileModule(`
+    ${fragments.error}
+    const generateAIEmailContent = ${fragments.generateAIEmailContent};
+    globalThis.generate = ${fragments.handleGenerateAll};
+  `, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+
+  const run = async policyFailure => {
+    const selectedCustomers = [1, 2, 3].map(CustomerID => ({
+      CustomerID, FirstName: "Synthetic", EmailAddress: `synthetic${CustomerID}@example.test`,
+    }));
+    let statuses = selectedCustomers.map(customer => ({ customerId: customer.CustomerID, status: "pending" }));
+    let generated;
+    let generating = false;
+    const calls = [];
+    const notices = [];
+    const context = {
+      selectedCustomers, selectedTemplate: "stale_cart", allOrders: [], allCarts: [],
+      getFunctionsApiUrl: () => "https://functions.example.test",
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        if (calls.length === 2) {
+          return policyFailure
+            ? { ok: false, status: 502, json: async () => ({ code: "agent_tool_policy_violation" }) }
+            : { ok: false, status: 502, json: async () => ({ code: "upstream_unavailable" }) };
+        }
+        return { ok: true, status: 200, json: async () => ({ subject: "Subject", body: "Body" }) };
+      },
+      setEmailStatuses: update => { statuses = typeof update === "function" ? update(statuses) : update; },
+      setGeneratedEmails: value => { generated = value; },
+      setPreviewCustomerId: () => {},
+      setIsGenerating: value => { generating = value; },
+      toast: { success: message => notices.push({ kind: "success", message }),
+               error: message => notices.push({ kind: "error", message }) },
+    };
+    vm.runInNewContext(code, context);
+    await context.generate();
+    return { calls, statuses, generated, generating, notices };
+  };
+
+  const stopped = await run(true);
+  assert.equal(stopped.calls.length, 2);
+  assert.ok(stopped.calls.every(call => call.url.endsWith("/api/email/generate-ai-content")));
+  assert.equal(stopped.generated.size, 0);
+  assert.equal(stopped.generating, false);
+  assert.equal(stopped.statuses[0].subject, undefined);
+  assert.equal(stopped.statuses[1].status, "failed");
+  assert.match(stopped.statuses[1].error, /policy violation/i);
+  assert.equal(stopped.statuses[2].status, "pending");
+  assert.equal(stopped.notices[0].kind, "error");
+  assert.equal(stopped.notices.length, 1);
+  assert.equal(vm.runInNewContext(fragments.allSent, {
+    generatedEmails: stopped.generated, emailStatuses: [{ status: "failed" }],
+  }), false);
+
+  const ordinary = await run(false);
+  assert.equal(ordinary.calls.length, 3);
+  assert.equal(ordinary.generated.size, 2);
+  assert.equal(ordinary.statuses[1].status, "failed");
+  assert.equal(ordinary.notices[0].kind, "success");
+});
+
+test("verified review completion reports stopped and partially processed jobs honestly", async () => {
+  const source = await readFile(new URL("../../app-admin/src/components/GenerateVerifiedReviewsWizardDialog.tsx", import.meta.url), "utf8");
+  let stateValues;
+  let stateIndex;
+  const react = {
+    useState: () => [stateValues[stateIndex++], () => {}],
+    useRef: value => ({ current: value }),
+    useCallback: callback => callback,
+  };
+  const jsx = (type, props) => ({ type, props });
+  const context = vm.createContext({ document: { body: {} } });
+  const module = new vm.SourceTextModule(ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText, { context });
+  await module.link(async name => {
+    const exports = name === "react" ? { ...react, default: react }
+      : name === "react/jsx-runtime" ? { jsx, jsxs: jsx, Fragment: "fragment" }
+      : name === "react-dom" ? { createPortal: content => content }
+      : name === "@/hooks/useLiveUpdates" ? { useLiveUpdates: () => {} }
+      : name === "@/services/utilityService" ? {
+          getVerifiedReviewsSummary: () => {}, startBatchVerifiedReviews: () => {},
+          getVerifiedReviewsJobStatus: () => {},
+        }
+      : name === "lucide-react" ? Object.fromEntries(
+          ["Star", "X", "Loader2", "CheckCircle", "AlertCircle", "AlertTriangle", "ExternalLink"].map(icon => [icon, icon]),
+        )
+      : { Skeleton: "Skeleton" };
+    return new vm.SyntheticModule(Object.keys(exports), function () {
+      for (const [key, value] of Object.entries(exports)) this.setExport(key, value);
+    }, { context });
+  });
+  await module.evaluate();
+  const text = node => {
+    if (node == null || typeof node === "boolean") return "";
+    if (Array.isArray(node)) return node.map(text).join("");
+    if (typeof node === "object") return text(node.props?.children);
+    return String(node);
+  };
+  const render = job => {
+    stateValues = [true, "done", null, false, null, 0, 1, job, false, null];
+    stateIndex = 0;
+    return text(module.namespace.default()).replace(/\s+/g, " ");
+  };
+  const failedReview = render({
+    processedCount: 0, totalCount: 2, productsProcessed: 0, productsTotal: 2,
+    lastError: "Tool policy rejected",
+  });
+  assert.match(failedReview, /Generation stopped/);
+  assert.match(failedReview, /Processed 0 of 2 review requests/);
+  assert.match(failedReview, /Generation stopped: Tool policy rejected/);
+  assert.doesNotMatch(failedReview, /Done!|Generated 0/);
+
+  const failedReply = render({
+    processedCount: 1, totalCount: 1, productsProcessed: 0, productsTotal: 1,
+    lastError: "Tool policy rejected",
+  });
+  assert.match(failedReply, /Generation stopped/);
+  assert.match(failedReply, /0 of 1 products completed/);
+
+  const completed = render({
+    processedCount: 2, totalCount: 2, productsProcessed: 2, productsTotal: 2,
+    lastError: null,
+  });
+  assert.match(completed, /Done!/);
+  assert.match(completed, /Processed 2 of 2 review requests/);
+  assert.doesNotMatch(completed, /Generation stopped/);
+});
+
 test("cleanup cancels batched work and all listeners, including an in-flight completion", async () => {
   const env = await loadSubscription();
   let reads = 0;

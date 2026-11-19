@@ -115,6 +115,12 @@ public sealed class AuthorizationServerOptions
     /// </summary>
     public HashSet<string> TrustedServicePrincipalIds { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Principal ID of the shared Functions runtime identity.</summary>
+    public string? FunctionsServicePrincipalId { get; set; }
+
+    /// <summary>Principal ID of the deployed hosted manufacturing agent instance.</summary>
+    public string? HostedManufacturingServicePrincipalId { get; set; }
+
     /// <summary>Whether the managed-identity assertion grant is configured.</summary>
     public bool ServiceGrantEnabled =>
         !string.IsNullOrWhiteSpace(EntraTenantId) && TrustedServicePrincipalIds.Count > 0;

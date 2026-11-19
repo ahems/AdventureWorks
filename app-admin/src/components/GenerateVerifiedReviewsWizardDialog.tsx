@@ -136,6 +136,9 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
   const effectiveProductCount = Math.max(1, Math.min(productCount || maxProducts, maxProducts));
   const effectiveReviewsPerProduct = Math.max(1, Math.min(reviewsPerProduct, Math.max(1, maxPerProduct)));
   const isAllProducts = maxProducts > 0 && effectiveProductCount === maxProducts;
+  const isIncomplete = jobState !== null &&
+    (jobState.processedCount < jobState.totalCount ||
+      jobState.productsProcessed < jobState.productsTotal);
 
   const canStart =
     !summaryLoading &&
@@ -505,17 +508,18 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
           {/* ── Done step ── */}
           {step === "done" && jobState && (
             <div className="space-y-4 text-center">
-              <CheckCircle className="w-14 h-14 text-doodle-green mx-auto" />
+              {isIncomplete
+                ? <AlertTriangle className="w-14 h-14 text-yellow-600 mx-auto" />
+                : <CheckCircle className="w-14 h-14 text-doodle-green mx-auto" />}
               <div>
-                <p className="font-doodle text-lg font-bold text-doodle-text">Done!</p>
+                <p className="font-doodle text-lg font-bold text-doodle-text">
+                  {isIncomplete ? "Generation stopped" : "Done!"}
+                </p>
                 <p className="font-doodle text-sm text-doodle-text/70 mt-1">
-                  Generated{" "}
-                  <strong>{jobState.processedCount.toLocaleString()}</strong>{" "}
-                  verified {jobState.processedCount === 1 ? "review" : "reviews"}{" "}
-                  across{" "}
-                  <strong>{jobState.productsTotal.toLocaleString()}</strong>{" "}
-                  {jobState.productsTotal === 1 ? "product" : "products"} using
-                  real customer identities from delivered orders.
+                  Processed <strong>{jobState.processedCount.toLocaleString()}</strong>{" "}
+                  of <strong>{jobState.totalCount.toLocaleString()}</strong> review requests.{" "}
+                  <strong>{jobState.productsProcessed.toLocaleString()}</strong>{" "}
+                  of <strong>{jobState.productsTotal.toLocaleString()}</strong> products completed.
                 </p>
               </div>
 
@@ -523,7 +527,8 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
                 <div className="flex items-start gap-2 p-2 bg-yellow-50 border border-yellow-300 rounded-lg text-left">
                   <AlertTriangle className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
                   <p className="font-doodle text-xs text-yellow-700">
-                    Some reviews may have failed: {jobState.lastError}
+                    {isIncomplete ? "Generation stopped: " : "Some reviews may have failed: "}
+                    {jobState.lastError}
                   </p>
                 </div>
               )}

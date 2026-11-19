@@ -704,31 +704,16 @@ public class TranslateLanguageFile
 
         try
         {
-            // Try connection string first (for local dev)
-            var connectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
             var accountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName");
-
-            logger.LogInformation("AzureWebJobsStorage value: {Value}", connectionString ?? "null");
-            logger.LogInformation("AzureWebJobsStorage__accountName value: {Value}", accountName ?? "null");
-
-            BlobServiceClient blobServiceClient;
-
-            if (!string.IsNullOrEmpty(connectionString) && !connectionString.Contains("__"))
+            if (string.IsNullOrEmpty(accountName))
             {
-                logger.LogInformation("Using connection string for blob storage");
-                blobServiceClient = new BlobServiceClient(connectionString);
+                throw new InvalidOperationException("AzureWebJobsStorage__accountName must be configured");
             }
-            else if (!string.IsNullOrEmpty(accountName))
-            {
-                logger.LogInformation("Using managed identity for blob storage with account: {AccountName}", accountName);
-                blobServiceClient = new BlobServiceClient(
-                    new Uri($"https://{accountName}.blob.core.windows.net"),
-                    new DefaultAzureCredential());
-            }
-            else
-            {
-                throw new InvalidOperationException("Either AzureWebJobsStorage or AzureWebJobsStorage__accountName must be configured");
-            }
+
+            logger.LogInformation("Using managed identity for blob storage with account: {AccountName}", accountName);
+            var blobServiceClient = new BlobServiceClient(
+                new Uri($"https://{accountName}.blob.core.windows.net"),
+                new DefaultAzureCredential());
 
             return await SaveToBlobAndGenerateSas(blobServiceClient, input, logger);
         }

@@ -6,6 +6,13 @@ function requestIntent(request) {
     : null;
 }
 
+export async function newAuthBrowserPage(context) {
+  const page = await context.newPage();
+  // Keep the page interceptor installed while temporary routes are removed.
+  await page.route("**/*", route => route.fallback());
+  return page;
+}
+
 export function cartSignature(rows) {
   return JSON.stringify(rows.map(row =>
     [row.ShoppingCartItemID, row.ShoppingCartID, row.ProductID, row.Quantity])

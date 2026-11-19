@@ -105,6 +105,11 @@ public class ReviewBatchAgentService
                 .Where(r => !string.IsNullOrWhiteSpace(r.Reply))
                 .ToDictionary(r => r.ReviewId, r => r.Reply!);
         }
+        catch (FoundryToolPolicyException)
+        {
+            operation.Telemetry.Success = false;
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "GenerateReviewReplies failed");
@@ -188,7 +193,7 @@ public class ReviewBatchAgentService
                 return generatedReviews;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not FoundryToolPolicyException)
         {
             _logger.LogError(ex, "Failed to generate reviews for ProductID {ProductID}", product.ProductID);
         }

@@ -71,7 +71,8 @@ public class CustomerGenerationAgentService
             previousResponseId: null,
             structuredInputs: structuredInputs,
             toolChoice: "auto",
-            mcpServiceScopes: [McpServiceTokenProvider.AdminWriteScope]);
+            mcpServiceScopes: [McpServiceTokenProvider.AdminWriteScope],
+            requireCustomerGenerationTools: true);
 
         var rawJson = agentResponse.ResponseText.Trim();
 

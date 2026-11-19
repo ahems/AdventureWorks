@@ -26,6 +26,8 @@ public enum AuthorizationOutcome
     DenyOwnership,
     DenyNoCustomer,
     DenyIdentity,
+    DenyAutonomy,
+    DenyServiceTool,
 }
 
 /// <summary>Result of a tool authorization evaluation.</summary>
@@ -52,6 +54,8 @@ public sealed record AuthorizationDecision(
         AuthorizationOutcome.DenyOwnership => "You can only access your own records.",
         AuthorizationOutcome.DenyNoCustomer => "No customer profile is associated with your account.",
         AuthorizationOutcome.DenyIdentity => "A recognized authenticated identity is required.",
+        AuthorizationOutcome.DenyAutonomy => "Autonomous manufacturing actions require the configured FullyAutonomous mode.",
+        AuthorizationOutcome.DenyServiceTool => "This service is not authorized to call this tool.",
         _ => "Not authorized.",
     };
 }

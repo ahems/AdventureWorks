@@ -51,12 +51,22 @@ bash tests/scripts/test-ai-chat-and-mcp.sh --admin-agent-canary
 
 The selected admin definition must match the reviewed 15 read-only tools and MCP
 target. The test first verifies an admin `get_business_stats` read and a
-manufacturing user's `sales.read` denial. It sends one admin-chat request, then
-correlates the completed dashboard tool and loaded agent version with the same
-delegated employee's allowed `sales.read` decision. A narrative response or
-missing telemetry alone is not execution evidence. Business data, tokens, user
-subjects and model text are withheld from the report. The normal Foundry response
-is stored; no order, simulator or email mutation is attempted.
+manufacturing user's `sales.read` denial. Its single admin-chat request asks for
+the dashboard, sales by status and top-selling products. For each of those three
+tools, a run-specific trace must correlate the completed MCP result and loaded
+agent version with the same delegated employee's allowed `sales.read` decision.
+Unselected tools or missing telemetry remain BLOCKED; a narrative response is not
+execution evidence. Business data, tokens, user subjects and model text are
+withheld from the report. The normal Foundry response is stored; no order,
+simulator or email mutation is attempted.
+
+Each opt-in chat canary also checks sampled completed-response telemetry for
+the Functions-to-Foundry bearer token's client-ID match. It binds a hash of the
+configured ID to the selected attached identity and verifies the Functions host,
+Foundry project and agent settings. Tokens and raw client IDs are not exported.
+Missing or unverifiable telemetry is BLOCKED; a detected mismatch fails. This
+in-process evidence covers observed response rounds only and does not replace
+the separate delegated MCP authorization correlation.
 
 Reports are written under ignored `.auth-results/` directories. Exit status is
 `0` for all applicable checks passing, `1` for failures and `2` for blocked

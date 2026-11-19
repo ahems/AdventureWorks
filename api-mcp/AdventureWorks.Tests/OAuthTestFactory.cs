@@ -36,14 +36,21 @@ public sealed class OAuthTestFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("DAB_RESOURCE_IDENTIFIER", DabResourceIdentifier);
         Environment.SetEnvironmentVariable("FUNCTIONS_RESOURCE_IDENTIFIER", FunctionsResourceIdentifier);
         Environment.SetEnvironmentVariable("MCP_ENTRA_TENANT_ID", "00000000-0000-0000-0000-00000000aaaa");
-        Environment.SetEnvironmentVariable("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS", TrustedServicePrincipalId);
+        Environment.SetEnvironmentVariable("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS",
+            $"{TrustedServicePrincipalId},{HostedServicePrincipalId},{UnprofiledServicePrincipalId}");
+        Environment.SetEnvironmentVariable("MCP_FUNCTIONS_PRINCIPAL_ID", TrustedServicePrincipalId);
+        Environment.SetEnvironmentVariable("MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID", HostedServicePrincipalId);
         Environment.SetEnvironmentVariable("OAUTH_INSPECTOR_REDIRECT_URIS", "https://inspector.example.test/oauth/callback");
     }
 
     public const string TrustedServicePrincipalId = "3a3f63e6-0000-0000-0000-000000000001";
+    public const string HostedServicePrincipalId = "3a3f63e6-0000-0000-0000-000000000002";
+    public const string UnprofiledServicePrincipalId = "3a3f63e6-0000-0000-0000-000000000003";
 
     /// <summary>Assertion value the fake validator accepts as the trusted managed identity.</summary>
     public const string ValidServiceAssertion = "valid-test-assertion";
+    public const string ValidHostedAssertion = "valid-hosted-assertion";
+    public const string ValidUnprofiledAssertion = "valid-unprofiled-assertion";
 
     public FakeUserDirectory Directory { get; } = new();
 
@@ -116,11 +123,15 @@ public sealed class FakeUserDirectory : IUserDirectory
         Task.FromResult(_byBeid.TryGetValue(businessEntityId, out var u) ? u : null);
 }
 
-/// <summary>Accepts only <see cref="OAuthTestFactory.ValidServiceAssertion"/>.</summary>
+/// <summary>Accepts only the test workload assertions.</summary>
 public sealed class FakeServiceAssertionValidator : IServiceAssertionValidator
 {
     public Task<ServiceAssertion?> ValidateAsync(string assertion, CancellationToken cancellationToken) =>
-        Task.FromResult(assertion == OAuthTestFactory.ValidServiceAssertion
-            ? new ServiceAssertion(OAuthTestFactory.TrustedServicePrincipalId)
-            : null);
+        Task.FromResult<ServiceAssertion?>(assertion switch
+        {
+            OAuthTestFactory.ValidServiceAssertion => new(OAuthTestFactory.TrustedServicePrincipalId),
+            OAuthTestFactory.ValidHostedAssertion => new(OAuthTestFactory.HostedServicePrincipalId),
+            OAuthTestFactory.ValidUnprofiledAssertion => new(OAuthTestFactory.UnprofiledServicePrincipalId),
+            _ => null,
+        });
 }

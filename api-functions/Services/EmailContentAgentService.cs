@@ -12,8 +12,7 @@ namespace api_functions.Services;
 /// subjects and bodies for marketing/transactional emails.
 ///
 /// Foundry features used:
-///   - x-memory-user-id     → scopes memory per template type for consistent
-///                            tone and style across email campaigns
+///   - x-memory-user-id     → scopes memory to the individual content request
 ///   - tool_choice: none    → customer context supplied in the user message
 /// </summary>
 public class EmailContentAgentService
@@ -40,7 +39,8 @@ public class EmailContentAgentService
 
     /// <summary>
     /// Generates a personalised email subject and body for the given template type and customer context.
-    /// Returns an <see cref="EmailContent"/> with <see cref="EmailContent.Error"/> set if the agent call fails.
+    /// Returns an <see cref="EmailContent"/> with <see cref="EmailContent.Error"/> set for ordinary failures.
+    /// A tool-policy violation stops the request.
     /// </summary>
     public async Task<EmailContent> GenerateEmailContentAsync(EmailContentRequest request)
     {
@@ -68,7 +68,7 @@ public class EmailContentAgentService
                 {{contextDetails}}
                 """;
 
-            var memoryUserId = $"email-{request.TemplateType}";
+            var memoryUserId = $"email-{Guid.NewGuid():N}";
 
             var agentResponse = await _foundryClient.InvokeAsync(
                 agentId: _agentId,
@@ -83,6 +83,11 @@ public class EmailContentAgentService
 
             operation.Telemetry.Success = true;
             return result ?? new EmailContent { Error = "Empty response from agent" };
+        }
+        catch (FoundryToolPolicyException)
+        {
+            operation.Telemetry.Success = false;
+            throw;
         }
         catch (Exception ex)
         {

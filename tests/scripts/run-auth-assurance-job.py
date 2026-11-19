@@ -194,7 +194,7 @@ def recover_reports(deployment, ledger, output):
     source += (ROOT / "tests/auth/read-reports.cjs").read_text()
     try:
         document = runtime.execute(d, app["name"], source, marker="AUTH_ASSURANCE_DOWNLOAD_RESULT",
-                                   max_output=2 * 1024 * 1024)
+                                   max_output=6 * 1024 * 1024)
     except runtime.auth.EvidenceError as error:
         raise RunnerError(str(error)) from error
     return verify_recovered_reports(document, ledger, output)
@@ -224,7 +224,7 @@ def verify_recovered_reports(document, ledger, output):
                 len(encoded) != 4 * ((size + 2) // 3)):
             raise RunnerError("Invalid recovered artifact size or encoding")
         total += size
-        if total > 1024 * 1024:
+        if total > 4 * 1024 * 1024:
             raise RunnerError("Recovered reports exceed the reviewed transfer bound")
         try:
             data = base64.b64decode(encoded, validate=True)
@@ -425,6 +425,7 @@ def main(argv=None):
         else:
             auth.export_inventory(local, offline=False)
             auth.contracts(local)
+            auth.functions_host_tests(local)
             auth.infra(local, d)
         local.save()
         if not (args.sql_only or args.mutations):

@@ -513,25 +513,12 @@ public class SupplyChainControlFunction
         try
         {
             if (_cachedQueueClient != null) return _cachedQueueClient;
-            string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-            Azure.Storage.Queues.QueueClient client;
-            if (!string.IsNullOrEmpty(queueUri))
-            {
-                var svc = new Azure.Storage.Queues.QueueServiceClient(
-                    new Uri(queueUri),
-                    new Azure.Identity.DefaultAzureCredential());
-                client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
-            }
-            else
-            {
-                string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
-                client = new Azure.Storage.Queues.QueueClient(
-                    connStr, SupplyChainService.QUEUE_NAME,
-                    new Azure.Storage.Queues.QueueClientOptions
-                    {
-                        MessageEncoding = Azure.Storage.Queues.QueueMessageEncoding.Base64
-                    });
-            }
+            string queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri")
+                ?? throw new InvalidOperationException("AzureWebJobsStorage__queueServiceUri is not configured");
+            var svc = new Azure.Storage.Queues.QueueServiceClient(
+                new Uri(queueUri),
+                new Azure.Identity.DefaultAzureCredential());
+            Azure.Storage.Queues.QueueClient client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
             _cachedQueueClient = client;
             return client;
         }

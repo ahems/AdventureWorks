@@ -75,6 +75,7 @@ builder.Services.AddSingleton(defaultCredential);
 
 // Register HttpClient (retained for services that still need it)
 builder.Services.AddHttpClient();
+builder.Services.AddAgentHttpClients();
 builder.Services.AddSingleton<DependencyHealthService>();
 
 // Aspire SQL Client with automatic tracing and health checks
@@ -237,7 +238,9 @@ builder.Services.AddSingleton<FoundryAgentClient>(sp =>
 
     var serviceTokenProvider = sp.GetRequiredService<McpServiceTokenProvider>();
 
-    return new FoundryAgentClient(logger, telemetryClient, credential, projectEndpoint, httpClientFactory, mcpServiceUrl, dabMcpUrl, modelDeployment, serviceTokenProvider);
+    return new FoundryAgentClient(logger, telemetryClient, credential, projectEndpoint, httpClientFactory,
+        mcpServiceUrl, dabMcpUrl, modelDeployment, serviceTokenProvider,
+        Guid.TryParse(managedIdentityClientId, out var expectedClientId) ? expectedClientId : null);
 });
 
 // Backend service credential for api-mcp: exchanges the managed identity's Entra token for an

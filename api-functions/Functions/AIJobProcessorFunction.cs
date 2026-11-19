@@ -233,9 +233,7 @@ public class AIJobProcessorFunction
         var productModelId = msg.ProductModelId.Value;
         _logger.LogInformation("Translation job: translating ProductModelID {id}", productModelId);
 
-        var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
-            ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
-        var productService = new ProductService(connectionString);
+        var productService = _productService;
 
         // Fetch the product to translate
         var products = await productService.GetProductsByModelIdsAsync(new List<int> { productModelId });
@@ -301,6 +299,10 @@ public class AIJobProcessorFunction
 
                 _logger.LogInformation("Translation job: saved {count} name translations for ProductID {pid}",
                     namesToSave.Count, product.ProductID);
+            }
+            catch (FoundryToolPolicyException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

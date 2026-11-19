@@ -19,9 +19,29 @@ success() { echo -e "${GREEN}[OK]${NC}     $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; }
 
+AGENT_TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/adventureworks-agent.XXXXXXXX") || {
+    error "Could not create a private agent deployment temporary directory."
+    exit 1
+}
+cleanup_agent_temp() {
+    rm -f -- "$AGENT_TEMP_DIR/connection-get.json" "$AGENT_TEMP_DIR/connection-create.json" \
+        "$AGENT_TEMP_DIR/connection-arm.json" "$AGENT_TEMP_DIR/memory-store.json" \
+        "$AGENT_TEMP_DIR/agent-get.json" "$AGENT_TEMP_DIR/agent-response.json" \
+        "$AGENT_TEMP_DIR/intent-get.json" "$AGENT_TEMP_DIR/intent-response.json" \
+        "$AGENT_TEMP_DIR/workflow-get.json" "$AGENT_TEMP_DIR/workflow-response.json"
+    rmdir -- "$AGENT_TEMP_DIR"
+}
+trap cleanup_agent_temp EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # ── Read a single value from the azd environment ─────────────────────────────
 get_azd_value() {
-    azd env get-value "$1" 2>/dev/null | tr -d '\n\r '
+    local environment_args=()
+    if [[ -n "${AZURE_ENV_NAME:-}" ]]; then
+        environment_args=(--environment "$AZURE_ENV_NAME")
+    fi
+    azd env get-value "$1" "${environment_args[@]}" --no-prompt 2>/dev/null | tr -d '\n\r '
 }
 
 # ── Environment variables — loaded once at source time ───────────────────────
@@ -54,6 +74,10 @@ if [ -z "$CHAT_GPT_DEPLOYMENT" ]; then
     error "chatGptDeploymentName is not set. Run 'azd provision' first."
     exit 1
 fi
+if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+    error "AZURE_SUBSCRIPTION_ID is not set in the selected azd environment."
+    exit 1
+fi
 
 # Connection ID exported by setup_shared_connections; used as
 # project_connection_id in DAB MCP tool configs.
@@ -61,13 +85,13 @@ DAB_MCP_CONNECTION_ID=""
 
 # ── Get a fresh Azure AI Foundry bearer token ─────────────────────────────────
 get_ai_token() {
-    az account get-access-token --resource "https://ai.azure.com/" \
+    az account get-access-token --subscription "$AZURE_SUBSCRIPTION_ID" --resource "https://ai.azure.com/" \
         --query accessToken -o tsv 2>/dev/null | tr -d '\n\r '
 }
 
 # ── Get an Azure management-plane token ───────────────────────────────────────
 _get_mgmt_token() {
-    az account get-access-token --resource "https://management.azure.com/" \
+    az account get-access-token --subscription "$AZURE_SUBSCRIPTION_ID" --resource "https://management.azure.com/" \
         --query accessToken -o tsv 2>/dev/null | tr -d '\n\r '
 }
 
@@ -116,7 +140,7 @@ setup_shared_connections() {
 
     # ── Check whether the connection already exists (Foundry data plane) ──────
     local get_status
-    get_status=$(curl -s -o /tmp/_aw_conn_get.json -w "%{http_code}" \
+    get_status=$(curl -s -o "$AGENT_TEMP_DIR/connection-get.json" -w "%{http_code}" \
         -H "Authorization: Bearer $token" \
         "${PROJECT_ENDPOINT}/connections/${conn_name}?api-version=${API_VERSION}" 2>/dev/null)
 
@@ -139,7 +163,7 @@ print(json.dumps({
 " "$conn_name" "$DAB_MCP_URL")
 
     local fp_status
-    fp_status=$(curl -s -o /tmp/_aw_conn_create.json -w "%{http_code}" -X POST \
+    fp_status=$(curl -s -o "$AGENT_TEMP_DIR/connection-create.json" -w "%{http_code}" -X POST \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
         -d "$fp_body" \
@@ -189,7 +213,7 @@ print(json.dumps({
 " "$DAB_MCP_URL")
 
         local arm_status
-        arm_status=$(curl -s -o /tmp/_aw_conn_arm.json -w "%{http_code}" -X PUT \
+        arm_status=$(curl -s -o "$AGENT_TEMP_DIR/connection-arm.json" -w "%{http_code}" -X PUT \
             -H "Authorization: Bearer $mgmt_token" \
             -H "Content-Type: application/json" \
             -d "$arm_body" \
@@ -202,13 +226,13 @@ print(json.dumps({
         fi
 
         local arm_resp
-        arm_resp=$(cat /tmp/_aw_conn_arm.json 2>/dev/null || echo "")
+        arm_resp=$(cat "$AGENT_TEMP_DIR/connection-arm.json" 2>/dev/null || echo "")
         warn "ARM connection creation returned HTTP $arm_status: ${arm_resp:0:200}"
     fi
 
     # ── Both methods failed — continue without a connection ───────────────────
     local fp_resp
-    fp_resp=$(cat /tmp/_aw_conn_create.json 2>/dev/null || echo "")
+    fp_resp=$(cat "$AGENT_TEMP_DIR/connection-create.json" 2>/dev/null || echo "")
     warn "Could not create DAB MCP project connection (Foundry HTTP $fp_status: ${fp_resp:0:150})."
     warn "Agents requiring DAB MCP will be created with a direct server_url."
     warn "DAB MCP tool calls may fail until the connection is added manually in the Foundry portal."
@@ -261,7 +285,7 @@ d = {
 print(json.dumps(d))
 " "$name" "$full_description" "$CHAT_GPT_DEPLOYMENT" "$EMBEDDING_DEPLOYMENT")
 
-    local resp_file="/tmp/_aw_memstore_${name}.json"
+    local resp_file="$AGENT_TEMP_DIR/memory-store.json"
     local http_code
     http_code=$(curl -s -o "$resp_file" -w "%{http_code}" -X POST \
         -H "Authorization: Bearer $token" \
@@ -428,11 +452,11 @@ print(json.dumps(d))
   "$description" "$tools_json" "$CHAT_GPT_DEPLOYMENT" \
   "$structured_inputs" "$starter_prompts")
 
-    local resp_file="/tmp/_aw_agent_${name}.json"
+    local resp_file="$AGENT_TEMP_DIR/agent-response.json"
 
     # ── Check whether the agent already exists ────────────────────────────────
     local get_status
-    get_status=$(curl -s -o /tmp/_aw_agent_get_${name}.json -w "%{http_code}" \
+    get_status=$(curl -s -o "$AGENT_TEMP_DIR/agent-get.json" -w "%{http_code}" \
         -H "Authorization: Bearer $token" \
         "${PROJECT_ENDPOINT}/agents/${name}?api-version=${API_VERSION}" 2>/dev/null)
 

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { after, before, test } from "node:test";
+import { newAuthBrowserPage } from "./auth-browser-network-policy.mjs";
 
 const appRequire = createRequire(new URL("../../app/package.json", import.meta.url));
 const mfgRequire = createRequire(new URL("../../app-manufacturing/package.json", import.meta.url));
@@ -51,6 +52,43 @@ before(async () => {
 after(async () => {
   if (browser) await browser.close();
   if (server) await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+});
+
+test("removing a temporary page route preserves the in-flight context guard", { timeout: 15000 }, async () => {
+  const context = await browser.newContext();
+  let release, arrived;
+  const held = new Promise(resolve => { release = resolve; });
+  const captured = new Promise(resolve => { arrived = resolve; });
+  let allowed = 0, blocked = 0;
+  try {
+    await context.route("**/route-guard-probe", async route => {
+      if (route.request().method() !== "GET") {
+        blocked++;
+        return route.abort();
+      }
+      allowed++;
+      arrived();
+      await held;
+      await route.continue();
+    });
+    const page = await newAuthBrowserPage(context);
+    await page.goto(origin);
+    const match = "**/route-guard-probe";
+    const temporary = route => route.fallback();
+    await page.route(match, temporary);
+    const read = page.evaluate(() => fetch("/route-guard-probe").then(response => response.status));
+    await captured;
+    await page.unroute(match, temporary);
+    release();
+    assert.equal(await read, 200);
+    assert.equal(await page.evaluate(() => fetch("/route-guard-probe", { method: "POST" })
+      .then(() => false, () => true)), true);
+    assert.equal(allowed, 1);
+    assert.equal(blocked, 1);
+  } finally {
+    release();
+    await context.close();
+  }
 });
 
 for (const app of ["app-admin", "app-manufacturing"]) {

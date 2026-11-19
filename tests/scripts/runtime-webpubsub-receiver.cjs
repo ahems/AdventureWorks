@@ -10,17 +10,23 @@ function validInput(input) {
       url.host === input.host && !url.username && !url.password && !url.hash &&
       url.pathname === "/client/hubs/adventureworks" &&
       keys.length === 1 && keys[0] === "access_token" && !!url.searchParams.get("access_token") &&
+      (input.kind === undefined || input.kind === "functions-step") &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(input.probeId);
   } catch {
     return false;
   }
 }
 
-function matchesMessage(raw, probeId) {
+function matchesMessage(raw, probeId, kind) {
   try {
     const message = JSON.parse(raw);
-    return message.type === "message" && message.from === "group" &&
-      message.group === "utilities" && message.dataType === "json" &&
+    if (message.type !== "message" || message.from !== "group" || message.dataType !== "json") return false;
+    if (kind === "functions-step") {
+      return message.group === "manufacturing-agent" && message.data?.event === "step-updated" &&
+        message.data?.runId === probeId && message.data?.key === "auth-assurance-" + probeId &&
+        message.data?.status === "started";
+    }
+    return kind === undefined && message.group === "utilities" &&
       message.data?.event === "auth-assurance-probe" && message.data?.probeId === probeId;
   } catch {
     return false;
@@ -39,7 +45,7 @@ function listen(input) {
   const socket = new WebSocket(input.url, "json.webpubsub.azure.v1");
   socket.addEventListener("open", () => console.log("SOCKET_READY"));
   socket.addEventListener("message", (event) => {
-    if (typeof event.data === "string" && matchesMessage(event.data, input.probeId)) {
+    if (typeof event.data === "string" && matchesMessage(event.data, input.probeId, input.kind)) {
       clearTimeout(timeout);
       socket.close();
       finish("MESSAGE_RECEIVED", 0);

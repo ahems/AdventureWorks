@@ -29,13 +29,13 @@ public sealed class McpTaskOwnershipTests
     public async Task Table_task_owner_and_scope_survive_recreation_and_block_all_foreign_operations(int owner)
     {
         var table = new MemoryTable();
-        var creation = new McpTaskOwnership();
+        var creation = new McpTaskOwnership(new AuthorizationServerOptions());
         var store = new AzureTableMcpTaskStore(table, creation);
         McpTaskInfo task;
         using (creation.Bind(Caller(owner), "get_categories_with_products", NullLogger.Instance))
             task = await store.CreateTaskAsync();
 
-        var ownership = new McpTaskOwnership();
+        var ownership = new McpTaskOwnership(new AuthorizationServerOptions());
         store = new(table, ownership);
         var events = 0;
         store.InputResponseReceived += _ => events++;
@@ -72,7 +72,7 @@ public sealed class McpTaskOwnershipTests
     public async Task Table_tasks_fail_closed_for_lost_authority_and_unowned_legacy_state(string scenario)
     {
         var table = new MemoryTable();
-        var ownership = new McpTaskOwnership();
+        var ownership = new McpTaskOwnership(new AuthorizationServerOptions());
         var store = new AzureTableMcpTaskStore(table, ownership);
         McpTaskInfo task;
         var originalScope = scenario == "category" ? OAuthScopes.CustomersRead : OAuthScopes.ProductsRead;
@@ -97,7 +97,7 @@ public sealed class McpTaskOwnershipTests
     public async Task Creation_without_tool_authority_never_writes_a_table_entity()
     {
         var table = new MemoryTable();
-        var ownership = new McpTaskOwnership();
+        var ownership = new McpTaskOwnership(new AuthorizationServerOptions());
         var store = new AzureTableMcpTaskStore(table, ownership);
         using var binding = ownership.Bind(Caller(71), null, NullLogger.Instance);
         await Assert.ThrowsAsync<McpProtocolException>(() => store.CreateTaskAsync());
@@ -105,9 +105,52 @@ public sealed class McpTaskOwnershipTests
     }
 
     [Fact]
+    public async Task Service_tasks_recheck_current_principal_trust_and_tool_profile()
+    {
+        var principal = OAuthTestFactory.TrustedServicePrincipalId;
+        var options = new AuthorizationServerOptions { FunctionsServicePrincipalId = principal };
+        options.TrustedServicePrincipalIds.Add(principal);
+        var caller = new ClaimsPrincipal(new ClaimsIdentity([
+            new Claim("sub", "service:" + principal),
+            new Claim("app", AuthorizationServerOptions.ServiceClientId),
+            new Claim("category", UserCategories.Service),
+            new Claim("scope", OAuthScopes.McpAccess + " " + OAuthScopes.ProductsRead),
+        ], "test"));
+        var ownership = new McpTaskOwnership(options);
+        var table = new MemoryTable();
+        var store = new AzureTableMcpTaskStore(table, ownership);
+        McpTaskInfo task;
+        using (ownership.Bind(caller, "get_product_details", NullLogger.Instance))
+            task = await store.CreateTaskAsync();
+        using (ownership.Bind(caller, "get_product_availability", NullLogger.Instance))
+            await Assert.ThrowsAsync<McpProtocolException>(() => store.CreateTaskAsync());
+
+        using var binding = ownership.Bind(caller, null, NullLogger.Instance);
+        Assert.NotNull(await store.GetTaskAsync(task.TaskId));
+        var mutations = table.Mutations;
+        options.TrustedServicePrincipalIds.Remove(principal);
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.GetTaskAsync(task.TaskId));
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.SetCompletedAsync(task.TaskId, JsonSerializer.SerializeToElement("private")));
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.SetFailedAsync(task.TaskId, JsonSerializer.SerializeToElement("private")));
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.SetCancelledAsync(task.TaskId));
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.SetInputRequestsAsync(task.TaskId, new Dictionary<string, InputRequest>()));
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.ResolveInputRequestsAsync(task.TaskId, new Dictionary<string, InputResponse>()));
+        Assert.Equal(mutations, table.Mutations);
+
+        options.TrustedServicePrincipalIds.Add(principal);
+        options.FunctionsServicePrincipalId = OAuthTestFactory.HostedServicePrincipalId;
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.GetTaskAsync(task.TaskId));
+        options.FunctionsServicePrincipalId = principal;
+        table.ChangeTool(task.TaskId, "get_product_availability");
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.GetTaskAsync(task.TaskId));
+        await Assert.ThrowsAsync<McpProtocolException>(() => store.SetCancelledAsync(task.TaskId));
+        Assert.Equal(mutations, table.Mutations);
+    }
+
+    [Fact]
     public async Task In_memory_tasks_enforce_the_same_owner_and_scope_boundary()
     {
-        var ownership = new McpTaskOwnership();
+        var ownership = new McpTaskOwnership(new AuthorizationServerOptions());
         var store = new OwnedInMemoryMcpTaskStore(new InMemoryMcpTaskStore(), ownership);
         McpTaskInfo task;
         using (ownership.Bind(Caller(71), "get_categories_with_products", NullLogger.Instance))
@@ -148,6 +191,8 @@ public sealed class McpTaskOwnershipTests
         }
 
         public void ChangeRequiredScope(string taskId, string scope) => _rows[taskId]["RequiredScope"] = scope;
+
+        public void ChangeTool(string taskId, string tool) => _rows[taskId]["OwnerTool"] = tool;
 
         public override Task<Response> AddEntityAsync<T>(T entity, CancellationToken cancellationToken = default)
         {

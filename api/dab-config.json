@@ -7261,6 +7261,19 @@
           ]
         },
         {
+          "role": "manufacturing-engineer",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "EmailAddress"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "role": "sales-admin",
           "actions": [
             "create",

@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AdventureWorks.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace AdventureWorks.Tests;
@@ -121,10 +124,66 @@ public class OAuthMetadataTests : IClassFixture<OAuthTestFactory>
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         Assert.Equal("unhealthy", doc.RootElement.GetProperty("status").GetString());
+        var checks = doc.RootElement.GetProperty("checks").EnumerateArray().ToArray();
+        Assert.Equal(3, checks.Length);
+        Assert.Contains(checks, c => c.GetProperty("id").GetString() == "sql"
+            && c.GetProperty("required").GetBoolean());
+        Assert.Contains(checks, c => c.GetProperty("id").GetString() == "tasks"
+            && c.GetProperty("required").GetBoolean());
+        Assert.Contains(checks, c => c.GetProperty("id").GetString() == "sql-identity"
+            && !c.GetProperty("required").GetBoolean());
         Assert.DoesNotContain("Server=", json);
         Assert.DoesNotContain("Trusted_Connection", json);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health")).StatusCode);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+    }
+
+    [Theory]
+    [InlineData(1, "healthy")]
+    [InlineData(0, "unhealthy")]
+    [InlineData(null, "unknown")]
+    public void Sql_identity_requires_positive_current_principal_evidence(object? value, string expected)
+    {
+        Assert.Equal(expected, McpReadinessService.EvaluateSqlIdentity(value).Status);
+        Assert.Equal("unknown", McpReadinessService.EvaluateSqlIdentity(DBNull.Value).Status);
+        Assert.Throws<InvalidOperationException>(() => McpReadinessService.EvaluateSqlIdentity(2));
+    }
+
+    [Fact]
+    public void Optional_sql_identity_failure_does_not_change_core_readiness()
+    {
+        var checks = new McpDependencyCheck[]
+        {
+            new("sql", "healthy", "OK"),
+            new("tasks", "healthy", "OK"),
+            new("sql-identity", "unhealthy", "Mismatch", false)
+        };
+        Assert.Equal("healthy", new McpReadinessReport(DateTimeOffset.UtcNow, checks).Status);
+        checks[0] = checks[0] with { Status = "unhealthy" };
+        Assert.Equal("unhealthy", new McpReadinessReport(DateTimeOffset.UtcNow, checks).Status);
+    }
+
+    [Fact]
+    public async Task Missing_or_invalid_sql_identity_configuration_is_explicit_and_sanitized()
+    {
+        var empty = new ConfigurationBuilder().AddInMemoryCollection().Build();
+        var missingService = new McpReadinessService(empty, NullLogger<McpReadinessService>.Instance);
+        var missing = await missingService.GetReportAsync(CancellationToken.None);
+        Assert.Contains(missing.Checks, c => c.Id == "sql-identity"
+            && !c.Required && c.Status == "not-configured");
+
+        var invalid = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:AdventureWorks"] = "invalid connection string",
+            ["AZURE_CLIENT_ID"] = "invalid client id"
+        }).Build();
+        var invalidService = new McpReadinessService(invalid, NullLogger<McpReadinessService>.Instance);
+        var report = await invalidService.GetReportAsync(CancellationToken.None);
+        var identity = Assert.Single(report.Checks, c => c.Id == "sql-identity");
+        Assert.Equal("unhealthy", identity.Status);
+        Assert.False(identity.Required);
+        Assert.DoesNotContain("invalid client id", JsonSerializer.Serialize(report));
+        Assert.DoesNotContain("invalid connection string", JsonSerializer.Serialize(report));
     }
 
     private static async Task<JsonElement> GetJsonAsync(HttpClient client, string path)

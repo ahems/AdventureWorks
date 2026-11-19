@@ -3,5 +3,6 @@
   "startupReadTimeoutMs": 240000,
   "renewedReadTimeoutMs": 90000,
   "slowReadThresholdMs": 30000,
+  "internalLoginMinimumIntervalMs": 12000,
   "runnerTimeoutSeconds": 1200
 }

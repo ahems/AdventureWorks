@@ -33,13 +33,15 @@ public class GenerateEmailContentFunction
     /// Body: { "firstName": string, "templateType": string, "productNames"?: string[],
     ///         "cartValue"?: number, "lastOrderId"?: int, "totalSpent"?: number, "totalOrders"?: int }
     /// Returns: { "subject": string, "body": string } or { "subject": null, "body": null, "error": string }
-    /// on model failure so callers can fall back gracefully.
+    /// on ordinary model failure so callers can fall back gracefully. A tool-policy
+    /// violation returns HTTP 502 with a sanitized error code.
     /// </summary>
     [Function("GenerateEmailContent")]
     public async Task<HttpResponseData> GenerateEmailContent(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "email/generate-ai-content")]
         HttpRequestData req)
     {
+        using var activity = InvocationActivity.Start(req.FunctionContext.TraceContext, "EmailContentGeneration");
         _logger.LogInformation("GenerateEmailContent called");
 
         try
@@ -72,6 +74,17 @@ public class GenerateEmailContentFunction
             var ok = req.CreateResponse(HttpStatusCode.OK);
             await ok.WriteAsJsonAsync(content);
             return ok;
+        }
+        catch (FoundryToolPolicyException ex)
+        {
+            _logger.LogError(ex, "Email content generation stopped after a tool-policy violation");
+            var error = req.CreateResponse(HttpStatusCode.BadGateway);
+            await error.WriteAsJsonAsync(new
+            {
+                error = "Content generation stopped because the agent requested an unapproved tool.",
+                code = "agent_tool_policy_violation"
+            });
+            return error;
         }
         catch (Exception ex)
         {

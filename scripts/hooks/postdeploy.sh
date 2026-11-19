@@ -4,11 +4,16 @@
 
 set -euo pipefail
 
+environment_args=()
+if [[ -n "${AZURE_ENV_NAME:-}" ]]; then
+  environment_args=(--environment "$AZURE_ENV_NAME")
+fi
+
 get_azd_value() {
   local name=$1
   local raw first_line
 
-  raw=$(azd env get-value "$name" 2>&1 || true)
+  raw=$(azd env get-value "$name" "${environment_args[@]}" --no-prompt 2>&1 || true)
   if [[ "$raw" =~ [Ee][Rr][Rr][Oo][Rr].*not\ found ]] || \
      [[ "$raw" =~ [Nn]o\ value\ found ]] || \
      [[ -z "$raw" ]]; then
@@ -26,7 +31,7 @@ manufacturing_endpoint=$(get_azd_value "AGENT_MANUFACTURING_AGENT_RESPONSES_ENDP
 if [[ -z "$manufacturing_endpoint" ]]; then
   echo "Warning: hosted Manufacturing agent endpoint was not published by azd."
 else
-  azd env set "MANUFACTURING_AGENT_ENDPOINT" "$manufacturing_endpoint" >/dev/null
+  azd env set "MANUFACTURING_AGENT_ENDPOINT" "$manufacturing_endpoint" "${environment_args[@]}" --no-prompt >/dev/null
   echo "Published MANUFACTURING_AGENT_ENDPOINT from the hosted agent deployment."
 fi
 
@@ -40,6 +45,8 @@ fi
 # variables). This is idempotent across re-runs of azd up.
 mcp_app_name=$(get_azd_value "SERVICE_API_MCP_NAME")
 resource_group=$(get_azd_value "AZURE_RESOURCE_GROUP")
+subscription=$(get_azd_value "AZURE_SUBSCRIPTION_ID")
+runtime_identity=$(get_azd_value "USER_MANAGED_IDENTITY_NAME")
 eshop_url=$(get_azd_value "APP_URL")
 admin_url=$(get_azd_value "APP_ADMIN_URL")
 manufacturing_url=$(get_azd_value "APP_MANUFACTURING_URL")
@@ -48,17 +55,19 @@ inspector_url=$(get_azd_value "MCP_INSPECTOR_URL")
 # Foundry assigns a hosted instance principal only when the agent is deployed.
 # Resolve it from the deployed endpoint, not the project/blueprint/client identity.
 # Merge with the current shared-identity allowlist; never replace existing trust.
-hosted_trust=""
-if [[ -n "$manufacturing_endpoint" ]]; then
-  if [[ -z "$mcp_app_name" || -z "$resource_group" ]]; then
-    echo "ERROR: api-mcp app name/resource group is required to wire hosted agent MCP trust." >&2
-    exit 1
-  fi
-  hosted_trust=$(python3 scripts/utilities/hosted-agent-mcp-trust.py \
-    --endpoint "$manufacturing_endpoint" \
-    --resource-group "$resource_group" \
-    --app-name "$mcp_app_name")
+if [[ -z "$mcp_app_name" || -z "$resource_group" || -z "$subscription" || -z "$runtime_identity" ]]; then
+  echo "ERROR: api-mcp, resource group, subscription and runtime identity are required for MCP service trust." >&2
+  exit 1
 fi
+principal_profiles=$(python3 scripts/utilities/hosted-agent-mcp-trust.py \
+  --endpoint "$manufacturing_endpoint" \
+  --resource-group "$resource_group" \
+  --app-name "$mcp_app_name" \
+  --identity-name "$runtime_identity" \
+  --subscription "$subscription")
+hosted_trust=$(printf '%s' "$principal_profiles" | jq -er '.trusted')
+functions_principal=$(printf '%s' "$principal_profiles" | jq -er '.functions')
+hosted_principal=$(printf '%s' "$principal_profiles" | jq -r '.hosted')
 
 if [[ -z "$mcp_app_name" || -z "$resource_group" ]]; then
   echo "Warning: api-mcp app name or resource group unavailable; skipping OAuth redirect URI wiring."
@@ -78,15 +87,16 @@ else
   append_redirect "OAUTH_ADMIN_REDIRECT_URIS" "$admin_url"
   append_redirect "OAUTH_MANUFACTURING_REDIRECT_URIS" "$manufacturing_url"
   append_redirect "OAUTH_INSPECTOR_REDIRECT_URIS" "$inspector_url"
-  if [[ -n "$hosted_trust" ]]; then
-    redirect_env_pairs+=("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS=$hosted_trust")
-  fi
+  redirect_env_pairs+=("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS=$hosted_trust")
+  redirect_env_pairs+=("MCP_FUNCTIONS_PRINCIPAL_ID=$functions_principal")
+  redirect_env_pairs+=("MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID=$hosted_principal")
 
   if [[ ${#redirect_env_pairs[@]} -gt 0 ]]; then
     echo "Configuring OAuth redirects and hosted agent MCP trust..."
     az containerapp update \
       --name "$mcp_app_name" \
       --resource-group "$resource_group" \
+      --subscription "$subscription" \
       --set-env-vars "${redirect_env_pairs[@]}" \
       --output none
     echo "OAuth redirects and hosted agent MCP trust configured."
@@ -102,7 +112,7 @@ deployed_foundry_agent_config_hash=$(get_azd_value "FOUNDRY_AGENT_CONFIG_HASH")
 if [[ "$foundry_agent_config_hash" != "$deployed_foundry_agent_config_hash" ]]; then
   echo "Foundry agent provisioning sources changed; applying reviewed definitions."
   bash scripts/utilities/create-foundry-agents.sh
-  azd env set "FOUNDRY_AGENT_CONFIG_HASH" "$foundry_agent_config_hash" >/dev/null
+  azd env set "FOUNDRY_AGENT_CONFIG_HASH" "$foundry_agent_config_hash" "${environment_args[@]}" --no-prompt >/dev/null
 fi
 
 # Run after every service has deployed so the Functions app receives the newly

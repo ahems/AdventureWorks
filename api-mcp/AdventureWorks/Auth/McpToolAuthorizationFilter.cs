@@ -77,6 +77,19 @@ public static class McpToolAuthorizationFilter
 
         var decision = evaluator.Evaluate(caller, toolName, ownerValue, ownerPresent);
 
+        if (decision.Allowed && category == UserCategories.Service &&
+            (application != AuthorizationServerOptions.ServiceClientId ||
+             !ServicePrincipalPolicy.CanCall(services.GetRequiredService<AuthorizationServerOptions>(), subject, toolName)))
+        {
+            decision = new AuthorizationDecision(false, AuthorizationOutcome.DenyServiceTool, decision.RequiredScope);
+        }
+
+        if (decision.Allowed && ManufacturingAutonomyGuard.RequiresCheck(category, toolName) &&
+            !await services.GetRequiredService<ManufacturingAutonomyGuard>().IsFullyAutonomousAsync(ct))
+        {
+            decision = new AuthorizationDecision(false, AuthorizationOutcome.DenyAutonomy, decision.RequiredScope);
+        }
+
         LogAndTrack(logger, telemetry, subject, category, application, toolName,
             decision.RequiredScope, decision.Outcome, correlationId);
 

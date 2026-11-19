@@ -218,6 +218,19 @@ def stop_process(process):
             process.wait(timeout=5)
 
 
+def wait_for_storage(process):
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise HostFailure("The local storage emulator exited during startup")
+        try:
+            with socket.create_connection(("127.0.0.1", 10000), timeout=0.2):
+                return
+        except OSError:
+            time.sleep(0.1)
+    raise HostFailure("The local storage emulator did not start within 30 seconds")
+
+
 def probe_events(path):
     if not path.exists():
         return []
@@ -315,16 +328,7 @@ def isolated_run(inventory, metadata, app, work, func, azurite, output):
                 [str(azurite), "--silent", "--location", str(work / "storage"),
                  "--blobHost", "127.0.0.1", "--queueHost", "127.0.0.1", "--tableHost", "127.0.0.1"],
                 cwd=work, env=environment, stdout=storage_log, stderr=subprocess.STDOUT)
-            for attempt in range(50):
-                if storage.poll() is not None:
-                    raise HostFailure("The local storage emulator exited during startup")
-                try:
-                    with socket.create_connection(("127.0.0.1", 10000), timeout=0.2):
-                        break
-                except OSError:
-                    time.sleep(0.1)
-            else:
-                raise HostFailure("The local storage emulator did not start")
+            wait_for_storage(storage)
             host = subprocess.Popen([str(func), "host", "start", "--port", str(port), "--no-build"],
                                     cwd=app, env=environment, stdout=host_log, stderr=subprocess.STDOUT)
             for attempt in range(120):

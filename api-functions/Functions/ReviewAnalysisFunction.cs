@@ -40,6 +40,7 @@ public class ReviewAnalysisFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "reviews/analyze-batch")]
         HttpRequestData req)
     {
+        using var activity = InvocationActivity.Start(req.FunctionContext.TraceContext, "ReviewAnalysis");
         _logger.LogInformation("AnalyzeReviewsBatch called");
 
         try
