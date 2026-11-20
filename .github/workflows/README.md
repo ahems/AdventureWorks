@@ -58,8 +58,11 @@ supported for this workflow.
   Environments**, restrict its allowed deployment branches, and require
   reviewers where available. This is the GitHub deployment protection/approval
   environment, not the azd environment name or Azure resource-group name.
-- Azure CLI and `jq`; run the commands below from the repository root in a
-  Bash shell. Sign in with `az login --tenant <tenant-id>` first.
+- **Recommended: [Azure Cloud Shell](https://shell.azure.com) (Bash).** It is
+  already signed in and includes Azure CLI and `jq`. The script below is
+  self-contained: it does not need a clone of this repository or any other
+  file. From another Bash shell, install Azure CLI and `jq` and sign in with
+  `az login --tenant <tenant-id>` first.
 
 **Choose the exact GitHub OIDC subject.** The deploy job uses the
 `adventureworks-demo` GitHub Environment. Its name is part of the OIDC subject
@@ -79,19 +82,36 @@ subjects. Check the fork's actual settings and configured subject in
 [GitHub's OIDC reference](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims);
 the subject must match exactly. Do not copy a GitHub token into logs or share it.
 
-**Create the identity and grant access.** Replace the three placeholders below
-with the target subscription ID, its tenant ID, and the exact subject for the
-fork. Run this once in a dedicated Bash shell: `set -e` stops on errors.
-If a command fails, inspect the partially created app and assignments before
-retrying; rerunning the whole block can create duplicate registrations.
+**Create the identity and grant access.** In Cloud Shell (Bash), create a
+script file, for example with `code create-github-deployer.sh`, and paste the
+block below into it. Replace the three placeholders with the target
+subscription ID, its tenant ID, and the exact subject for the fork. Save the
+file, then run it with `bash create-github-deployer.sh`. Running it as a file
+means a failed check stops the script without closing the Cloud Shell session.
+
+The script is safe to rerun, for example after a partial failure. It reuses
+the single app registration named `AdventureWorks-GitHub-Deploy`, its service
+principal, a federated credential with the same subject, and existing
+subscription-scope grants, creating only what is missing. It stops instead of
+changing anything if several apps share that name, if the credential name is
+already used for a different subject, or if an existing RBAC Administrator
+grant has a different condition.
 
 ```bash
+#!/usr/bin/env bash
+# Self-contained and rerunnable: creates or completes the AdventureWorks
+# GitHub deployer service principal. No repository clone or other files needed.
 set -euo pipefail
 set +H
 SUBSCRIPTION_ID="<target-subscription-id>"
 TENANT_ID="<target-tenant-id>"
 OIDC_SUBJECT="<exact-subject-for-the-fork-and-adventureworks-demo-environment>"
 APP_NAME="AdventureWorks-GitHub-Deploy"
+CREDENTIAL_NAME="github-adventureworks-demo"
+ISSUER="https://token.actions.githubusercontent.com"
+SCOPE="/subscriptions/$SUBSCRIPTION_ID"
+CONTRIBUTOR_ROLE_ID="b24988ac-6180-42a0-ab88-20f7382dd24c"
+RBAC_ADMIN_ROLE_ID="f58310d9-a9f6-439a-9e8d-f62e7b41a168"
 
 if [[ -z "$OIDC_SUBJECT" || "$OIDC_SUBJECT" == *"<"* || "$OIDC_SUBJECT" == *">"* ]]; then
   echo "Set OIDC_SUBJECT to the fork's exact GitHub Actions subject." >&2
@@ -104,42 +124,105 @@ if [[ "$(az account show --query tenantId --output tsv)" != "$TENANT_ID" ]]; the
 fi
 
 # The application client ID and the service principal object ID are different.
-CLIENT_ID=$(az ad app create --display-name "$APP_NAME" \
-  --sign-in-audience AzureADMyOrg --query appId --output tsv)
+mapfile -t APP_IDS < <(az ad app list --display-name "$APP_NAME" --query "[].appId" --output tsv)
+if (( ${#APP_IDS[@]} > 1 )); then
+  echo "Several app registrations are named $APP_NAME; delete the extras or change APP_NAME." >&2
+  exit 1
+elif (( ${#APP_IDS[@]} == 1 )); then
+  CLIENT_ID=${APP_IDS[0]}
+  echo "Reusing app registration $APP_NAME ($CLIENT_ID)."
+else
+  CLIENT_ID=$(az ad app create --display-name "$APP_NAME" \
+    --sign-in-audience AzureADMyOrg --query appId --output tsv)
+  echo "Created app registration $APP_NAME ($CLIENT_ID)."
+fi
 if [[ -z "$CLIENT_ID" ]]; then
-  echo "App creation did not return a client ID." >&2
+  echo "Could not determine the app's client ID." >&2
   exit 1
 fi
-PRINCIPAL_ID=$(az ad sp create --id "$CLIENT_ID" --query id --output tsv)
+
+PRINCIPAL_ID=$(az ad sp list --filter "appId eq '$CLIENT_ID'" --query "[0].id" --output tsv)
 if [[ -z "$PRINCIPAL_ID" ]]; then
-  echo "Service principal creation did not return an object ID." >&2
+  PRINCIPAL_ID=$(az ad sp create --id "$CLIENT_ID" --query id --output tsv)
+  echo "Created service principal $PRINCIPAL_ID."
+else
+  echo "Reusing service principal $PRINCIPAL_ID."
+fi
+if [[ -z "$PRINCIPAL_ID" ]]; then
+  echo "Could not determine the service principal object ID." >&2
   exit 1
 fi
 
-FIC_JSON=$(jq -n --arg subject "$OIDC_SUBJECT" '{
-  name: "github-adventureworks-demo",
-  issuer: "https://token.actions.githubusercontent.com",
-  subject: $subject,
-  audiences: ["api://AzureADTokenExchange"]
-}')
-az ad app federated-credential create --id "$CLIENT_ID" \
-  --parameters "$FIC_JSON" --output none
-
-az role assignment create --subscription "$SUBSCRIPTION_ID" \
-  --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal \
-  --role Contributor --scope "/subscriptions/$SUBSCRIPTION_ID" --output none
-
-ROLE_IDS=$(jq -r '[.roleDefinitionIds[]] | join(", ")' infra/azd-role-assignment-allowlist.json)
-if [[ -z "$ROLE_IDS" ]]; then
-  echo "The role assignment allowlist is empty." >&2
+CREDENTIALS=$(az ad app federated-credential list --id "$CLIENT_ID" --output json)
+if jq -e --arg subject "$OIDC_SUBJECT" --arg issuer "$ISSUER" \
+  'any(.[]; .subject == $subject and .issuer == $issuer)' <<<"$CREDENTIALS" >/dev/null; then
+  echo "Federated credential for $OIDC_SUBJECT already exists."
+elif jq -e --arg name "$CREDENTIAL_NAME" 'any(.[]; .name == $name)' <<<"$CREDENTIALS" >/dev/null; then
+  echo "Federated credential $CREDENTIAL_NAME exists with a different subject; review it before rerunning." >&2
   exit 1
+else
+  FIC_JSON=$(jq -n --arg name "$CREDENTIAL_NAME" --arg issuer "$ISSUER" --arg subject "$OIDC_SUBJECT" \
+    '{name: $name, issuer: $issuer, subject: $subject, audiences: ["api://AzureADTokenExchange"]}')
+  az ad app federated-credential create --id "$CLIENT_ID" \
+    --parameters "$FIC_JSON" --output none
+  echo "Created federated credential for $OIDC_SUBJECT."
 fi
+
+# Prints the JSON conditions of this principal's grants of a role at $SCOPE.
+existing_grants() {
+  az role assignment list --assignee "$PRINCIPAL_ID" --scope "$SCOPE" --output json |
+    jq -c --arg role "$1" --arg scope "$SCOPE" \
+      '[.[] | select((.roleDefinitionId | ascii_downcase | endswith("/" + $role))
+              and ((.scope | ascii_downcase) == ($scope | ascii_downcase))) | .condition]'
+}
+
+if [[ "$(existing_grants "$CONTRIBUTOR_ROLE_ID")" != "[]" ]]; then
+  echo "Contributor is already assigned."
+else
+  az role assignment create --subscription "$SUBSCRIPTION_ID" \
+    --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal \
+    --role Contributor --scope "$SCOPE" --output none
+  echo "Assigned Contributor."
+fi
+
+# Built-in roles that azd provisioning and its hooks assign. This is a copy of
+# infra/azd-role-assignment-allowlist.json; do not add roles without review.
+ALLOWED_ROLE_IDS=(
+  09976791-48a7-449e-bb21-39d1a415f350 # Communication and Email Service Owner
+  0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3 # Storage Table Data Contributor
+  0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb # Storage File Data SMB Share Contributor
+  12cf5a90-567b-43ae-8102-96cf46c7d9b4 # Web PubSub Service Owner
+  19c28022-e58e-450d-a464-0b2a53034789 # Cognitive Services Data Contributor (Preview)
+  4633458b-17de-408a-b874-0445c86b69e6 # Key Vault Secrets User
+  5e0bd9bd-7b93-4f28-af87-19fc36ad61bd # Cognitive Services OpenAI User
+  64702f94-c441-49e6-a78b-ef80e0188fee # Azure AI Developer
+  7f951dda-4ed3-4680-a7ca-43fe172d538d # AcrPull
+  974c5e8b-45b9-4653-ba55-5f855dd0fb88 # Storage Queue Data Contributor
+  a001fd3d-188f-4b5d-821b-7da978bf7442 # Cognitive Services OpenAI Contributor
+  a235d3ee-5935-4cfb-8cc5-a3303ad5995e # Storage File Data SMB MI Admin
+  a4417e6f-fecd-4de8-b567-7b0420556985 # Key Vault Certificates Officer
+  acdd72a7-3385-48ef-bd42-f606fba81ae7 # Reader
+  b7e6dc6d-f1e8-4753-8033-0f276bb0955b # Storage Blob Data Owner
+  b8eda974-7b85-4f76-af95-65846b26df6d # Storage File Data Privileged Reader
+  ba92f5b4-2d11-453d-a403-e96b0029c9fe # Storage Blob Data Contributor
+)
+ROLE_IDS=$(printf '%s, ' "${ALLOWED_ROLE_IDS[@]}")
+ROLE_IDS=${ROLE_IDS%, }
 CONDITION="((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLE_IDS} AND @Request[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'})) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLE_IDS} AND @Resource[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}))"
-az role assignment create --subscription "$SUBSCRIPTION_ID" \
-  --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal \
-  --role f58310d9-a9f6-439a-9e8d-f62e7b41a168 \
-  --scope "/subscriptions/$SUBSCRIPTION_ID" \
-  --condition "$CONDITION" --condition-version 2.0 --output none
+RBAC_ADMIN_GRANTS=$(existing_grants "$RBAC_ADMIN_ROLE_ID")
+if [[ "$RBAC_ADMIN_GRANTS" == "[]" ]]; then
+  az role assignment create --subscription "$SUBSCRIPTION_ID" \
+    --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal \
+    --role f58310d9-a9f6-439a-9e8d-f62e7b41a168 \
+    --scope "/subscriptions/$SUBSCRIPTION_ID" \
+    --condition "$CONDITION" --condition-version 2.0 --output none
+  echo "Assigned the conditioned RBAC Administrator role."
+elif jq -e --arg condition "$CONDITION" '. == [$condition]' <<<"$RBAC_ADMIN_GRANTS" >/dev/null; then
+  echo "The conditioned RBAC Administrator role is already assigned."
+else
+  echo "An RBAC Administrator grant with a different or missing condition exists; remove it and rerun." >&2
+  exit 1
+fi
 
 printf 'DEPLOYER_CLIENT_ID=%s\nDEPLOYER_OBJECT_ID=%s\nDEPLOYER_TENANT_ID=%s\nDEPLOYER_SUBSCRIPTION_ID=%s\n' \
   "$CLIENT_ID" "$PRINCIPAL_ID" "$TENANT_ID" "$SUBSCRIPTION_ID"
@@ -147,7 +230,10 @@ printf 'DEPLOYER_CLIENT_ID=%s\nDEPLOYER_OBJECT_ID=%s\nDEPLOYER_TENANT_ID=%s\nDEP
 
 The second grant is **Role Based Access Control Administrator**, restricted
 to the repository's allowlisted role definitions and service-principal
-assignees. Without that condition it can grant Owner. Another unrestricted
+assignees. The script's `ALLOWED_ROLE_IDS` is a copy of
+[azd-role-assignment-allowlist.json](../../infra/azd-role-assignment-allowlist.json);
+an offline test (`tests/auth/test_validate.py`) fails if the two differ.
+Without that condition it can grant Owner. Another unrestricted
 role-assignment grant to the same principal can bypass the condition. The
 remaining risks and role allowlist are explained in
 [Deployer Permissions](../../docs/AZD_DEPLOYER_PERMISSIONS.md#residual-risk-the-administrator-should-understand).
@@ -215,6 +301,44 @@ definitions. The seed remains asynchronous for local deployments; only this
 workflow waits for its own seed execution. Deployments with the same resolved
 environment name are serialized; a running deployment is not canceled by a
 new run, although GitHub may replace a pending run in the same group.
+
+### Recreate the local azd environment after a GitHub deployment
+
+The runner's azd environment is discarded, but local testing (for example
+`scripts/utilities/azure-auth.py`) and later `azd deploy` runs read deployment
+values from a local azd environment. After the workflow succeeds, sign in with
+an account that can read the resource group and its Function App settings
+(Reader is not enough for app settings; Contributor or Website Contributor is).
+Then recreate the environment:
+
+```bash
+az login
+python3 scripts/utilities/recover-azd-env.py \
+  --environment adventureworks042 \
+  --subscription <subscription-id> \
+  --dry-run   # lists the keys it would write; remove to create the environment
+```
+
+Use the azd environment name logged by the workflow run (not the GitHub
+Environment `adventureworks-demo`). The script makes only read-only Azure
+calls and refuses to overwrite an existing local azd environment. It creates
+and selects the azd environment, then writes:
+
+- the non-secret outputs of the latest successful `infra/main.bicep` deployment
+  for that environment in `rg-<environment-name>` (`--resource-group` overrides);
+- the azd inputs from `infra/main.parameters.json`, recovered from that
+  deployment's parameters (model selections, `OBJECT_ID`,
+  `DEPLOYER_PRINCIPAL_TYPE`, and so on);
+- `AZURE_*`, `TENANT_ID`, and the hook-derived `VITE_API_URL` and
+  `VITE_API_FUNCTIONS_URL`;
+- the `AI_AGENT_*_ID` and `MANUFACTURING_AGENT_ENDPOINT` values copied to the
+  Function App during deployment (`--skip-app-settings` omits them).
+
+It deliberately does not write the Static Web App deployment token or
+`FOUNDRY_AGENT_CONFIG_HASH`, and it cannot recover the `AI_AGENT_*_MEMORY_STORE`
+values. They are not needed for testing; the first local `azd deploy` re-applies
+the checked-out Foundry agent definitions and restores them. `OBJECT_ID`
+remains the deployer service principal's ID, matching the deployed state.
 
 ### Scope, failures, and cleanup
 

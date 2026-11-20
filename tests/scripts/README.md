@@ -74,6 +74,20 @@ and templates instead.
 - Manufacturing dispatcher and socket regressions:
   `npm --prefix app-manufacturing test -- src/hooks/useRealTimeUpdates.test.ts src/hooks/useWebPubSub.test.ts`.
 
+- **[test_github_deployer_setup.py](test_github_deployer_setup.py)** - Runs the
+  deployer setup script from `.github/workflows/README.md` against a stateful
+  fake `az`: a fresh run needs no repository files, a rerun after a partial
+  failure reuses the existing app and service principal, and conflicting
+  existing state stops it. Run
+  `python3 -m unittest tests/scripts/test_github_deployer_setup.py`.
+
+- **[test_recover_azd_env.py](test_recover_azd_env.py)** - Offline tests of
+  `scripts/utilities/recover-azd-env.py` with mocked `az`/`azd`: latest
+  successful root deployment selection, secret/token exclusion, parameter
+  mapping, the Function App settings allowlist, refusal to overwrite, dry run,
+  and missing-value failures. Run
+  `python3 -m unittest tests/scripts/test_recover_azd_env.py`.
+
 - **test-chat-model-selection.sh** - Runs the actual preup chat-selection block
   against fixture quotas, covering ranking, overrides, tiers, capacity, fallback,
   and explicit policy errors. Requires only Bash and jq; does not access Azure or

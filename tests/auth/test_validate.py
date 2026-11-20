@@ -3322,8 +3322,15 @@ class ContractTests(unittest.TestCase):
         self.assertIn("--role f58310d9-a9f6-439a-9e8d-f62e7b41a168", grant.group(0))
         self.assertIn("--condition-version 2.0", grant.group(0))
         self.assertIn("--assignee-principal-type ServicePrincipal", grant.group(0))
-        self.assertIn('ROLE_IDS=$(jq -r \'[.roleDefinitionIds[]] | join(", ")\' infra/azd-role-assignment-allowlist.json)',
-                      readme)
+        self.assertNotIn("roleDefinitionIds[]", readme)
+        inlined = re.search(r"ALLOWED_ROLE_IDS=\(\n(.*?)\n\)", readme, re.S)
+        self.assertIsNotNone(inlined)
+        inlined_ids = [line.split("#")[0].strip().lower() for line in inlined.group(1).splitlines()]
+        allow = {item.lower() for item in json.loads(
+            (auth.ROOT / "infra/azd-role-assignment-allowlist.json").read_text())["roleDefinitionIds"].values()}
+        self.assertEqual(len(inlined_ids), len(set(inlined_ids)))
+        self.assertEqual(set(inlined_ids), allow)
+        self.assertIn("ROLE_IDS=$(printf '%s, ' \"${ALLOWED_ROLE_IDS[@]}\")", readme)
         workflow = (auth.ROOT / ".github/workflows/azd-up-service-principal.yml").read_text()
         self.assertIn('azd env set OBJECT_ID "$DEPLOYER_OBJECT_ID"', workflow)
         self.assertIn("azd env set DEPLOYER_PRINCIPAL_TYPE ServicePrincipal", workflow)
