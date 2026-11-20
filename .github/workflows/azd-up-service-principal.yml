@@ -52,7 +52,7 @@ jobs:
     name: Deploy disposable demo
     needs: prepare
     runs-on: ubuntu-latest
-    environment: azure-demo
+    environment: adventureworks-demo
     timeout-minutes: 180
     concurrency:
       group: azd-up-${{ needs.prepare.outputs.environment_name }}

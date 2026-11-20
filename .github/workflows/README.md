@@ -40,10 +40,11 @@ app registration is in the target subscription's Entra tenant, not in the
 disposable demo resource group. Only an application service principal is
 supported for this workflow.
 
-If a suitably permitted service principal already exists, skip this section
-and follow
-[Authorizing another repository to use an existing service principal](../../docs/AZD_DEPLOYER_PERMISSIONS.md#authorizing-another-repository-to-use-an-existing-service-principal);
-it only adds a federated credential for the repository.
+> [!TIP]
+> **Already have a service principal with the required permissions?** Skip
+> the rest of this section. Follow
+> [Authorizing this repository to use an existing service principal](../../docs/AZD_DEPLOYER_PERMISSIONS.md#authorizing-this-repository-to-use-an-existing-service-principal),
+> which only grants this repository permission to use it.
 
 **Prerequisites**
 
@@ -52,17 +53,24 @@ it only adds a federated credential for the repository.
   and configure federated credentials on the new app. Subscription Owner alone
   does **not** confer those Entra permissions; if tenant policy restricts app
   registration or service-principal creation, ask an Entra administrator.
-- A GitHub fork and permission to configure its environment. Create a GitHub
-  Environment named `azure-demo` under **Settings > Environments**, restrict
-  its allowed deployment branches, and require reviewers where available.
+- A GitHub repository and permission to configure its environment. Create a
+  GitHub Environment named `adventureworks-demo` under **Settings >
+  Environments**, restrict its allowed deployment branches, and require
+  reviewers where available. This is the GitHub deployment protection/approval
+  environment, not the azd environment name or Azure resource-group name.
 - Azure CLI and `jq`; run the commands below from the repository root in a
   Bash shell. Sign in with `az login --tenant <tenant-id>` first.
 
-**Choose the exact GitHub OIDC subject.** The deploy job uses the `azure-demo`
-environment. For a repository using GitHub's default subject format:
+**Choose the exact GitHub OIDC subject.** The deploy job uses the
+`adventureworks-demo` GitHub Environment. Its name is part of the OIDC subject
+and must match exactly in the federated credential. It is distinct from the azd
+environment name, which is generated as `adventureworks001` through
+`adventureworks999` unless you provide one, and from the resource group name
+`rg-<azd-environment-name>`. For a repository using GitHub's default subject
+format:
 
-- Name-based: `repo:<owner>/<repo>:environment:azure-demo`
-- Immutable: `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:azure-demo`
+- Name-based: `repo:<owner>/<repo>:environment:adventureworks-demo`
+- Immutable: `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:adventureworks-demo`
 
 GitHub.com repositories created after July 15, 2026 use immutable subjects by
 default; older repositories can opt in, and renamed or transferred repositories
@@ -82,7 +90,7 @@ set -euo pipefail
 set +H
 SUBSCRIPTION_ID="<target-subscription-id>"
 TENANT_ID="<target-tenant-id>"
-OIDC_SUBJECT="<exact-subject-for-the-fork-and-azure-demo-environment>"
+OIDC_SUBJECT="<exact-subject-for-the-fork-and-adventureworks-demo-environment>"
 APP_NAME="AdventureWorks-GitHub-Deploy"
 
 if [[ -z "$OIDC_SUBJECT" || "$OIDC_SUBJECT" == *"<"* || "$OIDC_SUBJECT" == *">"* ]]; then
@@ -109,7 +117,7 @@ if [[ -z "$PRINCIPAL_ID" ]]; then
 fi
 
 FIC_JSON=$(jq -n --arg subject "$OIDC_SUBJECT" '{
-  name: "github-azure-demo",
+  name: "github-adventureworks-demo",
   issuer: "https://token.actions.githubusercontent.com",
   subject: $subject,
   audiences: ["api://AzureADTokenExchange"]
@@ -146,7 +154,7 @@ remaining risks and role allowlist are explained in
 RBAC propagation can take several minutes.
 
 **Configure GitHub.** Add the four values printed above as **environment
-variables** in `azure-demo` (not repository secrets; the workflow reads
+variables** in `adventureworks-demo` (not repository secrets; the workflow reads
 environment variables):
 
    | Variable | Value |

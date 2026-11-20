@@ -254,14 +254,16 @@ continues to default to `User`. See the [workflow instructions](../.github/workf
 for the Owner-run setup commands, GitHub Environment protections, and the
 Microsoft Graph self-check performed before deployment.
 
-### Authorizing another repository to use an existing service principal
+### Authorizing this repository to use an existing service principal
 
 Use this when an app registration and service principal already hold the
 permissions above on the target subscription, and only the repository
 containing the demo (for example, a new fork) needs to use it. Do not create
 another app registration, service principal or role assignment. Add one
-**federated identity credential** that trusts the repository's `azure-demo`
-GitHub Environment.
+**federated identity credential** that trusts the repository's
+`adventureworks-demo` GitHub Environment. This is the GitHub Actions
+deployment environment (for approvals and branch restrictions), not the
+separately generated azd environment name or Azure resource-group name.
 
 **Who can run it.** Adding a federated credential changes the app
 registration, so subscription Owner alone is not enough. Use an owner of the
@@ -276,9 +278,32 @@ subscription's role assignments, which Owner and Reader provide.
   depends on the repository; see
   [Choose the exact GitHub OIDC subject](../.github/workflows/README.md#one-time-azure-and-github-setup).
 - Choose a federated credential name that is unique within the app, for
-  example `github-<owner>-<repo>-azure-demo`. Use letters, numbers and hyphens.
-  The name cannot be changed later.
+  example `github-<owner>-<repo>-adventureworks-demo`. Use letters, numbers
+  and hyphens. The name cannot be changed later.
 - An app registration can have at most 20 federated credentials.
+
+**Example.** To authorize the repository
+`https://github.com/username/adventureworks`, take the owner (`username`) and
+repository name (`adventureworks`) from the URL, then set:
+
+```bash
+# Name-based subject (GitHub's default for older repositories):
+OIDC_SUBJECT="repo:username/adventureworks:environment:adventureworks-demo"
+CREDENTIAL_NAME="github-username-adventureworks-adventureworks-demo"
+```
+
+If the repository uses immutable subjects, include the numeric owner and
+repository IDs instead. Look them up with the GitHub CLI:
+
+```bash
+gh api repos/username/adventureworks --jq '"owner id: \(.owner.id), repo id: \(.id)"'
+# owner id: 1234567, repo id: 890123456
+OIDC_SUBJECT="repo:username@1234567/adventureworks@890123456:environment:adventureworks-demo"
+```
+
+The subject must match the one GitHub issues exactly. A mismatch makes the
+workflow's Azure sign-in fail with `AADSTS700213` (no matching federated
+identity record).
 
 Run the following from the root of a checkout of this repository, in Bash,
 with the Azure CLI and `jq`, after `az login --tenant <tenant-id>`. The
@@ -292,8 +317,8 @@ set -euo pipefail
 SUBSCRIPTION_ID="<target-subscription-id>"
 TENANT_ID="<target-tenant-id>"
 CLIENT_ID="<existing-app-client-id>"
-OIDC_SUBJECT="<exact-subject-for-the-repo-and-azure-demo-environment>"
-CREDENTIAL_NAME="<unique-name-such-as-github-owner-repo-azure-demo>"
+OIDC_SUBJECT="<exact-subject-for-the-repo-and-adventureworks-demo-environment>"
+CREDENTIAL_NAME="<unique-name-such-as-github-owner-repo-adventureworks-demo>"
 
 for value in "$OIDC_SUBJECT" "$CREDENTIAL_NAME"; do
   if [[ -z "$value" || "$value" == *"<"* || "$value" == *">"* ]]; then
@@ -334,7 +359,7 @@ if ! jq -e --slurpfile allow infra/azd-role-assignment-allowlist.json \
   exit 1
 fi
 
-# 3. Trust the repository's azure-demo environment, unless it is already trusted.
+# 3. Trust the repository's adventureworks-demo environment, unless already trusted.
 if [[ -n "$(az ad app federated-credential list --id "$CLIENT_ID" \
   --query "[?subject=='$OIDC_SUBJECT'].name" --output tsv)" ]]; then
   echo "This subject is already trusted; no credential was added."
@@ -360,9 +385,9 @@ Administrator grant to the same principal bypasses the allowlist condition.
 
 **Then, in the repository:**
 
-1. Under **Settings > Environments**, create the `azure-demo` environment.
+1. Under **Settings > Environments**, create the `adventureworks-demo` environment.
    Restrict its deployment branches and, where available, require reviewers.
-2. Add the four printed values as **environment variables** in `azure-demo`,
+2. Add the four printed values as **environment variables** in `adventureworks-demo`,
    as described in [Configure GitHub](../.github/workflows/README.md#one-time-azure-and-github-setup).
    `DEPLOYER_OBJECT_ID` is the service principal's object ID, not the app
    registration's object ID.
@@ -371,7 +396,7 @@ Administrator grant to the same principal bypasses the allowlist condition.
 
 **What this means for security.** Every repository with a trusted subject
 can deploy to the subscription with the same permissions, so a workflow run in
-any of them acts as this one deployer. Each repository's `azure-demo` environment
+any of them acts as this one deployer. Each repository's `adventureworks-demo` environment
 protections therefore matter. To revoke a repository, delete only its credential:
 
 ```bash
