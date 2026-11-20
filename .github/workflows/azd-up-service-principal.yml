@@ -17,6 +17,11 @@ on:
         required: false
         default: "swedencentral"
         type: string
+      validate_auth_infra:
+        description: "After readiness, run the read-only authentication infrastructure assurance as this service principal"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -313,3 +318,53 @@ jobs:
             echo "- Functions and MCP readiness: passed"
             echo "- SQL and Key Vault temporary network-rule cleanup: passed"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Users may hold no Azure permissions in this path, so the deployer service principal runs the read-only
+      # --infra assurance. It makes no Azure changes and never signs in as an application user.
+      - name: Validate authentication infrastructure (read-only)
+        if: ${{ inputs.validate_auth_infra }}
+        env:
+          ENVIRONMENT_NAME: ${{ needs.prepare.outputs.environment_name }}
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/auth-venv"
+          "$RUNNER_TEMP/auth-venv/bin/pip" install --quiet -r tests/auth/container/requirements.txt
+          export PATH="$RUNNER_TEMP/auth-venv/bin:$PATH"
+          set +e
+          bash tests/scripts/validate-auth.sh --infra --environment "$ENVIRONMENT_NAME" \
+            --output .auth-results/ci-infra
+          result=$?
+          set -e
+          if [[ ! -f .auth-results/ci-infra/report.json ]]; then
+            echo "Authentication assurance did not produce a report." >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          from collections import Counter
+          with open(".auth-results/ci-infra/report.json", encoding="utf-8") as report_file:
+              report = json.load(report_file)
+          counts = Counter(item["status"] for item in report["checks"])
+          lines = ["# Authentication infrastructure assurance", "",
+                   f"Outcome: **{report['outcome']}**", "",
+                   "| Status | Count |", "| --- | ---: |"]
+          for status in ["PASS", "ACCEPTED_EXCEPTION", "BLOCKED", "FAIL"]:
+              lines.append(f"| {status} | {counts.get(status, 0)} |")
+          with open(".auth-results/ci-infra/summary.md", "w", encoding="utf-8") as summary_file:
+              summary_file.write("\n".join(lines) + "\n")
+          PY
+          cat .auth-results/ci-infra/summary.md >> "$GITHUB_STEP_SUMMARY"
+          # Exit code 2 means only BLOCKED items remain (for example, private data-plane checks).
+          if [[ "$result" != "0" && "$result" != "2" ]]; then
+            exit "$result"
+          fi
+
+      - name: Upload authentication infrastructure report
+        if: ${{ always() && inputs.validate_auth_infra }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: auth-infra-${{ needs.prepare.outputs.environment_name }}
+          # Keep check details and resource inventory out of artifacts readable by repository readers.
+          path: .auth-results/ci-infra/summary.md
+          if-no-files-found: warn
+          retention-days: 14

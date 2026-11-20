@@ -193,6 +193,22 @@ lookup or an identity mismatch stops deployment.
    unused name.
 4. Wait for the run summary to report seed completion and readiness. A green
    `azd up` step alone is not considered demo-ready.
+5. Optionally set **validate_auth_infra** to run the read-only authentication
+   infrastructure checks (`tests/scripts/validate-auth.sh --infra`) as the
+   service principal after deployment. They verify RBAC-only data access,
+   disabled local keys, the role-assignment allowlist, and the conditioned RBAC
+   Administrator grant (`infra:deployer-access-management`). The SP grant is
+   recorded as `infra:deployer-service-principal-rbac-admin`, an accepted
+   exception. The run summary lists the status counts, and the
+   artifact (`auth-infra-<environment-name>`) contains only a sanitized
+   `summary.md` with those counts. The detailed Markdown/JUnit reports and
+   `report.json` (which includes resource inventory and check details) are not
+   uploaded. Any `FAIL` fails the step. `BLOCKED` checks do not fail the
+   workflow, but remain assurance gaps (for example, when Azure cannot return
+   effective role assignments or definitions).
+   Application, MCP and agent checks need local azd access and the demo logins,
+   so this step does not run them. See
+   [End-to-end authentication](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md#service-principal-github-actions-deployment-path).
 
 The runner uses the repository's existing lifecycle hooks and service deploy
 definitions. The seed remains asynchronous for local deployments; only this

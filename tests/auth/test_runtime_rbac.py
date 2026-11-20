@@ -789,7 +789,9 @@ class RuntimeRoleTests(unittest.TestCase):
         hook = (ROOT / "scripts/hooks/postprovision.sh").read_text()
         self.assertIn('utilities/reconcile-runtime-rbac.py" --apply', hook)
         self.assertLess(hook.index('utilities/reconcile-runtime-rbac.py" --apply'), hook.index("Preparing the MCP"))
-        self.assertIn('ensure_project_role "$_USER_OID" User "19c28022-e58e-450d-a464-0b2a53034789"', hook)
+        self.assertIn('ensure_project_role "$DEPLOYER_OBJECT_ID" "$DEPLOYER_PRINCIPAL_TYPE" '
+                      '"19c28022-e58e-450d-a464-0b2a53034789"', hook)
+        self.assertNotIn('ensure_project_role "$DEPLOYER_OBJECT_ID" User', hook)
         dashboard = hook.split("# Check effective Aspire Dashboard permissions", 1)[1].split(
             'echo "Preparing the MCP OAuth signing certificate..."', 1)[0]
         self.assertIn("Microsoft.Authorization/permissions?api-version=2022-04-01", dashboard)

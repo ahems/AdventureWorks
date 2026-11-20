@@ -7,9 +7,9 @@ import binascii
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-import hashlib
 import fcntl
 import fnmatch
+import hashlib
 import http.client as http_client
 import http.cookiejar as cookiejar
 import importlib.util
@@ -437,6 +437,162 @@ def azd_role_assignment_violations(assignments, group_scope, principals, allowli
             violations.append(str(item.get("roleDefinitionName")) + " at " +
                               (item.get("scope", "")[len(group):] or "resource group"))
     return sorted(violations)
+
+
+_DEPLOYER_CONDITION = re.compile(
+    r"\(\(!\(ActionMatches\{'Microsoft\.Authorization/roleAssignments/write'\}\)\)\s+OR\s+\((?P<write>[^()]*)\)\)"
+    r"\s+AND\s+"
+    r"\(\(!\(ActionMatches\{'Microsoft\.Authorization/roleAssignments/delete'\}\)\)\s+OR\s+\((?P<delete>[^()]*)\)\)",
+    re.IGNORECASE)
+
+
+def parse_role_assignment_condition(condition):
+    """Return per-action role IDs and service-principal limits, or None unless the reviewed shape matches exactly."""
+    match = _DEPLOYER_CONDITION.fullmatch(str(condition or "").strip())
+    if not match:
+        return None
+    clauses = {}
+    for action, source in [("write", "Request"), ("delete", "Resource")]:
+        prefix = r"@" + source + r"\[Microsoft\.Authorization/roleAssignments:"
+        roles = None
+        service_principal_only = False
+        for part in re.split(r"\s+AND\s+", match.group(action).strip(), flags=re.IGNORECASE):
+            role_match = re.fullmatch(prefix + r"RoleDefinitionId\]\s+ForAnyOfAnyValues:GuidEquals\s*\{([^{}]*)\}",
+                                      part, re.IGNORECASE)
+            if role_match and roles is None:
+                roles = {item.strip().lower() for item in role_match.group(1).split(",") if item.strip()}
+            elif (re.fullmatch(prefix + r"PrincipalType\]\s+ForAnyOfAnyValues:StringEqualsIgnoreCase\s*"
+                               r"\{'ServicePrincipal'\}", part, re.IGNORECASE) and not service_principal_only):
+                service_principal_only = True
+            else:
+                return None
+        if not roles:
+            return None
+        clauses[action] = {"roles": roles, "servicePrincipalOnly": service_principal_only}
+    return clauses
+
+
+def role_definition_assignment_authority(definition):
+    """Return whether a role definition grants assignment management, or None if its shape is unknown."""
+    permissions = definition.get("permissions") if isinstance(definition, dict) else None
+    if not isinstance(permissions, list):
+        return None
+    targets = ("Microsoft.Authorization/roleAssignments/write",
+               "Microsoft.Authorization/roleAssignments/delete")
+    for permission in permissions:
+        if not isinstance(permission, dict):
+            return None
+        actions = permission.get("actions", [])
+        not_actions = permission.get("notActions", [])
+        if not isinstance(actions, list) or not isinstance(not_actions, list):
+            return None
+        for target in targets:
+            granted = any(isinstance(action, str) and
+                          fnmatch.fnmatchcase(target.lower(), action.lower()) for action in actions)
+            denied = any(isinstance(action, str) and
+                         fnmatch.fnmatchcase(target.lower(), action.lower()) for action in not_actions)
+            if granted and not denied:
+                return True
+    return False
+
+
+def custom_deployer_role_matches(definition, expected_name):
+    """Require the documented custom role's exact assignment-only permission shape."""
+    if not isinstance(definition, dict) or definition.get("roleType") != "CustomRole":
+        return False
+    if definition.get("roleName") != expected_name:
+        return False
+    permissions = definition.get("permissions")
+    if not isinstance(permissions, list) or len(permissions) != 1 or not isinstance(permissions[0], dict):
+        return False
+    permission = permissions[0]
+    actions = permission.get("actions")
+    not_actions = permission.get("notActions", [])
+    data_actions = permission.get("dataActions", [])
+    not_data_actions = permission.get("notDataActions", [])
+    if (not isinstance(actions, list) or not all(isinstance(item, str) for item in actions) or
+            not all(isinstance(items, list) and all(isinstance(item, str) for item in items)
+                    for items in (not_actions, data_actions, not_data_actions))):
+        return False
+    expected_actions = {"microsoft.authorization/roleassignments/write",
+                        "microsoft.authorization/roleassignments/delete"}
+    return ({item.casefold() for item in actions} == expected_actions and
+            len(actions) == 2 and not not_actions and not data_actions and not not_data_actions)
+
+
+def deployer_access_management(assignments, subscription, allowlist, rules, principal_type, definitions):
+    """Classify effective deployer grants that can create role assignments."""
+    subscription_scope = f"/subscriptions/{subscription}".lower()
+    allowed = {item.lower() for item in allowlist}
+    conditioned_ids = {item.lower() for item in rules["conditionedRoleDefinitionIds"]}
+    unconditioned_ids = {item.lower() for item in rules["unconditionedRoleDefinitionIds"]}
+    definitions_by_id = {str(item.get("name", "")).rsplit("/", 1)[-1].lower(): item
+                         for item in definitions if isinstance(item, dict) and isinstance(item.get("name"), str)}
+    result = {"conditioned": [], "violations": [], "blocked": [], "conditionedBuiltIn": False}
+    for item in assignments:
+        if not isinstance(item, dict):
+            raise EvidenceError("Role assignment has invalid shape")
+        role_id = str(item.get("roleDefinitionId", "")).rsplit("/", 1)[-1].lower()
+        name = str(item.get("roleDefinitionName") or role_id)
+        definition = definitions_by_id.get(role_id)
+        if role_id in unconditioned_ids:
+            result["violations"].append(name + ": unconditioned role-assignment authority")
+            continue
+        is_documented_custom = (name == rules["customRoleName"] or
+                                (definition and definition.get("roleName") == rules["customRoleName"]))
+        if is_documented_custom:
+            if definition is None:
+                result["blocked"].append(name + ": custom deployer role definition could not be verified")
+                continue
+            if not custom_deployer_role_matches(definition, rules["customRoleName"]):
+                result["violations"].append(name + ": custom deployer role definition differs from its reviewed shape")
+                continue
+        if role_id in conditioned_ids or is_documented_custom:
+            scope = str(item.get("scope", "")).lower().rstrip("/")
+            if scope != subscription_scope:
+                result["violations"].append(name + ": assignment is not scoped to the selected subscription")
+                continue
+        if role_id not in conditioned_ids and not is_documented_custom:
+            authority = role_definition_assignment_authority(definition) if definition else None
+            if authority is True:
+                result["violations"].append(name + ": unreviewed role-assignment authority")
+            elif authority is None:
+                result["blocked"].append(name + ": role definition could not be verified")
+            continue
+        clauses = parse_role_assignment_condition(item.get("condition"))
+        problems = []
+        if clauses is None:
+            problems.append("condition missing or not the reviewed shape")
+        else:
+            for action, clause in clauses.items():
+                if clause["roles"] != allowed:
+                    problems.append(action + " role IDs differ from the allowlist")
+                if principal_type == "ServicePrincipal" and not clause["servicePrincipalOnly"]:
+                    problems.append(action + " is not limited to service-principal assignees")
+        if problems:
+            result["violations"].append(name + ": " + "; ".join(problems))
+        else:
+            result["conditioned"].append(name)
+            result["conditionedBuiltIn"] |= role_id in conditioned_ids
+    result["blocked"] = sorted(set(result["blocked"]))
+    return result
+
+
+def assignee_principal_type_mismatches(assignments, group_scope, expected):
+    """Assignments in the group whose principal type differs from the type azd declared for that principal."""
+    group = group_scope.lower().rstrip("/")
+    types = {principal.lower(): kind for principal, kind in expected.items() if principal}
+    mismatches = []
+    for item in assignments:
+        if not isinstance(item, dict):
+            raise EvidenceError("Role assignment has invalid shape")
+        principal = str(item.get("principalId", "")).lower()
+        scope = str(item.get("scope", "")).lower()
+        if principal not in types or (scope != group and not scope.startswith(group + "/")):
+            continue
+        if item.get("principalType") != types[principal]:
+            mismatches.append(str(item.get("roleDefinitionName")) + " assigned as " + str(item.get("principalType")))
+    return sorted(mismatches)
 
 
 def demo_custom_role_definitions(definitions, group_scope):
@@ -3586,17 +3742,63 @@ def infra(report, deployment):
         group_scope = f"/subscriptions/{d.subscription}/resourceGroups/{d.group}"
         principals = [d.azure("identity", "show", "-g", d.group, "-n", d.required(key))["principalId"]
                       for key in ["USER_MANAGED_IDENTITY_NAME", "SEED_MANAGED_IDENTITY_NAME"]]
-        principals.append(d.required("OBJECT_ID"))
+        deployer = d.required("OBJECT_ID")
+        principals.append(deployer)
+        contracts = json.loads(CONTRACTS.read_text())
+        rules = contracts["azdDeployerAccessManagement"]
+        deployer_type = (d.values.get("DEPLOYER_PRINCIPAL_TYPE") or "User").strip()
+        if deployer_type not in rules["principalTypes"]:
+            raise EvidenceError("DEPLOYER_PRINCIPAL_TYPE must be User or ServicePrincipal")
         assignments = d.azure("role", "assignment", "list", "--all")
         if not isinstance(assignments, list):
             raise EvidenceError("Role assignments could not be enumerated")
-        contracts = json.loads(CONTRACTS.read_text())
         violations = azd_role_assignment_violations(
             assignments, group_scope, principals, contracts["azdRoleAssignmentAllowlist"])
         report.check("infra:azd-role-assignments-allowlisted", "infra", not violations,
                      "Runtime, seed and deployer assignments inside the selected resource group use only "
                      "the conditioned deployer allowlist" + ("; outside allowlist: " + "; ".join(violations)
                                                              if violations else ""))
+        mismatches = assignee_principal_type_mismatches(
+            assignments, group_scope,
+            {principals[0]: "ServicePrincipal", principals[1]: "ServicePrincipal", deployer: deployer_type})
+        report.check("infra:azd-assignee-principal-types", "infra", not mismatches,
+                     "Assignments declare the runtime/seed identities as ServicePrincipal and the deployer as " +
+                     deployer_type + ", as the service-principal deployer condition requires" +
+                     ("; mismatched: " + "; ".join(mismatches) if mismatches else ""))
+        subscription_scope = f"/subscriptions/{d.subscription}"
+        try:
+            effective_deployer_assignments = d.azure(
+                "role", "assignment", "list", "--all", "--include-inherited", "--include-groups",
+                "--assignee", deployer)
+            if not isinstance(effective_deployer_assignments, list):
+                raise EvidenceError("Effective deployer role assignments could not be enumerated")
+            deployer_role_definitions = d.azure("role", "definition", "list", "--scope", subscription_scope)
+            if not isinstance(deployer_role_definitions, list):
+                raise EvidenceError("Deployer role definitions could not be enumerated")
+        except EvidenceError as error:
+            report.add("infra:deployer-access-management", "infra", "BLOCKED",
+                       "Effective deployer grants could not be verified: " + str(error))
+        else:
+            access = deployer_access_management(
+                effective_deployer_assignments, d.subscription, contracts["azdRoleAssignmentAllowlist"], rules,
+                deployer_type, deployer_role_definitions)
+            if access["violations"]:
+                report.add("infra:deployer-access-management", "infra", "FAIL",
+                           "Deployer role-assignment authority must be conditioned to the allowlist: " +
+                           "; ".join(access["violations"]))
+            elif access["blocked"] or not access["conditioned"]:
+                report.add("infra:deployer-access-management", "infra", "BLOCKED",
+                           "Effective deployer assignment coverage is incomplete: " +
+                           "; ".join(access["blocked"] or
+                                     ["no effective subscription-scope role-assignment grant is visible"]))
+            else:
+                report.add("infra:deployer-access-management", "infra", "PASS",
+                           deployer_type + " deployer role-assignment authority (" + ", ".join(access["conditioned"]) +
+                           ") is conditioned to the allowlist" +
+                           (" and ServicePrincipal assignees" if deployer_type == "ServicePrincipal" else ""))
+                if deployer_type == "ServicePrincipal" and access["conditionedBuiltIn"]:
+                    report.add("infra:deployer-service-principal-rbac-admin", "infra", "ACCEPTED_EXCEPTION",
+                               rules["servicePrincipalJustification"])
         privileged = {item.lower() for item in contracts["azdPrivilegedRoleDefinitionIds"].values()}
         report.check("infra:azd-allowlist-excludes-privileged", "infra",
                      not privileged & {item.lower() for item in contracts["azdRoleAssignmentAllowlist"]},

@@ -1368,10 +1368,48 @@ Executable coverage:
 | `infra:azd-allowlist-excludes-privileged` | Live contract | The contract allowlist excludes the three role-administration roles |
 | `infra:runtime-builtin-shape:{webpubsub,foundry-data}` | Live, read-only | The live built-in definition still has the reviewed data-action-only shape; Microsoft-side widening fails and needs review |
 | `infra:runtime-broad-builtin:{webpubsub,foundry-data}` and `infra:runtime-sensitive-management:*` (email) | `ACCEPTED_EXCEPTION` | Records each broad built-in with its contract justification and detected sensitive grants |
+| `test_deployer_condition_parser_accepts_only_the_reviewed_shape`, `test_documented_deployer_conditions_match_the_allowlist` | Offline source | Only the reviewed write/delete ABAC condition shape parses. Every documented condition (user path, SP path and infra README) allows exactly the allowlist role IDs |
+| `test_every_role_assignment_declares_a_principal_type` | Offline source | Every Bicep and AVM role assignment declares `ServicePrincipal` or `deployerPrincipalType`, never `User`/`Group`. Every hook `az role assignment create` passes `--assignee-principal-type`, so the SP-only condition can evaluate each request |
+| `infra:deployer-access-management` | Live, read-only | Direct, transitive-group and inherited role assignments are enumerated for the selected deployer. Owner/User Access Administrator and any unreviewed role-assignment authority fail. The RBAC Administrator or documented custom-role grant must have the reviewed condition and be scoped exactly to the selected subscription; the custom role definition must have exactly the two reviewed assignment actions. **BLOCKED** if effective assignments or a role definition cannot be enumerated or verified |
+| `infra:azd-assignee-principal-types` | Live, read-only | Resource-group assignments to the deployer use the declared `DEPLOYER_PRINCIPAL_TYPE` (`User` or `ServicePrincipal`) |
+| `infra:deployer-service-principal-rbac-admin` | `ACCEPTED_EXCEPTION` (SP path only) | Records the conditioned RBAC Administrator grant held by the GitHub Actions service principal |
 
 The condition limits which roles the deployer can assign, not who receives them
 or where in the subscription. That residual deployer risk is documented in the
 administrator guide.
+
+#### Service-principal (GitHub Actions) deployment path
+
+When the user cannot be granted Contributor directly, the
+[azd-up-service-principal workflow](../../../.github/workflows/README.md) deploys
+with a dedicated service principal. That principal holds **Contributor plus
+built-in Role Based Access Control Administrator** at subscription scope, which is an
+**accepted exception** to the "no RBAC Administrator" deployer rule. The workflow
+sets `OBJECT_ID` to the service principal object ID and `DEPLOYER_PRINCIPAL_TYPE=ServicePrincipal`;
+Bicep (`deployerPrincipalType`) and the hooks (`--assignee-principal-type`) pass
+that type through.
+
+The grant must carry the reviewed ABAC condition. For both write and delete, the
+role ID must be in the allowlist **and** the assignee must be a `ServicePrincipal`.
+The SP can therefore assign only allowlisted built-in roles to managed identities
+and service principals. It cannot grant users or groups access or assign Owner,
+User Access Administrator or RBAC Administrator. An unconditioned grant, a
+role set that differs from the allowlist, or a missing SP-only clause fails
+`infra:deployer-access-management`. Direct, inherited and transitive-group
+assignments are checked. A conditioned deployer grant outside the selected
+subscription scope fails; if Azure cannot return effective assignments or role
+definitions, the result is BLOCKED rather than assumed safe. A direct Owner or
+User Access Administrator also fails.
+
+The workflow's azd state is temporary, and the user may have no Azure access.
+Setting the workflow input `validate_auth_infra=true` therefore runs
+`validate-auth.sh --infra` read-only on the runner as the SP after deployment.
+It uploads only a sanitized status-count `summary.md`. Detailed Markdown/JUnit
+reports and `report.json` (which includes resource inventory and check details)
+are withheld. The SP path adds three `infra:` checks and one
+`ACCEPTED_EXCEPTION` compared with the user path, which adds two checks.
+Application, MCP and agent profiles still require local `azd` access and the
+seeded demo logins.
 
 ### Seed log mount: approved SMB managed identity migration
 
@@ -1901,6 +1939,7 @@ previous role-specific evidence applies.
 | Public reviews, protected mutations | Anonymous users may read reviews; creating or liking requires authentication, as confirmed by the user | Consumer/authenticated creation binds UserID to the signed business_entity_id; update permits only HelpfulVotes. Refreshed live checks confirm reviewer email is excluded from public-role reads and create responses while author IDs remain available. Public UserIDs remain a privacy exposure, client-supplied review email is not independently bound to the identity, and voting integrity is not server-enforced. |
 | Communication email authorization (`infra:runtime-sensitive-management:*`) | Built-in Communication and Email Service Owner at the single Communication resource; replaces the former read/write custom role | **Accepted broad built-in.** Includes resource delete, key list/regenerate and Email Service/domain management at that resource. Exact role ID/name, scope, principal and unconditional assignment are checked; the live definition must contain only `Microsoft.Communication/` actions and no data actions. No role administration. The four former runtime management bindings stay removed. |
 | Foundry model/agent access (`infra:runtime-broad-builtin:foundry-data`) | Runtime account-scoped OpenAI User; Azure AI Developer at account and project; built-in Cognitive Services Data Contributor (Preview) at the project, replacing the former `AIServices/*` custom role | **Accepted broad built-in.** The preview role grants all `Microsoft.CognitiveServices/*` data actions (except fine-tune deployment writes) at the project, but no management actions. Checks require the exact source-declared account/project set, one project-scoped data role and the reviewed live definition shape (`infra:runtime-builtin-shape:foundry-data`). Agent business access remains bounded by OAuth-delegated MCP/API tokens and tool policies, not by Foundry RBAC. **Not certified as least privilege.** |
+| Service-principal deployer RBAC Administrator (`infra:deployer-service-principal-rbac-admin`) | GitHub Actions fallback only: the deployment SP holds Contributor plus built-in RBAC Administrator at subscription scope. The ABAC condition limits write and delete to the allowlisted built-in role IDs and `ServicePrincipal` assignees; `OBJECT_ID`/`DEPLOYER_PRINCIPAL_TYPE` identify it | **Accepted deployer exception**, recorded only when `DEPLOYER_PRINCIPAL_TYPE=ServicePrincipal`. `infra:deployer-access-management` fails on unconditioned RBAC Administrator, a role set that differs from the allowlist, a missing SP-only clause or a direct Owner/User Access Administrator grant. Inherited grants are **BLOCKED** rather than assumed. Offline tests pin the documented conditions and every assignment's principal type. The interactive user path never receives RBAC Administrator. |
 
 Microsoft Learn's [database-policy guidance](https://learn.microsoft.com/en-us/azure/data-api-builder/concept/security/database-policies#supported-actions)
 currently says `create` policies are unsupported, whereas the released
@@ -3354,6 +3393,103 @@ rediscovered from azd and Azure; do not reuse old report/session tokens. Verify
 auth wiring without manual repair. Although refreshed deployments have been
 tested, complete clean-deployment assurance remains pending until all applicable
 gates pass on a recreated environment.
+
+### Post-deployment verification sequence
+
+Before using Azure, run the source-only assurance profile:
+
+```bash
+bash tests/scripts/validate-auth.sh --offline
+```
+
+For this source checkpoint, it records **90 PASS, 21 accepted exceptions,
+25 BLOCKED and zero FAIL** (exit code `2`). BLOCKED is expected here for
+deployed/browser/agent evidence unavailable offline; it is not a pass. The run
+includes the real `OwnedCartService` expiry/lock-wait lifecycle tests, the
+1,863-cell DAB write-decision contract, and current-run MCP HTTP dispatch/task
+ownership tests. It does not replace the live DAB owner-row or role/operation
+matrices.
+
+Use the selected azd environment rather than copying resource names or URLs from
+an earlier deployment. The following commands only read azd outputs and list
+seed-job executions; they do not change Azure resources:
+
+```bash
+ENV_NAME="$(azd env get-value AZURE_ENV_NAME --no-prompt)"
+RESOURCE_GROUP="$(azd env get-value AZURE_RESOURCE_GROUP --no-prompt)"
+SEED_JOB="$(azd env get-value SERVICE_SEED_JOB_NAME --no-prompt)"
+printf 'Selected environment: %s\n' "$ENV_NAME"
+az containerapp job execution list \
+  --name "$SEED_JOB" \
+  --resource-group "$RESOURCE_GROUP" \
+  --output table
+```
+
+Confirm the newest seed execution succeeded before running application checks.
+Do not treat an older successful execution as proof that the current deployment
+is seeded.
+
+Run the complete profile with the isolated Functions host. The optional order
+canary creates one storefront order and one store order, then cancels both
+through the admin path; omit `--order-cancellation-canary` unless that bounded
+test-data mutation is intended for this run.
+
+```bash
+set -euo pipefail
+OUT=".auth-results/post-up-${ENV_NAME}-$(date -u +%Y%m%dT%H%M%SZ)"
+set +e
+bash tests/scripts/validate-auth.sh \
+  --environment "$ENV_NAME" \
+  --all \
+  --functions-host \
+  --order-cancellation-canary \
+  --output "$OUT"
+RESULT=$?
+set -e
+
+python3 - "$OUT/report.json" <<'PY'
+import json
+import sys
+from collections import Counter
+
+with open(sys.argv[1], encoding="utf-8") as report_file:
+    checks = json.load(report_file)["checks"]
+counts = Counter(check["status"] for check in checks)
+for status in ("PASS", "ACCEPTED_EXCEPTION", "BLOCKED", "FAIL"):
+    print(f"{status}: {counts.get(status, 0)}")
+for check in checks:
+    if check["id"].startswith("infra:deployer-"):
+        print(f"{check['status']} {check['id']}: {check['detail']}")
+PY
+
+exit "$RESULT"
+```
+
+Exit code `0` means no check is blocked or failed. Exit code `2` means one or
+more evidence obligations remain blocked; review them rather than counting them
+as passes. Any other nonzero result, especially `FAIL`, needs investigation.
+Keep the complete report in the ignored local `.auth-results/` directory; do not
+publish `report.json`, which contains the discovered resource inventory.
+
+The last integrated reference run recorded **4,201 PASS, 23 accepted exceptions,
+283 BLOCKED and zero FAIL**. The deployer checks add the following expected
+delta to that reference, not a universal count threshold (live totals vary as
+environment-dependent evidence becomes available):
+
+| Deployment identity | Expected added checks | Expected status delta |
+| --- | --- | --- |
+| Interactive user | `infra:deployer-access-management`, `infra:azd-assignee-principal-types` | Two PASS |
+| GitHub Actions service principal | The two checks above plus `infra:deployer-service-principal-rbac-admin` | Two PASS and one `ACCEPTED_EXCEPTION` |
+
+Thus, if all pre-existing checks retain their reference status, the user-path
+comparison is 4,203 PASS / 23 exceptions / 283 BLOCKED / zero FAIL; the
+service-principal comparison is 4,203 PASS / 24 exceptions / 283 BLOCKED /
+zero FAIL. A `BLOCKED` result is still an assurance gap. Check the three
+deployer-check IDs in the report: an inherited group/management-group grant is
+reported as blocked because its condition cannot be established from the
+subscription assignment view. The service-principal workflow can run the
+read-only infra profile with `validate_auth_infra=true`; it does not run the
+application, browser, MCP or agent checks.
 
 ## Remaining work required for complete assurance
 

@@ -21,6 +21,7 @@ from unittest.mock import MagicMock, patch
 import urllib.error
 import urllib.parse
 import xml.etree.ElementTree as ET
+import yaml
 
 SPEC = importlib.util.spec_from_file_location("validate_auth", Path(__file__).with_name("validate.py"))
 auth = importlib.util.module_from_spec(SPEC)
@@ -3168,6 +3169,215 @@ class ContractTests(unittest.TestCase):
             {"roleType": "CustomRole", "roleName": "demo", "assignableScopes": [group + "/providers/a/b/c"]},
         ]
         self.assertEqual(auth.demo_custom_role_definitions(definitions, group), ["demo"])
+
+    @staticmethod
+    def _deployer_condition(roles, service_principal_only=False):
+        def clause(source):
+            text = (f"@{source}[Microsoft.Authorization/roleAssignments:RoleDefinitionId] "
+                    f"ForAnyOfAnyValues:GuidEquals {{{', '.join(roles)}}}")
+            if service_principal_only:
+                text += (f" AND @{source}[Microsoft.Authorization/roleAssignments:PrincipalType] "
+                         "ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}")
+            return text
+        return ("((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (" + clause("Request") +
+                ")) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (" +
+                clause("Resource") + "))")
+
+    def test_deployer_condition_parser_accepts_only_the_reviewed_shape(self):
+        roles = ["acdd72a7-3385-48ef-bd42-f606fba81ae7", "BA92F5B4-2D11-453D-A403-E96B0029C9FE"]
+        expected = {item.lower() for item in roles}
+        for service_principal_only in [False, True]:
+            parsed = auth.parse_role_assignment_condition(self._deployer_condition(roles, service_principal_only))
+            self.assertEqual(parsed, {action: {"roles": expected, "servicePrincipalOnly": service_principal_only}
+                                      for action in ["write", "delete"]})
+        good = self._deployer_condition(roles)
+        for bad in [None, "", good.replace("@Resource", "@Request"),
+                    good + " OR (true)",
+                    good.replace("ForAnyOfAnyValues:GuidEquals", "ForAnyOfAnyValues:GuidNotEquals"),
+                    good.replace("{" + ", ".join(roles) + "}", "{}"),
+                    good.replace("roleAssignments/delete", "roleAssignments/write"),
+                    good.replace(")) AND ((", ")) OR ((")]:
+            with self.subTest(bad=bad and bad[-40:]):
+                self.assertIsNone(auth.parse_role_assignment_condition(bad))
+
+    def test_deployer_access_management_requires_conditioned_authority(self):
+        rules = json.loads(auth.CONTRACTS.read_text())["azdDeployerAccessManagement"]
+        allow = ["acdd72a7-3385-48ef-bd42-f606fba81ae7", "ba92f5b4-2d11-453d-a403-e96b0029c9fe"]
+        rbac_admin = rules["conditionedRoleDefinitionIds"][0]
+        custom_role = "custom-guid"
+
+        def grant(role, name, condition=None, principal="sp", scope="/subscriptions/s"):
+            return {"principalId": principal, "principalType": "Group" if principal.startswith("group") else "ServicePrincipal",
+                    "roleDefinitionId": "/x/roleDefinitions/" + role,
+                    "roleDefinitionName": name, "scope": scope, "condition": condition}
+
+        def definition(role, name, actions=()):
+            return {"name": role, "roleName": name, "roleType": "CustomRole",
+                    "permissions": [{"actions": list(actions), "notActions": [],
+                                     "dataActions": [], "notDataActions": []}]}
+
+        definitions = [
+            definition(rbac_admin, "Role Based Access Control Administrator"),
+            definition(custom_role, rules["customRoleName"], [
+                "Microsoft.Authorization/roleAssignments/write",
+                "Microsoft.Authorization/roleAssignments/delete"]),
+            definition("b24988ac-6180-42a0-ab88-20f7382dd24c", "Contributor", ["Microsoft.Compute/*"]),
+            definition("unreviewed", "Unreviewed Role", ["Microsoft.Authorization/roleAssignments/*"]),
+        ]
+
+        def classify(items, principal_type="ServicePrincipal"):
+            return auth.deployer_access_management(items, "s", allow, rules, principal_type, definitions)
+
+        conditioned = self._deployer_condition(allow, service_principal_only=True)
+        contributor = grant("b24988ac-6180-42a0-ab88-20f7382dd24c", "Contributor")
+        result = classify([contributor, grant(rbac_admin, "Role Based Access Control Administrator", conditioned)])
+        self.assertEqual((result["violations"], result["conditionedBuiltIn"]), ([], True))
+        group_owner = grant("8e3af657-a8ff-443c-a75c-2fe8c4bcb635", "Owner", principal="group-admin")
+        self.assertIn("Owner", classify([group_owner])["violations"][0])
+        group_grant = grant(custom_role, rules["customRoleName"], self._deployer_condition(allow),
+                            principal="group-assigned")
+        custom = grant(custom_role, rules["customRoleName"], self._deployer_condition(allow))
+        user = classify([custom], "User")
+        self.assertEqual((user["violations"], user["conditioned"], user["conditionedBuiltIn"]),
+                         ([], [rules["customRoleName"]], False))
+        self.assertEqual(classify([group_grant], "User")["conditioned"], [rules["customRoleName"]])
+        inherited = grant(rbac_admin, "Role Based Access Control Administrator", conditioned,
+                          scope="/providers/Microsoft.Management/managementGroups/parent")
+        self.assertIn("not scoped to the selected subscription",
+                      classify([inherited])["violations"][0])
+        self.assertEqual(classify([contributor]), {
+            "conditioned": [], "violations": [], "blocked": [], "conditionedBuiltIn": False})
+        for label, item, principal_type in [
+                ("unconditioned", grant(rbac_admin, "RBAC Admin"), "ServicePrincipal"),
+                ("not SP-only", grant(rbac_admin, "RBAC Admin", self._deployer_condition(allow)), "ServicePrincipal"),
+                ("extra role", grant(rbac_admin, "RBAC Admin", self._deployer_condition(
+                    allow + ["8e3af657-a8ff-443c-a75c-2fe8c4bcb635"], True)), "ServicePrincipal"),
+                ("missing role", grant(rbac_admin, "RBAC Admin", self._deployer_condition(allow[:1])), "User"),
+                ("owner", grant("8e3af657-a8ff-443c-a75c-2fe8c4bcb635", "Owner"), "User"),
+                ("uaa", grant("18d7d88d-d35e-4fb5-a5c3-7773c20a72d9", "UAA", conditioned), "ServicePrincipal")]:
+            with self.subTest(label):
+                self.assertTrue(classify([item], principal_type)["violations"])
+        unsafe_custom = grant("unreviewed", "Unreviewed Role")
+        unsafe = classify([unsafe_custom])
+        self.assertIn("unreviewed role-assignment authority", unsafe["violations"][0])
+        wrong_documented_shape = definition(custom_role, rules["customRoleName"], [
+            "Microsoft.Authorization/roleAssignments/write", "Microsoft.Authorization/*"])
+        unsafe = auth.deployer_access_management(
+            [custom], "s", allow, rules, "User", definitions + [wrong_documented_shape])
+        self.assertIn("definition differs", unsafe["violations"][0])
+        unverifiable = classify([grant("missing-definition", "Missing role")])
+        self.assertTrue(unverifiable["blocked"])
+        self.assertTrue(auth.role_definition_assignment_authority(
+            definition("wildcard", "Wildcard", ["Microsoft.Authorization/*"])))
+        self.assertFalse(auth.role_definition_assignment_authority(
+            {**definition("excluded", "Excluded", ["Microsoft.Authorization/*"]),
+             "permissions": [{"actions": ["Microsoft.Authorization/*"],
+                              "notActions": ["Microsoft.Authorization/roleAssignments/*"]}]}))
+        with self.assertRaises(auth.EvidenceError):
+            classify(["bad"])
+
+    def test_assignee_principal_types_match_the_declared_deployer_type(self):
+        group = "/subscriptions/s/resourceGroups/rg"
+
+        def item(principal, kind, scope=group):
+            return {"principalId": principal, "principalType": kind, "roleDefinitionName": "Role", "scope": scope}
+
+        expected = {"runtime": "ServicePrincipal", "deployer": "ServicePrincipal"}
+        clean = [item("RUNTIME", "ServicePrincipal"), item("deployer", "ServicePrincipal", group + "/x"),
+                 item("deployer", "User", "/subscriptions/s"), item("other", "User")]
+        self.assertEqual(auth.assignee_principal_type_mismatches(clean, group, expected), [])
+        self.assertEqual(auth.assignee_principal_type_mismatches(clean + [item("deployer", "User")], group, expected),
+                         ["Role assigned as User"])
+
+    def test_documented_deployer_conditions_match_the_allowlist(self):
+        allow = {item.lower() for item in json.loads(
+            (auth.ROOT / "infra/azd-role-assignment-allowlist.json").read_text())["roleDefinitionIds"].values()}
+        joined = ", ".join(sorted(allow))
+        sources = {
+            "docs/AZD_DEPLOYER_PERMISSIONS.md": False,
+            ".github/workflows/README.md": True,
+        }
+        for relative, service_principal_only in sources.items():
+            text = (auth.ROOT / relative).read_text()
+            found = re.findall(r'(?:CONDITION="|--condition ")(\(\(!\(ActionMatches[^"]+)"', text)
+            self.assertTrue(found, relative)
+            for condition in found:
+                with self.subTest(source=relative, condition=condition[-30:]):
+                    parsed = auth.parse_role_assignment_condition(condition.replace("$ROLE_IDS", joined))
+                    self.assertIsNotNone(parsed)
+                    for clause in parsed.values():
+                        self.assertEqual(clause["roles"], allow)
+                        self.assertEqual(clause["servicePrincipalOnly"], service_principal_only)
+        readme = (auth.ROOT / "infra/README.md").read_text()
+        block = re.search(r"```text\n(\(\(!\(ActionMatches.*?)```", readme, re.S).group(1)
+        parsed = auth.parse_role_assignment_condition(" ".join(block.replace("<allowlisted GUIDs>", joined).split()))
+        self.assertEqual({action: clause["roles"] for action, clause in parsed.items()},
+                         {"write": allow, "delete": allow})
+
+    def test_service_principal_deployment_path_keeps_its_conditioned_grant_contract(self):
+        readme = (auth.ROOT / ".github/workflows/README.md").read_text()
+        grant = re.search(r"az role assignment create[^\n]*\\\n(?:[^\n]*\\\n)*[^\n]*--condition \"\$CONDITION\""
+                          r"[^\n]*", readme)
+        self.assertIsNotNone(grant)
+        self.assertIn("--role f58310d9-a9f6-439a-9e8d-f62e7b41a168", grant.group(0))
+        self.assertIn("--condition-version 2.0", grant.group(0))
+        self.assertIn("--assignee-principal-type ServicePrincipal", grant.group(0))
+        self.assertIn('ROLE_IDS=$(jq -r \'[.roleDefinitionIds[]] | join(", ")\' infra/azd-role-assignment-allowlist.json)',
+                      readme)
+        workflow = (auth.ROOT / ".github/workflows/azd-up-service-principal.yml").read_text()
+        self.assertIn('azd env set OBJECT_ID "$DEPLOYER_OBJECT_ID"', workflow)
+        self.assertIn("azd env set DEPLOYER_PRINCIPAL_TYPE ServicePrincipal", workflow)
+        steps = {step.get("name"): step for step in yaml.safe_load(workflow)["jobs"]["deploy"]["steps"]}
+        validate_step = steps["Validate authentication infrastructure (read-only)"]
+        upload_step = steps["Upload authentication infrastructure report"]
+        self.assertEqual(validate_step["if"], "${{ inputs.validate_auth_infra }}")
+        self.assertIn("always() && inputs.validate_auth_infra", upload_step["if"])
+        self.assertEqual(upload_step["with"]["path"], ".auth-results/ci-infra/summary.md")
+        invocations = re.findall(r"validate-auth\.sh([^\n]*\\\n[^\n]*)", validate_step["run"])
+        self.assertEqual(len(invocations), 1)
+        self.assertIn("--infra --environment", invocations[0])
+        self.assertNotIn("canary", invocations[0])
+        self.assertIn("report.json", validate_step["run"])
+        self.assertNotIn("report.json", upload_step["with"]["path"])
+        self.assertNotIn("['detail']", validate_step["run"])
+        self.assertNotIn("['inventory']", validate_step["run"])
+        self.assertIs(yaml.safe_load(workflow)[True]["workflow_dispatch"]["inputs"]["validate_auth_infra"]["default"],
+                      False)
+        self.assertEqual(json.loads((auth.ROOT / "infra/main.parameters.json").read_text())
+                         ["parameters"]["deployerPrincipalType"]["value"], "${DEPLOYER_PRINCIPAL_TYPE:-User}")
+        rules = json.loads(auth.CONTRACTS.read_text())["azdDeployerAccessManagement"]
+        self.assertEqual(rules["conditionedRoleDefinitionIds"],
+                         [json.loads(auth.CONTRACTS.read_text())["azdPrivilegedRoleDefinitionIds"]
+                          ["Role Based Access Control Administrator"]])
+        self.assertEqual(rules["customRoleName"],
+                         json.loads((auth.ROOT / "infra/azd-deployer-role.json").read_text())["Name"])
+        assignment_query = (auth.ROOT / "tests/auth/validate.py").read_text().split(
+            "effective_deployer_assignments = d.azure(", 1)[1].split(
+            "if not isinstance(effective_deployer_assignments, list)", 1)[0]
+        for flag in ['"--include-inherited"', '"--include-groups"', '"--assignee"']:
+            self.assertIn(flag, assignment_query)
+
+    def test_every_role_assignment_declares_a_principal_type(self):
+        # The service-principal deployer condition matches the request's PrincipalType, so it must always be sent.
+        for path in sorted((auth.ROOT / "infra").rglob("*.bicep")):
+            source = path.read_text()
+            relative = str(path.relative_to(auth.ROOT))
+            blocks = re.findall(r"^resource \w+ 'Microsoft\.Authorization/roleAssignments@[^']+' = "
+                                r"(?:if \([^\n]*\) )?\{\n(.*?)^\}", source, re.S | re.M)
+            self.assertEqual(len(blocks), source.count("'Microsoft.Authorization/roleAssignments@"), relative)
+            for index, block in enumerate(blocks):
+                with self.subTest(relative, block=index):
+                    self.assertRegex(block, r"principalType: ('ServicePrincipal'|deployerPrincipalType)\n")
+            self.assertEqual(source.count("roleDefinitionIdOrName:"),
+                             len(re.findall(r"roleDefinitionIdOrName:[^\n]*\n(?:[^\n]*\n){0,3}?\s*principalType: "
+                                            r"(?:'ServicePrincipal'|deployerPrincipalType)\n", source)), relative)
+            self.assertNotIn("principalType: 'User'", source, relative)
+            self.assertNotIn("principalType: 'Group'", source, relative)
+        for path in sorted((auth.ROOT / "scripts").rglob("*.sh")):
+            source = path.read_text()
+            for match in re.finditer(r"az role assignment create((?:[^\n]*\\\n)*[^\n]*)", source):
+                with self.subTest(str(path.relative_to(auth.ROOT)), at=match.start()):
+                    self.assertIn("--assignee-principal-type", match.group(1))
 
     def test_webpubsub_role_requires_exact_builtin_at_the_webpubsub_resource(self):
         scope = "/subscriptions/test/resourceGroups/demo/providers/Microsoft.SignalRService/webPubSub/pubsub"
