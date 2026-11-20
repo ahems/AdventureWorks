@@ -2,6 +2,8 @@ param storageName string = 'avstorage${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
 param identityId string
 param aadAdminObjectId string
+@allowed([ 'User', 'ServicePrincipal' ])
+param deployerPrincipalType string = 'User'
 param virtualNetworkId string
 param privateEndpointSubnetId string
 
@@ -239,26 +241,26 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.33.0' = {
         roleDefinitionIdOrName: 'Storage File Data Privileged Reader'
         principalType: 'ServicePrincipal'
       }
-      // Grant current user permissions for local development
+      // Grant the configured deployer principal local-development access
       {
         principalId: aadAdminObjectId
         roleDefinitionIdOrName: 'Storage Blob Data Contributor'
-        principalType: 'User'
+        principalType: deployerPrincipalType
       }
       {
         principalId: aadAdminObjectId
         roleDefinitionIdOrName: 'Storage Queue Data Contributor'
-        principalType: 'User'
+        principalType: deployerPrincipalType
       }
       {
         principalId: aadAdminObjectId
         roleDefinitionIdOrName: 'Storage Table Data Contributor'
-        principalType: 'User'
+        principalType: deployerPrincipalType
       }
       {
         principalId: aadAdminObjectId
         roleDefinitionIdOrName: 'Storage File Data SMB Share Contributor'
-        principalType: 'User'
+        principalType: deployerPrincipalType
       }
     ]
   }

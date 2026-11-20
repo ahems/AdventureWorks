@@ -262,7 +262,7 @@ if [[ -n "$_existing_acct" ]] && [[ -n "$_existing_rg" ]] && \
     if [[ -n "$_acct_scope" ]] && [[ -n "$_identity_principal" ]]; then
       for _check_role in "64702f94-c441-49e6-a78b-ef80e0188fee" "a001fd3d-188f-4b5d-821b-7da978bf7442"; do
         _ra_ids=$(az role assignment list --scope "$_acct_scope" \
-          --assignee "$_identity_principal" --role "$_check_role" \
+          --assignee-object-id "$_identity_principal" --role "$_check_role" \
           --query "[].id" -o tsv 2>/dev/null)
         while IFS= read -r _ra_id; do
           [[ -z "$_ra_id" ]] && continue

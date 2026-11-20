@@ -64,6 +64,9 @@
     },
     "skipLocalDevRoleAssignments": {
       "value": "${SKIP_LOCAL_DEV_ROLE_ASSIGNMENTS:-false}"
+    },
+    "deployerPrincipalType": {
+      "value": "${DEPLOYER_PRINCIPAL_TYPE:-User}"
     }
   }
 }

@@ -7,6 +7,8 @@ param kind string = 'AIServices'
 param restoreOpenAi bool = false
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
+@allowed([ 'User', 'ServicePrincipal' ])
+param deployerPrincipalType string = 'User'
 param skipLocalDevRoleAssignments bool = false
 param projectName string
 param appInsightsId string
@@ -269,19 +271,19 @@ resource aiDeveloperRoleAssignment 'Microsoft.Authorization/roleAssignments@2020
   }
 }
 
-// Grant the same Azure AI Developer role to local devs for testing with az login
+// Grant Azure AI Developer to the configured deployer for local or GitHub-hosted access
 resource aiDeveloperLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(account.id, aadAdminObjectId, '64702f94-c441-49e6-a78b-ef80e0188fee')
   scope: account
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee') // Azure AI Developer
     principalId: aadAdminObjectId
-    principalType: 'User'
+    principalType: deployerPrincipalType
   }
 }
 
-// Grant the specified Entra ID admin/user data-plane access for local development
-// Enables DefaultAzureCredential (az login) to call Microsoft Foundry deployments during development
+// Grant the configured deployer data-plane access for local development or GitHub deployment
+// Enables DefaultAzureCredential (az login) to call Microsoft Foundry deployments
 // Uses deterministic GUID to maintain idempotency across deployments
 resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(account.id, aadAdminObjectId, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
@@ -289,7 +291,7 @@ resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
     principalId: aadAdminObjectId
-    principalType: 'User'
+    principalType: deployerPrincipalType
   }
 }
 
@@ -308,25 +310,25 @@ resource aiDeveloperProjectRoleAssignment 'Microsoft.Authorization/roleAssignmen
   }
 }
 
-// Grant Azure AI Developer on the project to the local dev user (for agent creation scripts)
+// Grant Azure AI Developer on the project to the configured deployer (for agent creation)
 resource aiDeveloperLocalProjectRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(aiProject.id, aadAdminObjectId, '64702f94-c441-49e6-a78b-ef80e0188fee')
   scope: aiProject
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee') // Azure AI Developer
     principalId: aadAdminObjectId
-    principalType: 'User'
+    principalType: deployerPrincipalType
   }
 }
 
-// Grant Cognitive Services OpenAI Contributor on the project to the local dev user
+// Grant Cognitive Services OpenAI Contributor on the project to the configured deployer
 resource openAiUserLocalProjectRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(aiProject.id, aadAdminObjectId, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
   scope: aiProject
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
     principalId: aadAdminObjectId
-    principalType: 'User'
+    principalType: deployerPrincipalType
   }
 }
 
@@ -341,14 +343,14 @@ resource foundryAgentsProjectMiRoleAssignment 'Microsoft.Authorization/roleAssig
   }
 }
 
-// Grant the same project-scoped built-in data role to the local dev user.
+// Grant the same project-scoped built-in data role to the configured deployer.
 resource foundryAgentsProjectUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(aiProject.id, aadAdminObjectId, '19c28022-e58e-450d-a464-0b2a53034789')
   scope: aiProject
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '19c28022-e58e-450d-a464-0b2a53034789') // Cognitive Services Data Contributor (Preview)
     principalId: aadAdminObjectId
-    principalType: 'User'
+    principalType: deployerPrincipalType
   }
 }
 

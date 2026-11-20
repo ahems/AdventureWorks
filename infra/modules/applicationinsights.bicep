@@ -3,6 +3,8 @@ param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup(
 param location string = resourceGroup().location
 param identityName string = ''
 param aadAdminObjectId string = ''
+@allowed([ 'User', 'ServicePrincipal' ])
+param deployerPrincipalType string = 'User'
 param skipLocalDevRoleAssignments bool = false
 
 // Use Azure Verified Module for Log Analytics Workspace
@@ -52,14 +54,14 @@ resource appInsightsReaderRoleAssignment 'Microsoft.Authorization/roleAssignment
   dependsOn: [appInsights]
 }
 
-// Grant the local dev user Reader on Application Insights for trace access
+// Grant the configured deployer principal Reader on Application Insights for trace access
 resource appInsightsReaderLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments && !empty(aadAdminObjectId)) {
   name: guid(appInsightsResource.id, aadAdminObjectId, 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
   scope: appInsightsResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7') // Reader
     principalId: aadAdminObjectId
-    principalType: 'User'
+    principalType: deployerPrincipalType
   }
   dependsOn: [appInsights]
 }

@@ -38,6 +38,8 @@ param AIServicesKind string = 'AIServices'
 param publicNetworkAccess string = 'Enabled'
 param sqlDatabaseName string
 param skipLocalDevRoleAssignments bool = false
+@allowed([ 'User', 'ServicePrincipal' ])
+param deployerPrincipalType string = 'User'
 
 var chatGptDeploymentCapacity = availableChatGptDeploymentCapacity / 10
 var embeddingDeploymentCapacity = availableEmbeddingDeploymentCapacity / 10
@@ -73,6 +75,7 @@ module storage 'modules/storage.bicep' = {
     location: location
     identityId: identity.outputs.principalId
     aadAdminObjectId: aadAdminObjectId
+    deployerPrincipalType: deployerPrincipalType
     virtualNetworkId: sqlPrivateNetwork.outputs.virtualNetworkId
     privateEndpointSubnetId: sqlPrivateNetwork.outputs.privateEndpointSubnetId
   }
@@ -131,6 +134,7 @@ module aifoundry 'modules/aiservices.bicep' = {
     kind: AIServicesKind
     publicNetworkAccess: publicNetworkAccess
     aadAdminObjectId: aadAdminObjectId
+    deployerPrincipalType: deployerPrincipalType
     projectName: 'av-aiproject-${resourceToken}'
     appInsightsId: appinsights.outputs.resourceId
     appInsightConnectionString: appinsights.outputs.connectionString
@@ -191,6 +195,7 @@ module appinsights 'modules/applicationinsights.bicep' = {
     location: location
     identityName: identityName
     aadAdminObjectId: aadAdminObjectId
+    deployerPrincipalType: deployerPrincipalType
     skipLocalDevRoleAssignments: skipLocalDevRoleAssignments
   }
   dependsOn: [

@@ -20,155 +20,87 @@ This job does not build/deploy the private runner or authorize live mutations.
 
 ## azd-up-service-principal.yml
 
-A manually triggered workflow that deploys the entire AdventureWorks application to Azure using a service principal for authentication.
+This manually triggered workflow is an optional deployment terminal for the
+same full `azd up --no-prompt` lifecycle used by the local quickstart. It
+authenticates with GitHub OIDC as an existing user-assigned managed identity;
+it does not add a second provisioning or deployment implementation. Local
+`azd up` remains the primary path.
 
-### Purpose
+The workflow runs only on `workflow_dispatch`, waits for the exact seed
+execution it started, checks Functions/MCP readiness, confirms SQL and Key
+Vault temporary network access was cleaned up, and writes the deployed URLs
+and status to the run summary. It never uploads Azure credential caches or
+prints all azd environment values.
 
-This workflow automates the full deployment process (`azd up`) including all lifecycle hooks:
+### One-time Azure and GitHub setup
 
-- `preup.sh` - Creates Entra ID app registrations, discovers OpenAI models
-- `azd provision` - Deploys Bicep infrastructure
-- `postprovision.sh` - Configures SQL database roles, deploys seed-job
-- `azd deploy` - Builds and deploys all services
-- `postdeploy.sh` - Updates redirect URIs, configures CORS
-- `postup.sh` - Displays completion summary
+1. Use an existing **user-assigned managed identity** kept outside the demo
+   subscription. Configure a federated identity credential with:
+   - Issuer: `https://token.actions.githubusercontent.com`
+   - Audience: `api://AzureADTokenExchange`
+   - Subject: `repo:<owner>/<repository>:environment:azure-demo`
+2. Grant that identity **Contributor** and **Role Based Access Control
+   Administrator** on the target subscription. The RBAC Administrator
+   assignment must use the allowlist condition and recommended
+   `PrincipalType = ServicePrincipal` restriction described in
+   [Deployer Permissions](../../docs/AZD_DEPLOYER_PERMISSIONS.md#deploying-with-a-managed-identity-github-actions).
+   Do not grant unconditioned RBAC Administrator, Owner, or User Access
+   Administrator.
+3. Create a GitHub Environment named `azure-demo`, restrict its allowed
+   deployment branches, and require reviewers where available.
+4. Add these **environment variables** to `azure-demo` (they are identifiers,
+   not credentials):
 
-### Prerequisites
+   | Variable | Value |
+   | --- | --- |
+   | `DEPLOYER_CLIENT_ID` | Managed identity client ID |
+   | `DEPLOYER_OBJECT_ID` | Managed identity principal/object ID (not the client ID) |
+   | `DEPLOYER_TENANT_ID` | Entra tenant ID |
+   | `DEPLOYER_SUBSCRIPTION_ID` | Target subscription ID |
 
-Before running this workflow, you must:
+No client secret, Microsoft Graph permission, Entra directory role, SQL
+administrator access, or pre-granted application data role is required.
+`preup.sh` discovers Azure resource/model information; it does not create
+Entra app registrations. The deployer creates the narrowly scoped application
+role assignments during normal provisioning and hooks. See the permissions
+document for the remaining role-assignment risk and complete setup commands.
 
-1. **Create a Service Principal** with appropriate permissions:
+### Run the workflow
 
-   ```bash
-   az ad sp create-for-rbac --name "AdventureWorks-GitHub-Actions" \
-     --role Contributor \
-     --scopes /subscriptions/{subscription-id}
-   ```
+1. In the fork, open **Actions** and select **Deploy demo with managed identity
+   (azd up)**.
+2. Choose **Run workflow**. Optionally provide a new azd environment name and
+   change the default regions (`eastus2`, `swedencentral`). If no name is
+   provided, the workflow randomly selects `adventureworks001` through
+   `adventureworks999` and logs the selected name.
+3. The workflow derives the resource group as `rg-<environment-name>`. Use a
+   new name for each fresh demo environment. If the selected resource group
+   already exists, the workflow stops without deploying; retry or specify an
+   unused name.
+4. Wait for the run summary to report seed completion and readiness. A green
+   `azd up` step alone is not considered demo-ready.
 
-   Save the output which contains:
-   - `appId` (AZURE_CLIENT_ID)
-   - `password` (AZURE_CLIENT_SECRET)
-   - `tenant` (AZURE_TENANT_ID)
+The runner uses the repository's existing lifecycle hooks and service deploy
+definitions. The seed remains asynchronous for local deployments; only this
+workflow waits for its own seed execution. Deployments with the same resolved
+environment name are serialized; a running deployment is not canceled by a
+new run, although GitHub may replace a pending run in the same group.
 
-2. **Grant additional permissions** to the service principal:
-   - **Microsoft Graph API**: `Application.ReadWrite.All` (for creating Entra ID app registrations)
-   - **SQL Database**: Admin access on the target SQL server (for database role assignments)
+### Scope, failures, and cleanup
 
-   You may also need to add the service principal to the "Directory Readers" role in Entra ID.
-
-3. **Configure GitHub Secrets** in your repository:
-   - `AZURE_CLIENT_ID` - The service principal application (client) ID
-   - `AZURE_CLIENT_SECRET` - The service principal secret (password)
-   - `AZURE_TENANT_ID` - Your Azure tenant ID
-   - `AZURE_SUBSCRIPTION_ID` - Your Azure subscription ID
-
-### Usage
-
-1. Go to the **Actions** tab in your GitHub repository
-2. Select **Deploy with Service Principal (azd up)** from the workflows list
-3. Click **Run workflow**
-4. Fill in the required parameters:
-   - **AZURE_RESOURCE_GROUP** (required): Name of the Azure resource group to create/use
-   - **AZURE_LOCATION** (optional, default: eastus2): Azure region for main resources
-   - **FOUNDRY_LOCATION** (optional, default: swedencentral): Azure region for AI Foundry/Cognitive Services
-5. Click **Run workflow** to start the deployment
-
-### What the Workflow Does
-
-1. **Setup Phase**:
-   - Checks out the repository
-   - Verifies pre-installed tools (Azure CLI, PowerShell, Python)
-   - Installs Azure Developer CLI (azd)
-   - Installs additional dependencies (jq)
-
-2. **Authentication Phase**:
-   - Logs in to Azure CLI using service principal credentials
-   - Logs in to PowerShell Az module using service principal credentials
-   - Sets the subscription context
-
-3. **Configuration Phase**:
-   - Creates a new azd environment
-   - Sets all required environment variables that the hook scripts expect
-   - Configures service principal context for hooks
-
-4. **Deployment Phase**:
-   - Runs `azd up --no-prompt` which orchestrates the entire deployment
-   - All hooks execute automatically in the correct order
-   - Uses service principal credentials throughout
-
-5. **Completion Phase**:
-   - Displays deployment information on success
-   - Uploads azd logs if the deployment fails
-
-### Expected Duration
-
-Total deployment time is approximately **29 minutes**:
-
-- Infrastructure provisioning: ~21 minutes
-- Container builds and deployments: varies based on service complexity
-- Database seeding: ~8 minutes (starts during postprovision and continues asynchronously in the background)
-
-Note: The seed job starts during the postprovision phase and continues asynchronously in the background, so it may still be running after `azd up` completes. You can monitor its progress with:
-
-```bash
-az containerapp job execution list --name <seed-job-name> --resource-group <resource-group-name>
-```
-
-### Troubleshooting
-
-**Authentication Errors**:
-
-- Verify all GitHub secrets are set correctly
-- Ensure the service principal has not expired
-- Check that the service principal has the required permissions
-
-**Permission Errors**:
-
-- The service principal needs "Directory Readers" role in Entra ID for preup hook
-- The service principal needs SQL admin access for postprovision hook
-- Verify the service principal has Contributor role on the subscription
-
-**Hook Failures**:
-
-- Check the workflow logs for specific error messages
-- The `postprovision.sh` hook requires PowerShell and Azure CLI access
-- The `preup.sh` hook requires jq and Python to be available
-
-**Timeout Issues**:
-
-- The default GitHub Actions timeout is 6 hours
-- If deployment takes longer, you may need to adjust the timeout
-- Consider running steps separately if needed
-
-### Monitoring Deployment
-
-After the workflow completes:
-
-1. Check the seed-job status:
-
-   ```bash
-   az containerapp job execution list \
-     --name <seed-job-name> \
-     --resource-group <resource-group-name>
-   ```
-
-2. View the deployed application:
-   - The workflow output includes URLs for all services
-   - Check the Application Insights dashboard for telemetry
-
-### Differences from Interactive `azd up`
-
-When using a service principal in GitHub Actions:
-
-- All hooks run non-interactively (`--no-prompt` flag)
-- Service principal object ID is used instead of user object ID
-- PowerShell authentication uses credential objects instead of interactive login
-- No browser-based authentication flows
-
-### Security Considerations
-
-- Never commit the service principal secret to the repository
-- Use GitHub encrypted secrets for all sensitive values
-- Regularly rotate the service principal secret
-- Limit service principal permissions to only what's required
-- Consider using Federated Identity Credentials (OIDC) instead of secrets for enhanced security
+- This is a demo/POC deployment and incurs the same Azure, AI and other service
+  costs as local `azd up`. It does not run on pushes or pull requests.
+- The hosted runner's azd state is temporary. The workflow is intended for a
+  **fresh demo environment**, not as a stateful redeploy, repair, migration or
+  takeover mechanism.
+- On failure, inspect the failed workflow step and the Azure resources in the
+  derived resource group. Do not treat a partial deployment or a green deploy
+  step without successful seed/readiness checks as ready. Re-run only after
+  understanding the partial state; use a different environment name for a new
+  demo.
+- The workflow never runs `azd down` or deletes resources. Teardown remains a
+  deliberate, user-run action; `azd down --no-prompt` permanently deletes the
+  selected demo environment and its data.
+- If an organization's network policy blocks the GitHub-hosted runner or the
+  normal hook access, do not weaken that policy. A separately approved
+  self-hosted/private runner may be needed.

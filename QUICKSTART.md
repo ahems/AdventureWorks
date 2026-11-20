@@ -2,6 +2,11 @@
 
 This guide covers deploying, exploring, and tearing down the Azure-hosted demo with **Azure Developer CLI (`azd`)**. It does not require running the application or its tests locally. A GitHub Codespace can be used as the deployment terminal.
 
+Deploying from a local terminal or Codespace with `azd up` is the primary
+path. If your subscription only permits deployment from GitHub, the optional
+[GitHub Actions managed-identity workflow](.github/workflows/README.md#azd-up-service-principalyml)
+uses the same `azd up` hooks and requires administrator setup first.
+
 > **What you're deploying:** See the [architecture diagram](docs/AdventureWorks-Reference-Architecture.svg) for a visual map of all Azure components provisioned by `azd up`.
 
 ---

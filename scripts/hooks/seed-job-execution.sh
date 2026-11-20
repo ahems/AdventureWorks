@@ -11,9 +11,16 @@ start_seed_job() {
         return 1
     fi
     execution="${execution//$'\r'/}"
-    if [[ -z "$execution" || "$execution" == "None" || "$execution" == "null" ]]; then
+    if [[ -z "$execution" || "$execution" == "None" || "$execution" == "null" ]] || \
+       ! [[ "$execution" =~ ^[[:alnum:]-]+$ ]]; then
         echo "ERROR: Seed-job start did not return an execution name; startup cannot be confirmed." >&2
         return 1
+    fi
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        if ! printf 'seed_execution_name=%s\n' "$execution" >> "$GITHUB_OUTPUT"; then
+            echo "ERROR: Could not publish the seed execution name to GitHub Actions." >&2
+            return 1
+        fi
     fi
     echo "  Started seed-job execution $execution; deployment continues without waiting for completion."
     echo "  Database readiness is separate from deployment success. Check /health or the execution logs for completion or failure."

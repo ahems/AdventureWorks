@@ -187,6 +187,32 @@ echo "Preparing the MCP OAuth signing certificate..."
 KEY_VAULT_NAME=$(azd env get-value 'MCP_SIGNING_KEY_VAULT_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
 SIGNING_CERT_NAME=$(azd env get-value 'MCP_SIGNING_CERTIFICATE_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
 [ -z "$SIGNING_CERT_NAME" ] && SIGNING_CERT_NAME="mcp-signing"
+DEPLOYER_PRINCIPAL_TYPE=$(azd env get-value 'DEPLOYER_PRINCIPAL_TYPE' 2>/dev/null | head -n1 | tr -d '\n\r ')
+if [ -z "$DEPLOYER_PRINCIPAL_TYPE" ] || [[ "$DEPLOYER_PRINCIPAL_TYPE" == ERROR:* ]]; then
+    DEPLOYER_PRINCIPAL_TYPE="User"
+fi
+case "$DEPLOYER_PRINCIPAL_TYPE" in
+    User|ServicePrincipal) ;;
+    *)
+        echo "ERROR: DEPLOYER_PRINCIPAL_TYPE must be User or ServicePrincipal (got: $DEPLOYER_PRINCIPAL_TYPE)." >&2
+        exit 1
+        ;;
+esac
+DEPLOYER_OBJECT_ID=$(azd env get-value 'OBJECT_ID' 2>/dev/null | head -n1 | tr -d '\n\r ')
+if [[ "$DEPLOYER_OBJECT_ID" == ERROR:* ]]; then
+    DEPLOYER_OBJECT_ID=""
+fi
+if [ -z "$DEPLOYER_OBJECT_ID" ]; then
+    if [ "$DEPLOYER_PRINCIPAL_TYPE" = "ServicePrincipal" ]; then
+        echo "ERROR: OBJECT_ID is required when DEPLOYER_PRINCIPAL_TYPE is ServicePrincipal." >&2
+        exit 1
+    fi
+    DEPLOYER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
+fi
+if ! [[ "$DEPLOYER_OBJECT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    echo "ERROR: Could not determine a valid deployer object ID." >&2
+    exit 1
+fi
 
 if [ -z "$KEY_VAULT_NAME" ] || [[ "$KEY_VAULT_NAME" == ERROR:* ]]; then
     echo "ERROR: MCP_SIGNING_KEY_VAULT_NAME is missing; the MCP OAuth server cannot start without its signing certificate." >&2
@@ -228,28 +254,27 @@ else
         exit 1
     fi
     VAULT_RESOURCE_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${KEY_VAULT_NAME}"
-    DEPLOYER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
-
     if [ -n "$DEPLOYER_OBJECT_ID" ]; then
         # Grant the deployer "Key Vault Certificates Officer" (idempotent), scoped to the vault only.
         EXISTING_CERT_OFFICER=$(az role assignment list \
             --scope "$VAULT_RESOURCE_ID" \
             --subscription "$SUBSCRIPTION_ID" \
-            --assignee "$DEPLOYER_OBJECT_ID" \
+            --assignee-object-id "$DEPLOYER_OBJECT_ID" \
             --role "Key Vault Certificates Officer" \
             --query "[].id" -o tsv 2>/dev/null || echo "")
         if [ -z "$EXISTING_CERT_OFFICER" ]; then
             if az role assignment create \
                 --scope "$VAULT_RESOURCE_ID" \
                 --subscription "$SUBSCRIPTION_ID" \
-                --assignee "$DEPLOYER_OBJECT_ID" \
+                --assignee-object-id "$DEPLOYER_OBJECT_ID" \
+                --assignee-principal-type "$DEPLOYER_PRINCIPAL_TYPE" \
                 --role "Key Vault Certificates Officer" \
                 --output none 2>/dev/null; then
                 echo "  Granted deployer 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
             elif az role assignment list \
                 --scope "$VAULT_RESOURCE_ID" \
                 --subscription "$SUBSCRIPTION_ID" \
-                --assignee "$DEPLOYER_OBJECT_ID" \
+                --assignee-object-id "$DEPLOYER_OBJECT_ID" \
                 --role "Key Vault Certificates Officer" \
                 --query "[0].id" -o tsv 2>/dev/null | grep -q .; then
                 echo "  Deployer already has 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
@@ -664,7 +689,6 @@ _AI_ACCOUNT=$(azd env get-value AZURE_OPENAI_ACCOUNT_NAME 2>/dev/null | head -n1
 _AI_PROJECT=$(azd env get-value AI_FOUNDRY_PROJECT_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
 _SUBSCRIPTION=$(azd env get-value AZURE_SUBSCRIPTION_ID 2>/dev/null | head -n1 | tr -d '\n\r ')
 _RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null | head -n1 | tr -d '\n\r ')
-_USER_OID=$(azd env get-value OBJECT_ID 2>/dev/null | head -n1 | tr -d '\n\r ')
 _MI_NAME=$(azd env get-value USER_MANAGED_IDENTITY_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 # Resolve project name from the Foundry endpoint if not stored separately
@@ -678,7 +702,7 @@ ensure_project_role() {
 
   assignment=$(az role assignment list \
     --scope "$_PROJECT_SCOPE" \
-    --assignee "$principal_id" \
+    --assignee-object-id "$principal_id" \
     --role "$role" \
     --query "[0].id" -o tsv 2>/dev/null || true)
   [[ -n "$assignment" ]] && return 0
@@ -694,7 +718,7 @@ ensure_project_role() {
 
   assignment=$(az role assignment list \
     --scope "$_PROJECT_SCOPE" \
-    --assignee "$principal_id" \
+    --assignee-object-id "$principal_id" \
     --role "$role" \
     --query "[0].id" -o tsv 2>/dev/null || true)
   if [[ -z "$assignment" ]]; then
@@ -704,11 +728,11 @@ ensure_project_role() {
   fi
 }
 
-if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$_USER_OID" ]]; then
+if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$DEPLOYER_OBJECT_ID" ]]; then
   _PROJECT_SCOPE="/subscriptions/${_SUBSCRIPTION}/resourceGroups/${_RG}/providers/Microsoft.CognitiveServices/accounts/${_AI_ACCOUNT}/projects/${_AI_PROJECT}"
 
-  ensure_project_role "$_USER_OID" User "64702f94-c441-49e6-a78b-ef80e0188fee" || exit 1
-  ensure_project_role "$_USER_OID" User "a001fd3d-188f-4b5d-821b-7da978bf7442" || exit 1
+  ensure_project_role "$DEPLOYER_OBJECT_ID" "$DEPLOYER_PRINCIPAL_TYPE" "64702f94-c441-49e6-a78b-ef80e0188fee" || exit 1
+  ensure_project_role "$DEPLOYER_OBJECT_ID" "$DEPLOYER_PRINCIPAL_TYPE" "a001fd3d-188f-4b5d-821b-7da978bf7442" || exit 1
 
   # Assign Azure AI Developer to the managed identity at project scope
   _MI_PRINCIPAL=""
@@ -727,7 +751,7 @@ if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$_USER_OID" ]]; 
 
   # This built-in data role is broader than the former custom role; Bicep gives
   # it only at the Foundry project scope. Ensure the deployer's assignment too.
-  ensure_project_role "$_USER_OID" User "19c28022-e58e-450d-a464-0b2a53034789" || exit 1
+  ensure_project_role "$DEPLOYER_OBJECT_ID" "$DEPLOYER_PRINCIPAL_TYPE" "19c28022-e58e-450d-a464-0b2a53034789" || exit 1
   echo "Azure AI permissions configured."
 
   # Allow time for RBAC propagation before agent creation
