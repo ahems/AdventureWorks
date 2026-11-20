@@ -75,12 +75,56 @@ format:
 - Name-based: `repo:<owner>/<repo>:environment:adventureworks-demo`
 - Immutable: `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:adventureworks-demo`
 
-GitHub.com repositories created after July 15, 2026 use immutable subjects by
-default; older repositories can opt in, and renamed or transferred repositories
-can switch formats. Customized OIDC subject templates can produce different
-subjects. Check the fork's actual settings and configured subject in
-[GitHub's OIDC reference](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims);
-the subject must match exactly. Do not copy a GitHub token into logs or share it.
+Use the immutable form only if the repository actually uses immutable subject
+claims. GitHub.com repositories created after July 15, 2026 use them by
+default; older repositories use the name-based form unless they opt in, and
+customized OIDC subject templates produce other subjects. See
+[GitHub's OIDC reference](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims).
+If unsure, start with the name-based form.
+
+> [!TIP]
+> If the workflow's **Azure login** step fails with `AADSTS700213: No matching
+> federated identity record found for presented assertion subject '...'`, the
+> quoted value is the exact subject GitHub sent. Either copy it into
+> `OIDC_SUBJECT` and rerun the script below (it updates the existing
+> credential), or, if the credential already uses the immutable form, turn on
+> immutable subjects for the repository as described next. Then rerun the
+> workflow. Do not copy a GitHub token into logs or share it.
+
+**Optional: turn on immutable subjects for an older repository.** The immutable
+form is recommended because the trust cannot be reused by someone who later
+claims the same owner or repository name. Repositories created before July 15,
+2026 can opt in. This requires admin access to the repository; `gh` is
+preinstalled in Cloud Shell (run `gh auth login` first if needed). Replace
+`OWNER/REPO`, for example `username/adventureworks`:
+
+```bash
+REPO="OWNER/REPO"
+
+# 1. Print the immutable subject for this repository. Use it as OIDC_SUBJECT,
+#    or compare it with the subject of an existing federated credential.
+gh api "repos/$REPO" \
+  --jq '"repo:\(.owner.login)@\(.owner.id)/\(.name)@\(.id):environment:adventureworks-demo"'
+
+# 2. Opt the repository in. use_default=true keeps GitHub's standard subject
+#    layout and only adds the owner and repository IDs.
+gh api -X PUT "repos/$REPO/actions/oidc/customization/sub" \
+  -F use_default=true -F use_immutable_subject=true
+
+# 3. Confirm: the output should include "use_immutable_subject": true.
+gh api "repos/$REPO/actions/oidc/customization/sub"
+```
+
+You can make the same change in the repository's Actions OIDC settings
+instead of the API. New workflow runs use the immutable subject immediately,
+so make sure the federated credential's subject matches exactly, including
+letter case, before rerunning the workflow. The setting applies to every OIDC
+workflow in the repository, so any other cloud trust configured with
+name-based subjects for this repository stops working. An organization-level
+subject template can also change the result. To revert, run step 2 with
+`use_immutable_subject=false` and use the name-based subject again. See
+GitHub's
+[OIDC REST API](https://docs.github.com/en/rest/actions/oidc#set-the-customization-template-for-an-oidc-subject-claim-for-a-repository).
 
 **Create the identity and grant access.** In Cloud Shell (Bash), create a
 script file, for example with `code create-github-deployer.sh`, and paste the
@@ -92,10 +136,11 @@ means a failed check stops the script without closing the Cloud Shell session.
 The script is safe to rerun, for example after a partial failure. It reuses
 the single app registration named `AdventureWorks-GitHub-Deploy`, its service
 principal, a federated credential with the same subject, and existing
-subscription-scope grants, creating only what is missing. It stops instead of
-changing anything if several apps share that name, if the credential name is
-already used for a different subject, or if an existing RBAC Administrator
-grant has a different condition.
+subscription-scope grants, creating only what is missing. To correct the
+subject, edit `OIDC_SUBJECT` and rerun: the script replaces the subject of its
+`github-adventureworks-demo` credential, so the old subject stops working. It
+stops instead of changing anything if several apps share that name, or if an
+existing RBAC Administrator grant has a different condition.
 
 ```bash
 #!/usr/bin/env bash
@@ -154,15 +199,19 @@ if [[ -z "$PRINCIPAL_ID" ]]; then
 fi
 
 CREDENTIALS=$(az ad app federated-credential list --id "$CLIENT_ID" --output json)
+FIC_JSON=$(jq -n --arg name "$CREDENTIAL_NAME" --arg issuer "$ISSUER" --arg subject "$OIDC_SUBJECT" \
+  '{name: $name, issuer: $issuer, subject: $subject, audiences: ["api://AzureADTokenExchange"]}')
+OLD_SUBJECT=$(jq -r --arg name "$CREDENTIAL_NAME" \
+  'map(select(.name == $name)) | if length == 1 then .[0].subject else "" end' <<<"$CREDENTIALS")
 if jq -e --arg subject "$OIDC_SUBJECT" --arg issuer "$ISSUER" \
   'any(.[]; .subject == $subject and .issuer == $issuer)' <<<"$CREDENTIALS" >/dev/null; then
   echo "Federated credential for $OIDC_SUBJECT already exists."
-elif jq -e --arg name "$CREDENTIAL_NAME" 'any(.[]; .name == $name)' <<<"$CREDENTIALS" >/dev/null; then
-  echo "Federated credential $CREDENTIAL_NAME exists with a different subject; review it before rerunning." >&2
-  exit 1
+elif [[ -n "$OLD_SUBJECT" ]]; then
+  # The script owns this credential name, so a new subject replaces the old one.
+  az ad app federated-credential update --id "$CLIENT_ID" \
+    --federated-credential-id "$CREDENTIAL_NAME" --parameters "$FIC_JSON" --output none
+  echo "Updated federated credential $CREDENTIAL_NAME: $OLD_SUBJECT -> $OIDC_SUBJECT."
 else
-  FIC_JSON=$(jq -n --arg name "$CREDENTIAL_NAME" --arg issuer "$ISSUER" --arg subject "$OIDC_SUBJECT" \
-    '{name: $name, issuer: $issuer, subject: $subject, audiences: ["api://AzureADTokenExchange"]}')
   az ad app federated-credential create --id "$CLIENT_ID" \
     --parameters "$FIC_JSON" --output none
   echo "Created federated credential for $OIDC_SUBJECT."

@@ -78,7 +78,7 @@ and templates instead.
   deployer setup script from `.github/workflows/README.md` against a stateful
   fake `az`: a fresh run needs no repository files, a rerun after a partial
   failure reuses the existing app and service principal, and conflicting
-  existing state stops it. Run
+  existing state stops it; a changed subject updates the script's credential. Run
   `python3 -m unittest tests/scripts/test_github_deployer_setup.py`.
 
 - **[test_recover_azd_env.py](test_recover_azd_env.py)** - Offline tests of

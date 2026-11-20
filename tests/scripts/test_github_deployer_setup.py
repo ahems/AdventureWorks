@@ -44,6 +44,10 @@ elif cmd.startswith("ad app federated-credential list"):
     out = json.dumps(state["credentials"])
 elif cmd.startswith("ad app federated-credential create"):
     state["credentials"].append(json.loads(opt("--parameters")))
+elif cmd.startswith("ad app federated-credential update"):
+    name = opt("--federated-credential-id")
+    state["credentials"] = [json.loads(opt("--parameters")) if c["name"] == name else c
+                            for c in state["credentials"]]
 elif cmd.startswith("role assignment list"):
     out = json.dumps(state["assignments"])
 elif cmd.startswith("role assignment create"):
@@ -114,12 +118,20 @@ class DeployerSetupScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.created(state), [])
 
+    def test_changed_subject_updates_the_script_credential(self):
+        old = "repo:username@1/adventureworks@2:environment:adventureworks-demo"
+        other = {"name": "unrelated", "issuer": "https://token.actions.githubusercontent.com", "subject": "x"}
+        result, state = self.run_script(apps=[APP], sp=SP, credentials=[
+            {"name": "github-adventureworks-demo", "issuer": "https://token.actions.githubusercontent.com",
+             "subject": old}, other])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"{old} -> {SUBJECT}", result.stdout)
+        self.assertEqual([c["subject"] for c in state["credentials"]], [SUBJECT, "x"])
+        self.assertNotIn("ad app federated-credential", " ".join(self.created(state)))
+
     def test_stops_on_ambiguous_or_conflicting_existing_state(self):
         cases = {
             "Several app registrations": {"apps": [APP, "55555555-5555-5555-5555-555555555555"]},
-            "different subject": {"apps": [APP], "sp": SP, "credentials": [
-                {"name": "github-adventureworks-demo", "issuer": "https://token.actions.githubusercontent.com",
-                 "subject": "repo:other/repo:environment:adventureworks-demo"}]},
             "different or missing condition": {"apps": [APP], "sp": SP, "assignments": [
                 assignment(CONTRIBUTOR), assignment(RBAC_ADMIN)]},
         }
