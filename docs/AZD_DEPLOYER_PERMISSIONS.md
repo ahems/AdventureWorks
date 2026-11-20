@@ -3,8 +3,8 @@
 This page is for **Azure subscription administrators** who have been asked to
 grant someone the permissions needed to deploy the AdventureWorks demo with
 `azd up`. It assumes no familiarity with the demo itself. For deployment from
-GitHub Actions with a managed identity, see
-[Deploying with a managed identity](#deploying-with-a-managed-identity-github-actions).
+GitHub Actions with an Entra app registration, see the
+[workflow setup instructions](../.github/workflows/README.md#one-time-azure-and-github-setup).
 
 ## Summary of the request
 
@@ -241,110 +241,140 @@ The allowlist must be reviewed whenever the demo adds a new role assignment.
 See [Azure role assignments and deployer limits](../infra/README.md#azure-role-assignments-and-deployer-limits)
 for the technical details of the condition.
 
-## Deploying with a managed identity (GitHub Actions)
+## Deploying with a service principal (GitHub Actions)
 
-Some subscriptions only allow deployment from a pipeline. For that optional
-path, `azd up` runs in GitHub Actions, which signs in as an existing
-**user-assigned managed identity** through a federated credential. No client
-secret is involved.
+The optional GitHub Actions path signs in with an Entra app registration's
+service principal and a GitHub OIDC federated credential. It requires Contributor
+and condition-restricted Role Based Access Control Administrator (or the custom
+role above) on the target subscription. The condition also limits role
+assignments to service principals.
 
-The optional GitHub workflow sets `DEPLOYER_PRINCIPAL_TYPE=ServicePrincipal`.
-The regular local `azd up` path defaults this setting to `User` and is
-unchanged. See the [workflow instructions](../.github/workflows/README.md#azd-up-service-principalyml)
-for configuring GitHub OIDC and running the deployment.
+The workflow sets `DEPLOYER_PRINCIPAL_TYPE=ServicePrincipal`; local `azd up`
+continues to default to `User`. See the [workflow instructions](../.github/workflows/README.md#azd-up-service-principalyml)
+for the Owner-run setup commands, GitHub Environment protections, and the
+Microsoft Graph self-check performed before deployment.
 
-### Required permissions
+### Authorizing another repository to use an existing service principal
 
-The managed identity needs the **same two roles as a user**, on the target
-subscription:
+Use this when an app registration and service principal already hold the
+permissions above on the target subscription, and only the repository
+containing the demo (for example, a new fork) needs to use it. Do not create
+another app registration, service principal or role assignment. Add one
+**federated identity credential** that trusts the repository's `azure-demo`
+GitHub Environment.
 
-| Role | Scope | Notes |
-| --- | --- | --- |
-| Contributor | Target subscription | Creates the resource group and all resources. |
-| Role Based Access Control Administrator (or the custom role above) | Target subscription | **With the allowlist condition.** Without the condition, this role can assign Owner to itself, which makes it equivalent to Owner. |
+**Who can run it.** Adding a federated credential changes the app
+registration, so subscription Owner alone is not enough. Use an owner of the
+app registration, or an Entra Application Administrator or Cloud Application
+Administrator. The role checks below also need read access to the
+subscription's role assignments, which Owner and Reader provide.
 
-Nothing else is required. In particular, the identity does **not** need:
+**Before you start.**
 
-- Microsoft Graph API permissions, an Entra directory role such as Directory
-  Readers, or permission to create app registrations. The deployment creates no
-  Entra applications. Application sign-in is handled by the demo's own OAuth
-  server.
-- SQL administrator rights. SQL is private, and the seed job's own identity is
-  its Entra administrator.
-- Pre-granted data-plane roles. During deployment, the identity grants itself
-  the allowlisted roles it needs on the resources it creates, such as
-  Key Vault Certificates Officer and Azure AI Developer.
-- Owner or User Access Administrator.
+- Get the existing app's **application (client) ID**, the target subscription
+  and tenant IDs, and the repository's exact OIDC subject. The subject format
+  depends on the repository; see
+  [Choose the exact GitHub OIDC subject](../.github/workflows/README.md#one-time-azure-and-github-setup).
+- Choose a federated credential name that is unique within the app, for
+  example `github-<owner>-<repo>-azure-demo`. Use letters, numbers and hyphens.
+  The name cannot be changed later.
+- An app registration can have at most 20 federated credentials.
 
-### Differences from granting a user
-
-- Use the identity's **principal (object) ID**, not its client ID, and
-  `--assignee-principal-type ServicePrincipal`.
-- Every role assignment that this path creates targets a service principal:
-  the deployer identity, the demo's runtime and seed identities, or Foundry's
-  system-assigned identities. You can therefore add a principal-type
-  restriction to the condition so that the identity cannot grant roles to users
-  or groups. This is recommended.
-- The identity must also have a federated identity credential that trusts the
-  GitHub repository and environment. Creating it requires permission to manage
-  the identity itself, for example Managed Identity Contributor on the
-  identity's resource group.
-
-### Granting the managed identity
-role assignments. Requires Azure CLI and `jq`.
+Run the following from the root of a checkout of this repository, in Bash,
+with the Azure CLI and `jq`, after `az login --tenant <tenant-id>`. The
+checks stop without making changes if the principal is not an application
+service principal, its conditional role does not cover the current
+[role allowlist](../infra/azd-role-assignment-allowlist.json), or the subject
+is already trusted.
 
 ```bash
-set +H  # avoid bash history expansion of "!" in the condition
-SUB="<target-subscription-id>"
-MI_SUB="<identity-subscription-id>"
-MI_RG="<identity-resource-group>"
-MI_NAME="<identity-name>"
-GITHUB_REPO="<owner>/<repository>"
-GITHUB_ENVIRONMENT="azure-demo"
+set -euo pipefail
+SUBSCRIPTION_ID="<target-subscription-id>"
+TENANT_ID="<target-tenant-id>"
+CLIENT_ID="<existing-app-client-id>"
+OIDC_SUBJECT="<exact-subject-for-the-repo-and-azure-demo-environment>"
+CREDENTIAL_NAME="<unique-name-such-as-github-owner-repo-azure-demo>"
 
-DEPLOYER_OID=$(az identity show --name "$MI_NAME" --resource-group "$MI_RG" \
-  --subscription "$MI_SUB" --query principalId -o tsv)
+for value in "$OIDC_SUBJECT" "$CREDENTIAL_NAME"; do
+  if [[ -z "$value" || "$value" == *"<"* || "$value" == *">"* ]]; then
+    echo "Replace every placeholder before running." >&2
+    exit 1
+  fi
+done
+az account set --subscription "$SUBSCRIPTION_ID"
+if [[ "$(az account show --query tenantId --output tsv)" != "$TENANT_ID" ]]; then
+  echo "The target subscription is not in the specified tenant." >&2
+  exit 1
+fi
 
-# 1. Contributor on the target subscription.
-az role assignment create \
-  --assignee-object-id "$DEPLOYER_OID" --assignee-principal-type ServicePrincipal \
-  --role Contributor --scope "/subscriptions/$SUB"
+# 1. Confirm the identity is an app registration's service principal.
+PRINCIPAL_ID=$(az ad sp show --id "$CLIENT_ID" --query id --output tsv)
+SP_TYPE=$(az ad sp show --id "$CLIENT_ID" --query servicePrincipalType --output tsv)
+if [[ "$SP_TYPE" != "Application" ]]; then
+  echo "The workflow supports only an app registration's service principal (found: $SP_TYPE)." >&2
+  exit 1
+fi
 
-# 2. Role Based Access Control Administrator, limited to the allowlisted roles
-#    and to service-principal assignees.
-ROLE_IDS=$(jq -r '[.roleDefinitionIds[]] | join(", ")' infra/azd-role-assignment-allowlist.json)
-CONDITION="((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLE_IDS} AND @Request[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'})) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLE_IDS} AND @Resource[Microsoft.Authorization/roleAssignments:PrincipalType] ForAnyOfAnyValues:StringEqualsIgnoreCase {'ServicePrincipal'}))"
-az role assignment create \
-  --assignee-object-id "$DEPLOYER_OID" --assignee-principal-type ServicePrincipal \
-  --role f58310d9-a9f6-439a-9e8d-f62e7b41a168 --scope "/subscriptions/$SUB" \
-  --condition "$CONDITION" --condition-version 2.0
+# 2. Confirm the existing subscription-scope grants.
+ASSIGNMENTS=$(az role assignment list --assignee "$PRINCIPAL_ID" \
+  --scope "/subscriptions/$SUBSCRIPTION_ID" --output json)
+jq -r '.[] | [.roleDefinitionName, .scope, (if .condition then "conditional" else "unconditional" end)] | @tsv' <<< "$ASSIGNMENTS"
+if ! jq -e --arg scope "/subscriptions/$SUBSCRIPTION_ID" \
+  'any(.[]; .roleDefinitionName == "Contributor" and (.scope | ascii_downcase) == ($scope | ascii_downcase))' \
+  <<< "$ASSIGNMENTS" >/dev/null; then
+  echo "Contributor on the target subscription is missing." >&2
+  exit 1
+fi
+if ! jq -e --slurpfile allow infra/azd-role-assignment-allowlist.json \
+  'any(.[]; (.condition // "") as $c | $c != "" and
+       ($c | contains("ServicePrincipal")) and
+       all($allow[0].roleDefinitionIds[]; . as $id | $c | ascii_downcase | contains($id | ascii_downcase)))' \
+  <<< "$ASSIGNMENTS" >/dev/null; then
+  echo "No conditional role-assignment grant covers the current allowlist; update it as described above." >&2
+  exit 1
+fi
 
-# 3. Trust GitHub Actions runs that use the named GitHub Environment.
-az identity federated-credential create \
-  --name "github-${GITHUB_ENVIRONMENT}" \
-  --identity-name "$MI_NAME" --resource-group "$MI_RG" --subscription "$MI_SUB" \
-  --issuer "https://token.actions.githubusercontent.com" \
-  --subject "repo:${GITHUB_REPO}:environment:${GITHUB_ENVIRONMENT}" \
-  --audiences "api://AzureADTokenExchange"
+# 3. Trust the repository's azure-demo environment, unless it is already trusted.
+if [[ -n "$(az ad app federated-credential list --id "$CLIENT_ID" \
+  --query "[?subject=='$OIDC_SUBJECT'].name" --output tsv)" ]]; then
+  echo "This subject is already trusted; no credential was added."
+else
+  FIC_JSON=$(jq -n --arg name "$CREDENTIAL_NAME" --arg subject "$OIDC_SUBJECT" '{
+    name: $name,
+    issuer: "https://token.actions.githubusercontent.com",
+    subject: $subject,
+    audiences: ["api://AzureADTokenExchange"]
+  }')
+  az ad app federated-credential create --id "$CLIENT_ID" \
+    --parameters "$FIC_JSON" --output none
+fi
+
+printf 'DEPLOYER_CLIENT_ID=%s\nDEPLOYER_OBJECT_ID=%s\nDEPLOYER_TENANT_ID=%s\nDEPLOYER_SUBSCRIPTION_ID=%s\n' \
+  "$CLIENT_ID" "$PRINCIPAL_ID" "$TENANT_ID" "$SUBSCRIPTION_ID"
 ```
 
-To use the custom role instead, pass `--role "AdventureWorks Demo azd Deployer"`
-in step 2, after creating that role as shown [above](#how-to-grant-it).
+The role check reports only the subscription-scope assignments it can see; it
+does not check inherited management-group roles. Review the listed roles: an
+unconditional Owner, User Access Administrator, or Role Based Access Control
+Administrator grant to the same principal bypasses the allowlist condition.
 
-### Additional risk with a managed identity
+**Then, in the repository:**
 
-On top of the [residual risk](#residual-risk-the-administrator-should-understand)
-that applies to any deployer:
+1. Under **Settings > Environments**, create the `azure-demo` environment.
+   Restrict its deployment branches and, where available, require reviewers.
+2. Add the four printed values as **environment variables** in `azure-demo`,
+   as described in [Configure GitHub](../.github/workflows/README.md#one-time-azure-and-github-setup).
+   `DEPLOYER_OBJECT_ID` is the service principal's object ID, not the app
+   registration's object ID.
+3. Run the workflow as described in
+   [Run the workflow](../.github/workflows/README.md#run-the-workflow).
 
-- **Anyone who can run the workflow acts as this identity.** That includes
-  anyone who can change the workflow on an allowed branch. Protect the GitHub
-  Environment with allowed branches and, where available, required reviewers.
-- **Contributor can change managed identities, including their federated
-  credentials.** If the deploying identity is in the target subscription, it
-  can add federated credentials to itself or to other managed identities there.
-  Keep the deploying identity in a different subscription where it has no
-  roles. A separate resource group in the target subscription does not help,
-  because Contributor covers every resource group there. A managed identity can
-  hold roles in another subscription in the same tenant.
-- **Keep the identity out of the demo's resource group.** Teardown deletes that
-  resource group and everything in it.
+**What this means for security.** Every repository with a trusted subject
+can deploy to the subscription with the same permissions, so a workflow run in
+any of them acts as this one deployer. Each repository's `azure-demo` environment
+protections therefore matter. To revoke a repository, delete only its credential:
+
+```bash
+az ad app federated-credential delete --id "$CLIENT_ID" \
+  --federated-credential-id "$CREDENTIAL_NAME"
+```

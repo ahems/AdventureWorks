@@ -4,7 +4,7 @@ This guide covers deploying, exploring, and tearing down the Azure-hosted demo w
 
 Deploying from a local terminal or Codespace with `azd up` is the primary
 path. If your subscription only permits deployment from GitHub, the optional
-[GitHub Actions managed-identity workflow](.github/workflows/README.md#azd-up-service-principalyml)
+[GitHub Actions service-principal workflow](.github/workflows/README.md#azd-up-service-principalyml)
 uses the same `azd up` hooks and requires administrator setup first.
 
 > **What you're deploying:** See the [architecture diagram](docs/AdventureWorks-Reference-Architecture.svg) for a visual map of all Azure components provisioned by `azd up`.

@@ -1,4 +1,4 @@
-name: Deploy demo with managed identity (azd up)
+name: Deploy demo with service principal (azd up)
 
 on:
   workflow_dispatch:
@@ -82,6 +82,12 @@ jobs:
             echo "GitHub Environment variables DEPLOYER_CLIENT_ID, DEPLOYER_OBJECT_ID, DEPLOYER_TENANT_ID, and DEPLOYER_SUBSCRIPTION_ID are required." >&2
             exit 1
           fi
+          for value in "$DEPLOYER_CLIENT_ID" "$DEPLOYER_OBJECT_ID" "$DEPLOYER_TENANT_ID" "$DEPLOYER_SUBSCRIPTION_ID"; do
+            if [[ ! "$value" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+              echo "Each DEPLOYER_* ID must be a valid GUID." >&2
+              exit 1
+            fi
+          done
           if [[ ! "$AZURE_LOCATION" =~ ^[a-zA-Z0-9-]+$ ]]; then
             echo "AZURE_LOCATION must contain only letters, numbers, and hyphens." >&2
             exit 1
@@ -125,9 +131,33 @@ jobs:
       - name: Log in to Azure CLI with GitHub OIDC
         uses: Azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
         with:
+          auth-type: SERVICE_PRINCIPAL
           client-id: ${{ vars.DEPLOYER_CLIENT_ID }}
           tenant-id: ${{ vars.DEPLOYER_TENANT_ID }}
           subscription-id: ${{ vars.DEPLOYER_SUBSCRIPTION_ID }}
+
+      - name: Verify deployment service principal
+        env:
+          DEPLOYER_CLIENT_ID: ${{ vars.DEPLOYER_CLIENT_ID }}
+          DEPLOYER_OBJECT_ID: ${{ vars.DEPLOYER_OBJECT_ID }}
+        run: |
+          set -euo pipefail
+          if ! PRINCIPAL=$(az rest --method get \
+            --url "https://graph.microsoft.com/v1.0/servicePrincipals/$DEPLOYER_OBJECT_ID?\$select=id,appId,servicePrincipalType" \
+            --output json); then
+            echo "Could not read the deployment service principal from Microsoft Graph." >&2
+            exit 1
+          fi
+          if ! jq -se --arg object_id "$DEPLOYER_OBJECT_ID" --arg client_id "$DEPLOYER_CLIENT_ID" '
+            length == 1 and (.[0] |
+              type == "object" and .servicePrincipalType == "Application" and
+              (.id | type == "string") and (.appId | type == "string") and
+              ((.id | ascii_downcase) == ($object_id | ascii_downcase)) and
+              ((.appId | ascii_downcase) == ($client_id | ascii_downcase)))
+          ' <<< "$PRINCIPAL" >/dev/null; then
+            echo "Deployment requires an application service principal matching DEPLOYER_CLIENT_ID and DEPLOYER_OBJECT_ID." >&2
+            exit 1
+          fi
 
       - name: Log in to azd with GitHub OIDC
         env:
