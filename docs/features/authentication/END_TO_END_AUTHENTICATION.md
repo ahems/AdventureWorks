@@ -3523,6 +3523,21 @@ definition FAIL. If the host suspends during a run, browser suites may time out
 on cold services; rerun `--browsers` (or the full profile) before treating such
 a failure as an authorization regression.
 
+**Paid agent canaries in the service-principal reference.** Every opt-in agent
+canary profile ran against the same environment. All authorization denials
+passed. The admin inference positives failed for a model-service reason, not an
+authorization one. The deployment-time model selection picked a chat model that
+returned only a `reasoning` output item without tools and an HTTP 500 from the
+Responses API with tools. The content-free `OutputItemTypes`/`UsageReported`
+telemetry on `Foundry.Responses.Completed` provides this evidence without
+recording prompts or responses. The chat-definition checks were BLOCKED because
+the operator lacks Foundry `agents/read`. To avoid an incompatible automatic
+choice, pin a known-good model before deployment with `CHAT_MODEL_NAME_REGEX`
+(an azd value or the service-principal workflow variable), then rerun the
+canaries. The manufacturing-content positive is BLOCKED when the model's reserved
+illustrations already exist. That pre-inference eligibility check is not an
+authorization result.
+
 ## Remaining work required for complete assurance
 
 - Deployed side-effect evidence for Functions mutation routes that still need

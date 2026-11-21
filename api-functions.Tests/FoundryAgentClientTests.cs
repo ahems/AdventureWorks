@@ -154,6 +154,31 @@ public class FoundryAgentClientTests
     }
 
     [Fact]
+    public async Task Empty_output_records_only_content_free_shape_diagnostics()
+    {
+        using var handler = new FoundryHandler
+        {
+            CustomResponse = """{"id":"resp-test","status":"completed","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"private reasoning"}]},{"type":"message","content":[{"type":"private text!","text":"hidden"}]}]}"""
+        };
+        var channel = new CapturingTelemetryChannel();
+        using var telemetry = new TelemetryConfiguration
+        {
+            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
+            TelemetryChannel = channel
+        };
+        var client = CreateClient(handler, telemetry);
+
+        var result = await client.InvokeAsync("agent", "Use supplied data", toolChoice: "none");
+
+        Assert.Equal(string.Empty, result.ResponseText);
+        var completed = Assert.Single(channel.Items.OfType<EventTelemetry>(),
+            item => item.Name == "Foundry.Responses.Completed");
+        Assert.Equal("reasoning,message,message/other", completed.Properties["OutputItemTypes"]);
+        Assert.Equal("false", completed.Properties["UsageReported"]);
+        Assert.DoesNotContain("private", string.Join("|", completed.Properties.Values));
+    }
+
+    [Fact]
     public async Task Tool_free_calls_never_approve_an_unsolicited_tool_request()
     {
         using var handler = new FoundryHandler { FirstResponseNeedsApproval = true };

@@ -702,20 +702,37 @@ if (!string.IsNullOrEmpty(storageAccountName))
     var expectedTables = DependencyHealthService.ApplicationTables;
     var expectedContainers = DependencyHealthService.ApplicationContainers;
 
+    // Only a 404 means a resource is missing; other failures (e.g. RBAC) are reported as check failures.
+    void LogStorageCheckFailure(string kind, string name, Exception error)
+    {
+        if (error is Azure.RequestFailedException { Status: 404 })
+            startupLogger.LogWarning("Missing storage {Kind} '{Name}' — run 'azd provision' to create infrastructure", kind, name);
+        else
+            startupLogger.LogWarning("Storage {Kind} '{Name}' check failed (status {Status}); the resource was not verified",
+                kind, name, (error as Azure.RequestFailedException)?.Status.ToString() ?? error.GetType().Name);
+    }
+
     foreach (var q in expectedQueues)
     {
         try { await queueSvc.GetQueueClient(q).GetPropertiesAsync(); }
-        catch { startupLogger.LogWarning("Missing storage queue '{Queue}' — run 'azd provision' to create infrastructure", q); }
+        catch (Exception error) { LogStorageCheckFailure("queue", q, error); }
     }
     foreach (var t in expectedTables)
     {
-        try { await tableSvc.GetTableClient(t).GetAccessPoliciesAsync(); }
-        catch { startupLogger.LogWarning("Missing storage table '{Table}' — run 'azd provision' to create infrastructure", t); }
+        // Matches the readiness probe: a one-row read needs only the table data role, unlike Get Table ACL.
+        try
+        {
+            await using var pages = tableSvc.GetTableClient(t)
+                .QueryAsync<Azure.Data.Tables.TableEntity>(maxPerPage: 1, select: ["PartitionKey"])
+                .AsPages().GetAsyncEnumerator();
+            await pages.MoveNextAsync();
+        }
+        catch (Exception error) { LogStorageCheckFailure("table", t, error); }
     }
     foreach (var c in expectedContainers)
     {
         try { await blobSvc.GetBlobContainerClient(c).GetPropertiesAsync(); }
-        catch { startupLogger.LogWarning("Missing blob container '{Container}' — run 'azd provision' to create infrastructure", c); }
+        catch (Exception error) { LogStorageCheckFailure("blob container", c, error); }
     }
 }
 

@@ -308,6 +308,11 @@ environment variables):
    | `DEPLOYER_TENANT_ID` | Entra tenant ID |
    | `DEPLOYER_SUBSCRIPTION_ID` | Target subscription ID |
 
+Optionally add `CHAT_MODEL_NAME_REGEX` (for example `^gpt-6\.2-astra$`) to pin
+the chat model that `preup.sh` would otherwise rank automatically from available
+quota. Use it when a newly available model variant is not yet compatible with
+the Foundry Responses calls used by the AI features.
+
 The deployment service principal itself needs no client secret, Microsoft Graph
 application permission, Entra directory role, SQL administrator access, or
 pre-granted application data role. The human creating the app does need the

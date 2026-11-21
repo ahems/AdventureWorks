@@ -423,8 +423,9 @@ All Azure Storage resources used by the demo application (queues, tables, blob c
   application tables. Authenticate with the test's approved identity; do not use
   storage account keys.
 - **Startup health check**: `Program.cs` uses `DependencyHealthService.Application*`
-  resource lists, checks queues/containers with `GetPropertiesAsync()` and tables with
-  `GetAccessPoliciesAsync()`, and logs warnings on failed checks. These checks run
+  resource lists, checks queues/containers with `GetPropertiesAsync()` and tables with a
+  one-row `QueryAsync` (Get Table ACL is not granted by the built-in table data role), and
+  logs "missing" only for 404s; other failures are logged as unverified checks. These checks run
   during startup but do not fail startup or create resources.
 - **Why**: Each `CreateIfNotExistsAsync` adds an unnecessary HTTP round-trip (HEAD + conditional PUT). During simulation workloads that send hundreds of queue messages per minute, this overhead is significant.
 

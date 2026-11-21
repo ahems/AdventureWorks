@@ -8273,6 +8273,12 @@ def guarded_agent_tool_definition_matches(definition, expected_tools, mcp_url):
     )
 
 
+def foundry_definition_denied_message(status):
+    # Service-principal deployments do not grant the local operator Foundry agent read access.
+    return (f"Foundry agent definition read returned HTTP {status}; the validating identity "
+            "needs Foundry agents/read (the template grants Azure AI Developer to the deployer)")
+
+
 def guarded_chat_agent_definition(report, deployment, agent_key, expected_tools, label):
     endpoint = https_url(deployment.required("AI_FOUNDRY_PROJECT_ENDPOINT"))
     agent_id = deployment.required(agent_key)
@@ -8285,6 +8291,8 @@ def guarded_chat_agent_definition(report, deployment, agent_key, expected_tools,
         "GET", endpoint + "/agents/" + urllib.parse.quote(agent_id, safe="") + "?api-version=v1",
         token=token,
     )
+    if status in (401, 403):
+        raise EvidenceError(f"{label}: " + foundry_definition_denied_message(status))
     try:
         document = json.loads(raw)
         latest = document["versions"]["latest"]
@@ -8713,9 +8721,7 @@ def help_me_choose_agent_definition(report, deployment):
         token=token,
     )
     if status in (401, 403):
-        # Service-principal deployments do not grant the local operator Foundry agent read access.
-        raise EvidenceError(f"Foundry agent definition read returned HTTP {status}; the validating identity "
-                            "needs Foundry agents/read (the template grants Azure AI Developer to the deployer)")
+        raise EvidenceError(foundry_definition_denied_message(status))
     try:
         document = json.loads(raw)
         definition = (document.get("versions", {}).get("latest", {}).get("definition")

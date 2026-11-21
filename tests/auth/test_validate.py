@@ -5201,6 +5201,25 @@ class ContractTests(unittest.TestCase):
                 auth.command(["az", "rest", "--method", "get"])
         self.assertIn("permission denied", str(raised.exception))
         self.assertNotIn("PRIVATE", str(raised.exception))
+
+    def test_guarded_chat_definition_denial_is_blocked_with_the_missing_permission(self):
+        values = {"AI_FOUNDRY_PROJECT_ENDPOINT": "https://foundry.example.test/api/projects/p",
+                  "AI_AGENT_CHAT_ID": "chat-agent", "MCP_SERVICE_URL": "https://mcp.example.test/mcp"}
+        deployment = SimpleNamespace(required=lambda key: values[key])
+        for status in [401, 403]:
+            with self.subTest(denied=status):
+                report = auth.Report(Path("."))
+                with patch.object(auth, "command", return_value="foundry-token"), \
+                        patch.object(auth, "http", return_value=(status, {}, b"PRIVATE")):
+                    report.guarded("agent:customer-chat:definition", "agent-policy",
+                                   lambda: auth.guarded_chat_agent_definition(
+                                       report, deployment, "AI_AGENT_CHAT_ID", {"get_customer_orders"},
+                                       "customer-chat"))
+                self.assertEqual([check["status"] for check in report.checks], ["BLOCKED"])
+                self.assertIn("agents/read", report.checks[0]["detail"])
+                self.assertNotIn("PRIVATE", json.dumps(report.checks))
+
+    def test_help_me_choose_public_flow_is_anonymous_and_rejects_fallback_or_thread_ids(self):
         deployment = SimpleNamespace(required=lambda _: "https://functions.example.test")
         calls = []
         questions = {

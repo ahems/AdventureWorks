@@ -226,6 +226,7 @@ jobs:
           DEPLOYER_OBJECT_ID: ${{ vars.DEPLOYER_OBJECT_ID }}
           DEPLOYER_TENANT_ID: ${{ vars.DEPLOYER_TENANT_ID }}
           DEPLOYER_SUBSCRIPTION_ID: ${{ vars.DEPLOYER_SUBSCRIPTION_ID }}
+          CHAT_MODEL_NAME_REGEX: ${{ vars.CHAT_MODEL_NAME_REGEX }}
         run: |
           set -euo pipefail
           RESOURCE_GROUP="rg-$ENVIRONMENT_NAME"
@@ -248,6 +249,10 @@ jobs:
           azd env set OBJECT_ID "$DEPLOYER_OBJECT_ID" --no-prompt
           azd env set DEPLOYER_PRINCIPAL_TYPE ServicePrincipal --no-prompt
           azd env set SQL_DATABASE_NAME AdventureWorks --no-prompt
+          # Optional repository variable; preup otherwise ranks available chat models automatically.
+          if [[ -n "${CHAT_MODEL_NAME_REGEX:-}" ]]; then
+            azd env set CHAT_MODEL_NAME_REGEX "$CHAT_MODEL_NAME_REGEX" --no-prompt
+          fi
 
       - name: Provision and deploy with azd
         id: azd_up

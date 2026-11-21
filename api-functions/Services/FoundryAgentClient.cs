@@ -706,6 +706,10 @@ public class FoundryAgentClient
         }
     }
 
+    private static string SafeShapeName(string? value) =>
+        value is { Length: > 0 and <= 64 } && value.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '_' or '-' or '.')
+            ? value : "other";
+
     private FoundryAgentResponse ParseResponse(
         string responseBody, string agentId, CachedAgentDefinition definition, FoundryResponsesRequest request,
         string toolPolicy, string credentialClientMatch)
@@ -730,6 +734,8 @@ public class FoundryAgentClient
         var responseText = new StringBuilder();
         var toolsUsed = new List<string>();
         var completedMcpTools = new List<string>();
+        // Type names only (never content) so empty-output responses can be diagnosed safely.
+        var outputShape = new List<string>();
 
         // Walk the output array to collect text and tool-call names.
         // Output item types seen in Foundry responses:
@@ -742,7 +748,17 @@ public class FoundryAgentClient
         {
             foreach (var item in output.EnumerateArray())
             {
-                var itemType = item.TryGetProperty("type", out var t) ? t.GetString() : null;
+                var itemType = item.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
+                    ? t.GetString() : null;
+                outputShape.Add(SafeShapeName(itemType));
+                if (itemType == "message" && item.TryGetProperty("content", out var shapeContent)
+                    && shapeContent.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var c in shapeContent.EnumerateArray())
+                        outputShape.Add("message/" + SafeShapeName(
+                            c.ValueKind == JsonValueKind.Object && c.TryGetProperty("type", out var shapeType)
+                            && shapeType.ValueKind == JsonValueKind.String ? shapeType.GetString() : null));
+                }
 
                 switch (itemType)
                 {
@@ -806,11 +822,13 @@ public class FoundryAgentClient
 
         // Token usage → App Insights metrics
         int inputTokens = 0, outputTokens = 0;
-        if (root.TryGetProperty("usage", out var usageProp))
+        var usageReported = root.TryGetProperty("usage", out var usageProp) && usageProp.ValueKind == JsonValueKind.Object;
+        if (usageReported)
         {
             if (usageProp.TryGetProperty("input_tokens", out var it)) inputTokens = it.GetInt32();
             if (usageProp.TryGetProperty("output_tokens", out var ot)) outputTokens = ot.GetInt32();
         }
+        var outputItemTypes = outputShape.Count > 0 ? string.Join(",", outputShape.Distinct()) : "none";
 
         _telemetryClient.TrackMetric("Foundry.Responses.InputTokens", inputTokens,
             new Dictionary<string, string> { ["AgentId"] = agentId });
@@ -831,7 +849,9 @@ public class FoundryAgentClient
             ["ToolsUsed"] = string.Join(",", toolsUsed.Distinct()),
             ["CompletedMcpTools"] = string.Join(",", completedMcpTools.Distinct()),
             ["InputTokens"] = inputTokens.ToString(),
-            ["OutputTokens"] = outputTokens.ToString()
+            ["OutputTokens"] = outputTokens.ToString(),
+            ["OutputItemTypes"] = outputItemTypes,
+            ["UsageReported"] = usageReported ? "true" : "false"
         });
 
         _logger.LogInformation(
@@ -842,9 +862,10 @@ public class FoundryAgentClient
 
         if (responseText.Length == 0)
             _logger.LogWarning(
-                "Foundry agent '{AgentId}' returned no text output. ResponseId={ResponseId}, ToolsUsed={Tools}. Output may contain only reasoning or tool-call items.",
+                "Foundry agent '{AgentId}' returned no text output. ResponseId={ResponseId}, ToolsUsed={Tools}, OutputItemTypes={OutputItemTypes}, UsageReported={UsageReported}. Output may contain only reasoning or tool-call items.",
                 agentId, responseId ?? "?",
-                toolsUsed.Count > 0 ? string.Join(",", toolsUsed.Distinct()) : "none");
+                toolsUsed.Count > 0 ? string.Join(",", toolsUsed.Distinct()) : "none",
+                outputItemTypes, usageReported);
 
         return new FoundryAgentResponse
         {
