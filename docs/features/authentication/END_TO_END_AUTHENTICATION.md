@@ -232,8 +232,10 @@ Communication Services passes its local-auth check, because ARM API
 The overall result is still BLOCKED. Each remaining blocker is a deliberately
 unexercised path, not a detected weakness:
 
-- **119 Functions cells.** 83 mutation denials need a reviewed per-operation
-  safe fixture. The rest are classified side-effecting GETs (bank, supply-chain,
+- **119 Functions cells** at the time of that run. 83 mutation denials needed a
+  reviewed per-operation safe fixture; 54 now have one (see
+  [Reviewed mutation denial fixtures](#reviewed-mutation-denial-fixtures)), leaving
+  29 by design. The rest are classified side-effecting GETs (bank, supply-chain,
   warehouse and workforce initialization), nonempty order/payment rows and the
   receipt-email canary.
 - **32 Functions scope cells** and **24 default-profile MCP consumer-profile
@@ -280,6 +282,60 @@ separate diagnostic started the emulator, but the failures' cause is unconfirmed
 Both failed reports are retained rather than treated as policy passes. The host
 runner now allows up to 30 seconds for emulator startup and still fails on
 timeout or early process exit.
+
+#### Reviewed mutation denial fixtures
+
+The Functions middleware rejects unauthenticated requests before any handler
+runs, but `FUNCTIONS_OAUTH_MODE=disabled|audit` would let a request through. A
+live denial probe is therefore sent to a mutation only when
+`functionMutationDenialFixtures` in [contracts.json](../../../tests/auth/contracts.json)
+has a reviewed fixture for it. Each fixture is keyed `<FunctionName>:<METHOD>`
+and holds:
+
+- the route and path values
+- a body, or a short verbatim `rawBody`
+- the expected regression status if auth were bypassed (400–599)
+- the reason it is safe
+
+The fixture is chosen so that, if auth were bypassed, the handler would reject
+the request before writing anything.
+
+- **54 mutations have fixtures.** Anonymous and forged-token probes must return
+  401 with the middleware challenge
+  `Bearer realm="adventureworks-functions"` and `error="missing_token"` or
+  `error="invalid_token"`. No handler emits that realm, so a handler's own
+  401/403 cannot pass as a middleware denial.
+- **26 mutations stay BLOCKED by design.** These handlers write or start work
+  before they validate input, so no fixture is safe. Examples include
+  approve/reject-all, queue clears, pipeline promotion, exchange-rate refresh,
+  simulator reset/initialize/stop, receipt generation, embeddings/image jobs,
+  bank deposit/withdraw, supply-chain orders and `DeleteAddress`.
+- **3 more are excluded.** AI review generation, description translation and
+  supply-chain restock would succeed (200) with a malformed body, so they also
+  stay BLOCKED.
+
+The fixture contract is validated strictly. Methods must be mutations, keys are
+an allow-list, path values must match the route placeholders and
+`[A-Za-z0-9-]{1,64}`, and `rawBody` is at most 64 characters. The
+`inventory:function-mutation-fixtures` gate fails when a fixture no longer binds
+a protected handler and method, so route drift forces a re-review before any
+probe is sent. Their token, scope and category denials remain covered by the
+isolated Functions host.
+
+#### Customer-profile substitution
+
+The retained default-profile consumers have no Customer row, so DAB
+`SalesOrderHeader` owner-row cells and MCP consumer ownership cells cannot run
+against them. After the order canary runs, the report reconciles each such
+BLOCKED cell to PASS only when every same-run substitute exists exactly once and
+passed:
+
+- `dab:owner-rows:*` uses `dab:owner-rows-customer:<same case>`
+- `mcp-consumer:{A|B}:<tool>:<case>` uses the canary's
+  `order:mcp:owner:*` and `order:mcp:foreign:*` checks
+
+Each reconciled cell cites its substitutes. Without the canary, or if any
+substitute is missing, duplicated or not PASS, the cell stays BLOCKED.
 
 Runtime Foundry role assignments match source, but configured roles do not prove
 every Foundry or agent data path or complete effective RBAC. Individual unexecuted
@@ -512,9 +568,34 @@ On `adventureworks770`, none of the 64 models without instructions had a
 manufactured variant. Model 44 was the only diagram-free manufactured candidate,
 and it returned 409 because its reserved illustrations already exist. The report
 recorded 7 PASS and 3 BLOCKED, with all three denials passing. Positive-path
-generation therefore remains a documented **data-state blocker**. Unblocking it
-requires catalog or illustration data changes, which the no-database-change
-policy prohibits.
+generation was therefore a documented **data-state blocker** at that point.
+
+The seed overlays in `seed-job/manufacturing-content-coverage.json` now cover
+every manufactured model and model-less part, so a fresh environment has no
+read-only candidate. The model discovery also skips any model whose reserved
+illustrations (`100000 + modelId × 10 + 1..3`) already exist. When neither
+discovery finds a candidate, the profile creates a **disposable test fixture**
+using DAB REST as the manufacturing identity. That fixture is one
+`AuthCanary Part <random>` product (`MakeFlag` true, no model) with one
+`BillOfMaterials` edge. The profile verifies that the product's reserved part
+illustrations (`2000000 + productId × 10 + 1..3`) are free, then sends one
+part-sheet generation request. It deletes the BOM row and the product in a
+`finally` path and records `agent:manufacturing-content:fixture-cleanup`. The
+draft is unsaved, so the temporary rows are the only persistent data, and they
+are removed. This is a controlled test-data mutation; it does not change
+seeded catalog or illustration data.
+
+Exercising this path exposed an application defect. The guarded-definition
+check in `FoundryAgentClient` required every guarded agent definition to have
+configured tools. The intentionally tool-free `manufacturing-content-agent`
+therefore failed every instruction, part-sheet and diagram draft with HTTP 500.
+The check now requires tools only for guarded calls whose `toolChoice` is not
+`none`. Guarded calls still never receive fallback MCP tool augmentation. Unit
+tests cover the tool-free draft, cached-definition reuse by a tool-using chat,
+and a definition without instructions. After deployment, the profile on
+`adventureworks834` passed **11 of 11** checks: the three denials, the
+fixture, generation, cleanup, sampled Foundry identity and tool suppression. A
+follow-up DAB read confirmed that no fixture rows remained.
 
 On the refreshed deployment, a separate bounded admin-chat canary correlated
 the business dashboard, sales-by-status and top-selling-product tool results
@@ -1423,6 +1504,16 @@ trust and agent dependency closure. They are not FAIL or PASS. The SP's workflow
 `--infra` run, which has that access, covers deployed-agent discovery. Do not
 add an operator role assignment in place. Per the demo policy, any template
 change is applied by recreating the environment.
+
+The recommended way to get complete local evidence for an SP deployment is to
+run the profiles signed in as that same deployment SP in both `az` and `azd`
+(for example `az login --service-principal` and
+`azd auth login --client-id ... --tenant-id ...` with a federated or
+certificate credential the administrator issues). The operator then holds the
+template's Foundry roles, so the Foundry-derived checks are evaluated instead
+of BLOCKED. The application, DAB and MCP checks still authenticate as the
+seeded demo users through api-mcp, so the SP sign-in changes only which Azure
+control-plane and Foundry evidence can be read.
 
 ### Seed log mount: approved SMB managed identity migration
 
@@ -3105,7 +3196,12 @@ only aggregate Application Insights requests for the exact
 samples establish observed execution, not expired-row selection, the 500-row
 batch limit, deletion effects or natural capability expiry. No samples means
 BLOCKED, not proof the timer never ran; observed failed invocations fail this
-check. No timer is forced and no SQL fixture or clock change is made.
+check. Only invocations after the latest successful seed execution are evaluated,
+because the seed job creates `Sales.GuestCartSession` asynchronously and a fresh
+deployment's first ticks fail with `Invalid object name` until it finishes. Those
+earlier failures are counted separately as `preSeedFailures`, and the check stays
+BLOCKED until a seed execution has succeeded. No timer is forced and no SQL fixture
+or clock change is made.
 Targeted source-bound report
 `.auth-results/guest-cleanup-timer-74dd6896-e1ce-45c5-ad75-8d8b9f000c96/`
 records **six successful sampled invocations, zero failures**; actual SQL
@@ -3534,9 +3630,62 @@ recording prompts or responses. The chat-definition checks were BLOCKED because
 the operator lacks Foundry `agents/read`. To avoid an incompatible automatic
 choice, pin a known-good model before deployment with `CHAT_MODEL_NAME_REGEX`
 (an azd value or the service-principal workflow variable), then rerun the
-canaries. The manufacturing-content positive is BLOCKED when the model's reserved
-illustrations already exist. That pre-inference eligibility check is not an
-authorization result.
+canaries. The manufacturing-content positive was then BLOCKED because the
+model's reserved illustrations already existed. That pre-inference eligibility
+check is not an authorization result, and the disposable part fixture now
+replaces it.
+
+**Service-principal reference with the deploying SP as operator.** A second
+service-principal-deployed environment was validated while the local operator
+was signed in to `az` and `azd` as the deploying service principal. Foundry
+definition checks are therefore evaluated, not BLOCKED;
+`agent:helpme-choose:definition` passed. The full profile
+(`--all --functions-host --order-cancellation-canary` plus six agent canaries)
+recorded **4,370 PASS, 26 accepted exceptions, 202 BLOCKED and 9 FAIL**:
+
+- All 110 reviewed mutation denial probes passed with the middleware challenge,
+  and `inventory:function-mutation-fixtures` passed.
+- All 189 default-profile customer-profile cells passed through same-run
+  order-canary substitutes.
+- `guest-cart:cleanup:timer-execution` passed with four post-seed ticks. The one
+  pre-seed failure was excluded, as described in
+  [Ownership-handler two-owner closure](#ownership-handler-two-owner-closure).
+- Three native DAB MCP checks failed with a lost session (HTTP 404). DAB keeps
+  MCP sessions in replica memory, and the app scaled from one to three replicas
+  during the run. The same scenario passed three times in isolation. The probe
+  now restarts once with a fresh session after a mid-session 404. If the session
+  is lost again it reports `dab-mcp:session-continuity` as BLOCKED and evaluates
+  no authorization outcomes from that session. A lost first session's cleanup is
+  kept as `dab-mcp:lost-session-cleanup`.
+- Six agent positives failed for a model-service reason. The pinned model
+  `gpt-6.2-astra` (version `2026-11-17`) returned empty Responses output with
+  zero token usage from the Foundry **project** endpoint, even for a minimal
+  prompt. The same deployment answered through the account-level Responses
+  endpoint and chat completions. All agent authorization denials passed. To
+  exercise the positives, pin an established model, for example
+  `^gpt-6\.1-terra$`, before recreating the environment.
+
+**Rerun after replacing the chat model.** The operator recreated the `chat`
+deployment on `adventureworks834` as `gpt-6.1-terra` (Foundry deployments cannot
+be renamed). The same full profile then recorded **4,410 PASS, 26 accepted
+exceptions, 173 BLOCKED and 2 FAIL**. Every agent positive passed, and the DAB
+MCP session restart removed the earlier lost-session failures. The two FAILs
+were `browser:inspector:complete` and its required browser aggregate. All 39
+Inspector assertions had passed, but the Node script exited non-zero without a
+recorded cause. The runner now classifies Inspector stderr the same way as the
+internal browser script and appends the sanitized failure to the diagnostic. A
+`--browsers` rerun passed all 140 checks, so this was transient. The analysis
+profile passed 30 of 30. The manufacturing-content profile passed 11 of 11
+after the client tool-guard fix and the disposable part fixture, both described
+with the manufacturing-content canary profile above. The azd value
+`chatGptModelName` still records the original choice, which affects reports
+only.
+
+The CI read-only infrastructure step for this deployment failed on the
+guest-cart timer before that fix. The first timer tick ran before the
+asynchronous seed created `Sales.GuestCartSession`. The SQL trigger listeners
+also logged startup failures before the seed created the outbox table and lease
+schema; they recovered once seeding finished.
 
 ## Remaining work required for complete assurance
 

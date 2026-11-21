@@ -264,8 +264,10 @@ public class FoundryAgentClient
         CachedAgentDefinition def;
         try
         {
+            var guardedDefinition = requireConfiguredDefinition || contentFilterPolicy is not null || guardedTools is not null;
             def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken,
-                requireConfiguredDefinition: requireConfiguredDefinition || contentFilterPolicy is not null || guardedTools is not null);
+                requireConfiguredDefinition: guardedDefinition,
+                requireConfiguredTools: guardedDefinition && !string.Equals(toolChoice, "none", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception ex) when (guardedTools is not null && ex is (InvalidOperationException or JsonException or KeyNotFoundException))
         {
@@ -981,12 +983,15 @@ public class FoundryAgentClient
     private async Task<CachedAgentDefinition> GetOrFetchAgentDefinitionAsync(
         string agentId,
         CancellationToken cancellationToken,
-        bool requireConfiguredDefinition = false)
+        bool requireConfiguredDefinition = false,
+        bool requireConfiguredTools = false)
     {
         if (_agentDefCache.TryGetValue(agentId, out var cached))
         {
             if (requireConfiguredDefinition && (cached.IsFallback || string.IsNullOrWhiteSpace(cached.Instructions)))
                 throw new InvalidOperationException("Guarded agent requires a configured agent policy.");
+            if (requireConfiguredTools && cached.Tools.Count == 0)
+                throw new InvalidOperationException("Guarded agent requires configured agent tools.");
             return cached;
         }
 
@@ -1063,12 +1068,12 @@ public class FoundryAgentClient
         // If the agent definition has no MCP tools configured but fallback MCP URLs are
         // available via environment variables, inject them so the agent can reach live data.
         // This handles agents created in the Foundry portal without explicit MCP server setup.
-        if (requireConfiguredDefinition && tools.Count == 0)
+        // Tool-using guarded agents must define their own tools; tool-free (data-supplied) guarded
+        // agents are valid. Neither kind ever receives injected fallback tools.
+        if (requireConfiguredTools && tools.Count == 0)
             throw new InvalidOperationException("Guarded agent requires configured agent tools.");
-        if (tools.Count == 0 && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
+        if (tools.Count == 0 && !requireConfiguredDefinition && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
         {
-            if (requireConfiguredDefinition)
-                throw new InvalidOperationException("Guarded agent requires explicitly configured tools.");
             _logger.LogWarning(
                 "Agent '{AgentId}' has no tools in its Foundry definition. " +
                 "Augmenting with MCP tools from MCP_SERVICE_URL environment variable. " +

@@ -276,6 +276,50 @@ public class FoundryAgentClientTests
         Assert.Empty(handler.ResponseRequests);
     }
 
+    [Fact]
+    public async Task Draft_generation_uses_tool_free_definition_without_fallback_augmentation()
+    {
+        using var handler = new FoundryHandler { DefinitionHasTools = false };
+        var channel = new CapturingTelemetryChannel();
+        using var telemetry = new TelemetryConfiguration
+        {
+            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
+            TelemetryChannel = channel
+        };
+
+        await CreateClient(handler, telemetry).InvokeAsync(
+            "manufacturing-content-agent", "Draft", toolChoice: "none", requireConfiguredDefinition: true);
+
+        var completed = Assert.Single(channel.Items.OfType<EventTelemetry>(),
+            item => item.Name == "Foundry.Responses.Completed");
+        Assert.Equal("false", completed.Properties["AgentDefinitionFallback"]);
+        Assert.False(handler.ResponseRequests.Single().TryGetProperty("tools", out _));
+        Assert.Equal(0, handler.McpRequests);
+    }
+
+    [Fact]
+    public async Task Cached_tool_free_definition_does_not_satisfy_tool_using_guarded_chat()
+    {
+        using var handler = new FoundryHandler { DefinitionHasTools = false };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+        await client.InvokeAsync("eshop-chat-agent", "Draft", toolChoice: "none", requireConfiguredDefinition: true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.InvokeAsync(
+            "eshop-chat-agent", "Hello", contentFilterPolicy: "AdventureWorks-Eshop"));
+        Assert.Single(handler.ResponseRequests);
+    }
+
+    [Fact]
+    public async Task Draft_generation_rejects_definition_without_instructions()
+    {
+        using var handler = new FoundryHandler { DefinitionHasTools = false, DefinitionHasInstructions = false };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateClient(handler, telemetry).InvokeAsync(
+            "manufacturing-content-agent", "Draft", toolChoice: "none", requireConfiguredDefinition: true));
+        Assert.Empty(handler.ResponseRequests);
+    }
+
     [Theory]
     [InlineData("""{"error":{"code":"content_filter","message":"private prompt must not be echoed"}}""", 400)]
     [InlineData("""{"error":{"innererror":{"code":"ResponsibleAIPolicyViolation"}}}""", 400)]

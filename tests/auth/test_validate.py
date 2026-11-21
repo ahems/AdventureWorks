@@ -819,20 +819,29 @@ class ContractTests(unittest.TestCase):
                 self.assertEqual(report.checks[0]["status"], expected)
 
     def test_guest_cleanup_telemetry_distinguishes_execution_absence_failures_and_invalid_evidence(self):
+        executions = [
+            {"properties": {"status": "Failed", "endTime": "2026-11-14T03:00:00+00:00"}},
+            {"properties": {"status": "Succeeded", "endTime": "2026-11-14T01:01:20+00:00"}},
+            {"properties": {"status": "Running", "endTime": None}}]
         for scenario, values, expected in [
-                ("success", [6, 6, 0, "2026-11-14T01:50:00Z"], "PASS"),
-                ("fractional-ticks", [6, 6, 0, "2026-11-14T01:50:00.0071013Z"], "PASS"),
-                ("failure", [6, 5, 1, "2026-11-14T01:50:00Z"], "FAIL"),
-                ("absent", [0, 0, 0, None], "BLOCKED"),
-                ("unknown-status", [1, 0, 0, "2026-11-14T01:50:00Z"], "BLOCKED"),
-                ("inconsistent", [1, 2, 0, "2026-11-14T01:50:00Z"], None),
-                ("boolean", [True, 1, 0, "2026-11-14T01:50:00Z"], None),
-                ("invalid-time", [1, 1, 0, "not-a-date"], None)]:
+                ("success", [6, 6, 0, "2026-11-14T01:50:00Z", 0], "PASS"),
+                ("pre-seed-failure-excluded", [6, 6, 0, "2026-11-14T01:50:00Z", 1], "PASS"),
+                ("fractional-ticks", [6, 6, 0, "2026-11-14T01:50:00.0071013Z", 0], "PASS"),
+                ("failure", [6, 5, 1, "2026-11-14T01:50:00Z", 0], "FAIL"),
+                ("absent", [0, 0, 0, None, 0], "BLOCKED"),
+                ("absent-empty-max", [0, 0, 0, "", 2], "BLOCKED"),
+                ("unknown-status", [1, 0, 0, "2026-11-14T01:50:00Z", 0], "BLOCKED"),
+                ("inconsistent", [1, 2, 0, "2026-11-14T01:50:00Z", 0], None),
+                ("boolean", [True, 1, 0, "2026-11-14T01:50:00Z", 0], None),
+                ("negative-pre-seed", [1, 1, 0, "2026-11-14T01:50:00Z", -1], None),
+                ("invalid-time", [1, 1, 0, "not-a-date", 0], None)]:
             result = {"tables": [{"columns": [{"name": name} for name in
-                                             ["invocations", "successes", "failures", "latest"]],
+                                             ["invocations", "successes", "failures", "latest",
+                                              "preSeedFailures"]],
                                    "rows": [values]}]}
-            deployment = SimpleNamespace(required=lambda _: "selected-group",
-                                         azure=unittest.mock.Mock(side_effect=[["/selected/insights"], result]))
+            deployment = SimpleNamespace(
+                required=lambda _: "selected",
+                azure=unittest.mock.Mock(side_effect=[["/selected/insights"], executions, result]))
             report = auth.Report(Path("."))
             with self.subTest(scenario=scenario):
                 if expected is None:
@@ -842,11 +851,29 @@ class ContractTests(unittest.TestCase):
                 else:
                     auth.guest_cart_cleanup_telemetry(report, deployment)
                     self.assertEqual(report.checks[0]["status"], expected)
-                    self.assertEqual(report.inventory["guestCartCleanupTimer"]["invocations"], values[0])
+                    inventory = report.inventory["guestCartCleanupTimer"]
+                    self.assertEqual(inventory["invocations"], values[0])
+                    self.assertEqual(inventory["preSeedFailures"], values[4])
+                    self.assertEqual(inventory["seedCompleted"], "2026-11-14T01:01:20.000000Z")
                 query = deployment.azure.call_args_list[-1].args[-1]
                 self.assertIn("ago(24h)", query)
                 self.assertIn("name == 'CleanupExpiredGuestCarts'", query)
+                self.assertIn("datetime(2026-11-14T01:01:20.000000Z)", query)
                 self.assertNotIn("customDimensions", query)
+
+    def test_guest_cleanup_telemetry_is_blocked_until_a_seed_execution_succeeds(self):
+        for executions in [[], [{"properties": {"status": "Running", "endTime": None}}]]:
+            deployment = SimpleNamespace(
+                required=lambda _: "selected",
+                azure=unittest.mock.Mock(side_effect=[["/selected/insights"], executions]))
+            report = auth.Report(Path("."))
+            auth.guest_cart_cleanup_telemetry(report, deployment)
+            self.assertEqual(report.checks[0]["status"], "BLOCKED")
+            self.assertEqual(deployment.azure.call_count, 2)
+        bad = SimpleNamespace(required=lambda _: "selected", azure=unittest.mock.Mock(side_effect=[
+            ["/selected/insights"], [{"properties": {"status": "Succeeded", "endTime": "2026-11-14T01:01:20"}}]]))
+        with self.assertRaises(auth.EvidenceError):
+            auth.guest_cart_cleanup_telemetry(auth.Report(Path(".")), bad)
 
     def test_cart_lifecycle_gate_requires_every_current_run_case_exactly_once(self):
         prefix = "ApiFunctions.Tests.OwnedCartLifecycleTests."
@@ -1781,12 +1808,19 @@ class ContractTests(unittest.TestCase):
     def run_native_dab_mcp(self, scenario):
         calls = []
         cleanup_attempts = 0
+        sessions = 0
         with tempfile.TemporaryDirectory() as directory:
             report = auth.Report(Path(directory))
             deployment = SimpleNamespace(required=lambda _: "https://dab.example.invalid/graphql/")
 
             def http(method, url, *, token=None, data=None, headers=None, opener=None):
-                nonlocal cleanup_attempts
+                nonlocal cleanup_attempts, sessions
+                if method == "POST" and data["method"] == "initialize":
+                    sessions += 1
+                if (method == "POST" and data["method"] == "tools/call" and
+                        (scenario == "session-lost-always" or scenario == "session-lost-once" and sessions == 1)):
+                    calls.append((method, token, data, dict(headers), opener))
+                    return 404, {}, b""
                 self.assertEqual(url, "https://dab.example.invalid/mcp")
                 calls.append((method, token, data, dict(headers), opener))
                 if method == "DELETE":
@@ -1892,6 +1926,20 @@ class ContractTests(unittest.TestCase):
                     self.assertEqual(calls[-1][0], "DELETE")
                 if scenario in {"duplicate-tools", "invalid-required", "missing-session"}:
                     self.assertFalse(any(call[2] and call[2]["method"] == "tools/call" for call in calls))
+
+    def test_native_dab_mcp_restarts_once_with_a_fresh_session_after_replica_session_loss(self):
+        checks, calls = self.run_native_dab_mcp("session-lost-once")
+        statuses = {check["id"]: check["status"] for check in checks}
+        self.assertEqual(len([call for call in calls if call[2] and call[2]["method"] == "initialize"]), 2)
+        self.assertEqual(statuses.pop("dab-mcp:lost-session-cleanup"), "PASS")
+        self.assertEqual(len(statuses), 13)
+        self.assertTrue(all(status == "PASS" for status in statuses.values()), checks)
+        checks, calls = self.run_native_dab_mcp("session-lost-always")
+        statuses = {check["id"]: check["status"] for check in checks}
+        self.assertEqual(statuses["dab-mcp:session-continuity"], "BLOCKED")
+        self.assertNotIn("dab-mcp:private-role-denial", statuses)
+        self.assertNotIn("dab-mcp:catalog-read", statuses)
+        self.assertEqual(len([call for call in calls if call[0] == "DELETE"]), 2)
 
     def test_native_dab_mcp_retries_exact_session_delete_once_after_network_uncertainty(self):
         checks, calls = self.run_native_dab_mcp("cleanup-timeout-once")
@@ -2521,8 +2569,11 @@ class ContractTests(unittest.TestCase):
             {"Name": name, "Route": route, "Methods": methods, "Policy": {"IsAnonymous": False}}
             for name, route, methods in entries
         ]
-        with patch.object(auth, "http", return_value=(401, {}, b"")) as http:
+        challenge = {"WWW-Authenticate": 'Bearer realm="adventureworks-functions", error="missing_token", '
+                                         'error="invalid_token"'}
+        with patch.object(auth, "http", return_value=(401, challenge, b"")) as http:
             obligations = auth.function_denial_obligations(report, "https://functions.example.invalid")
+            obligations = [item for item in obligations if item[1] == "GET"]
             auth.live_denial_probes(report, obligations)
         self.assertEqual(http.call_count, 2)
         self.assertEqual({call.args[1] for call in http.call_args_list},
@@ -2530,9 +2581,70 @@ class ContractTests(unittest.TestCase):
         statuses = {check["id"]: check["status"] for check in report.checks}
         self.assertEqual(statuses["functions:GetManufacturingAgentQueueStatus:GET:anonymous"], "PASS")
         self.assertEqual(statuses["functions:GetManufacturingAgentQueueStatus:GET:forged"], "PASS")
+        fixtures = auth.function_mutation_denial_fixtures()
         for name, _, methods in entries[1:]:
             for method in methods:
-                self.assertEqual(statuses[f"functions:{name}:{method}:deny"], "BLOCKED")
+                if f"{name}:{method}" in fixtures:
+                    self.assertNotIn(f"functions:{name}:{method}:deny", statuses)
+                else:
+                    self.assertEqual(statuses[f"functions:{name}:{method}:deny"], "BLOCKED")
+
+    def test_mutation_denials_use_reviewed_fixtures_and_require_the_middleware_challenge(self):
+        functions = [
+            {"Name": "UpdateAddress", "Route": "addresses/{id:int}", "Methods": ["PUT"],
+             "Policy": {"IsAnonymous": False}},
+            {"Name": "CreateCategory", "Route": "CreateCategory", "Methods": ["POST"],
+             "Policy": {"IsAnonymous": False}},
+            {"Name": "SetAddressType", "Route": "addresses/{id:int}/type/changed", "Methods": ["PUT"],
+             "Policy": {"IsAnonymous": False}},
+            {"Name": "SimulatorsReset", "Route": "simulators/reset", "Methods": ["POST"],
+             "Policy": {"IsAnonymous": False}},
+            {"Name": "CleanupExpiredGuestCarts", "Route": None, "Methods": None,
+             "Policy": {"IsAnonymous": True}},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            report = auth.Report(Path(directory))
+            report.inventory["functions"] = functions
+            obligations = auth.function_denial_obligations(report, "https://f.example.invalid")
+            by_id = {item[0]: item for item in obligations}
+            self.assertEqual(by_id["functions:UpdateAddress:PUT:anonymous"][2],
+                             "https://f.example.invalid/api/addresses/0")
+            self.assertIsInstance(by_id["functions:UpdateAddress:PUT:forged"][4], auth.RawBody)
+            self.assertEqual(by_id["functions:CreateCategory:POST:anonymous"][4], {})
+            statuses = {item["id"]: item for item in report.checks}
+            self.assertIn("re-review", statuses["functions:SetAddressType:PUT:deny"]["detail"])
+            self.assertEqual(statuses["functions:SimulatorsReset:POST:deny"]["detail"],
+                             auth.MUTATION_FIXTURE_DETAIL)
+            self.assertEqual(statuses["inventory:function-mutation-fixtures"]["status"], "FAIL")
+            sent = []
+
+            def respond(method, url, *, token=None, data=None, raw=None):
+                sent.append((data, raw))
+                error = "invalid_token" if token else "missing_token"
+                if url.endswith("CreateCategory"):
+                    return 401, {"WWW-Authenticate": 'Bearer error="unauthorized"'}, b""
+                return 401, {"WWW-Authenticate": f'Bearer realm="adventureworks-functions", error="{error}"'}, b""
+            with patch.object(auth, "http", side_effect=respond):
+                auth.live_denial_probes(report, obligations)
+            statuses = {item["id"]: item["status"] for item in report.checks}
+            self.assertEqual(statuses["functions:UpdateAddress:PUT:anonymous"], "PASS")
+            self.assertEqual(statuses["functions:UpdateAddress:PUT:forged"], "PASS")
+            self.assertEqual(statuses["functions:CreateCategory:POST:anonymous"], "FAIL")
+            self.assertIn((None, "null"), sent)
+
+    def test_mutation_fixture_contract_rejects_unsafe_shapes(self):
+        valid = {"route": "a/{id:int}", "path": {"id": "0"}, "body": {}, "regression": 400, "reason": "r"}
+        for key, fixture in [
+                ("A:GET", valid), ("A:POST", {**valid, "path": {}}),
+                ("A:POST", {**valid, "path": {"id": "../x"}}), ("A:POST", {**valid, "rawBody": "{"}),
+                ("A:POST", {**valid, "regression": 200}), ("A:POST", {**valid, "extra": 1}),
+                ("A:POST", {key: value for key, value in valid.items() if key != "reason"}),
+        ]:
+            with self.subTest(key=key, fixture=fixture), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "contracts.json"
+                path.write_text(json.dumps({"functionMutationDenialFixtures": {key: fixture}}))
+                with patch.object(auth, "CONTRACTS", path), self.assertRaises(auth.EvidenceError):
+                    auth.function_mutation_denial_fixtures()
 
     def test_live_function_denials_reject_duplicate_inventory_before_any_request(self):
         report = auth.Report(Path("."))
@@ -5832,6 +5944,50 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(request.call_args_list[-1].kwargs["data"], expected_data)
             self.assertEqual(report.checks[-1]["status"], expected)
 
+    def test_manufacturing_content_uses_disposable_part_when_seed_covers_everything(self):
+        deployment = SimpleNamespace(required=lambda key: {
+            "API_FUNCTIONS_URL": "https://functions.example.test", "API_URL": "https://dab.example.test/graphql/",
+            "AI_AGENT_MANUFACTURING_CONTENT_ID": "manufacturing-agent"}[key])
+        body = {"status": "draft-awaiting-instruction-review", "agentId": "manufacturing-agent",
+                "sourceFingerprint": "a" * 64, "responseId": "private-response",
+                "grounding": {"product": {"productId": 1000}}, "draft": {}, "instructionsXml": "<x />",
+                "diagramReservations": []}
+        no_part = auth.EvidenceError("No usable manufacturing content candidate was found")
+        no_model = auth.EvidenceError("No usable manufacturing model candidate was found")
+        fixture = [(201, {}, b'{"value":[{"ProductID":1000}]}'), (201, {}, b'{"value":[{"BillOfMaterialsID":7}]}'),
+                   (200, {}, b'{"value":[]}')]
+        deletes = [(204, {}, b""), (204, {}, b"")]
+        helper = SimpleNamespace(IDENTITIES={"manufacturing": (None, None, None, None, "manufacturing-engineer")})
+        for generation, expected in [((200, {}, json.dumps(body).encode()), "PASS"), ((500, {}, b"{}"), "FAIL")]:
+            report = auth.Report(Path("."))
+            with patch.object(auth, "manufacturing_content_candidate", side_effect=no_part), \
+                    patch.object(auth, "manufacturing_model_candidate", side_effect=no_model), \
+                    patch.object(auth, "load_auth_helper", return_value=helper), \
+                    patch.object(auth, "data_supplied_agent_denials"), \
+                    patch.object(auth, "http", side_effect=[*fixture, generation, *deletes]) as request:
+                auth.manufacturing_content_agent_authorization(report, deployment, "functions", "reduced", "dab")
+            calls = [(call.args[0], call.args[1]) for call in request.call_args_list]
+            self.assertEqual(calls[-2:], [("DELETE", "https://dab.example.test/api/BillOfMaterials/BillOfMaterialsID/7"),
+                                          ("DELETE", "https://dab.example.test/api/Product/ProductID/1000")])
+            self.assertTrue(calls[-3][1].endswith("/api/manufacturing/content/parts/instructions/generate"))
+            self.assertEqual(request.call_args_list[-3].kwargs["data"], {"productId": 1000})
+            self.assertTrue(request.call_args_list[0].kwargs["data"]["Name"].startswith("AuthCanary Part "))
+            statuses = {item["id"]: item["status"] for item in report.checks}
+            self.assertEqual(statuses["agent:manufacturing-content:fixture-cleanup"], "PASS")
+            self.assertEqual(statuses["agent:manufacturing-content:allow-manufacturing"], expected)
+
+        report = auth.Report(Path("."))
+        with patch.object(auth, "manufacturing_content_candidate", side_effect=no_part), \
+                patch.object(auth, "manufacturing_model_candidate", side_effect=no_model), \
+                patch.object(auth, "load_auth_helper", return_value=helper), \
+                patch.object(auth, "data_supplied_agent_denials"), \
+                patch.object(auth, "http", side_effect=[fixture[0], (400, {}, b"{}"), (204, {}, b"")]) \
+                as request:
+            with self.assertRaisesRegex(auth.EvidenceError, "BillOfMaterials insert returned HTTP 400"):
+                auth.manufacturing_content_agent_authorization(report, deployment, "functions", "reduced", "dab")
+        self.assertEqual(request.call_args_list[-1].args[:2],
+                         ("DELETE", "https://dab.example.test/api/Product/ProductID/1000"))
+
     def test_manufacturing_model_candidate_requires_variant_english_description_and_effective_bom(self):
         deployment = SimpleNamespace(required=lambda key: {"API_URL": "https://dab.example.test/graphql/"}[key])
         helper = SimpleNamespace(IDENTITIES={"manufacturing": ("", "", "", "", "manufacturing-engineer")})
@@ -5842,7 +5998,9 @@ class ContractTests(unittest.TestCase):
             parsed = urllib.parse.urlsplit(url)
             query = urllib.parse.parse_qs(parsed.query).get("$filter", [""])[0]
             entity = parsed.path.rsplit("/", 1)[-1]
-            if entity == "ProductModel":
+            if entity == "Illustration":
+                body = {"value": []}
+            elif entity == "ProductModel":
                 body = {"value": [{"ProductModelID": 1}, {"ProductModelID": 2}, {"ProductModelID": 3}]}
             elif entity == "Product":
                 model = int(query.split()[2])
@@ -5872,13 +6030,19 @@ class ContractTests(unittest.TestCase):
         ns = auth.MANUFACTURING_INSTRUCTIONS_NAMESPACE
         documents = [{"ProductModelID": 5, "Instructions": f'<root xmlns="{ns}"><Location><step><diag/></step></Location></root>'},
                      {"ProductModelID": 6, "Instructions": "<root><!DOCTYPE x></root>"},
+                     {"ProductModelID": 4, "Instructions": f'<root xmlns="{ns}"><Location><step>Drill</step></Location></root>'},
                      {"ProductModelID": 7, "Instructions": f'<root xmlns="{ns}"><Location><step>Cut</step></Location></root>'}]
+        illustration_filters = []
 
         def request(method, url, *, token=None, headers=None):
             parsed = urllib.parse.urlsplit(url)
             query = urllib.parse.parse_qs(parsed.query).get("$filter", [""])[0]
             entity = parsed.path.rsplit("/", 1)[-1]
-            if entity == "ProductModel":
+            if entity == "Illustration":
+                illustration_filters.append(query)
+                # Model 4 already has a reserved diagram, so the endpoint would reject it before inference.
+                body = {"value": [{"IllustrationID": 100042}] if "ge 100041 and IllustrationID le 100043" in query else []}
+            elif entity == "ProductModel":
                 body = {"value": [{"ProductModelID": 1}] if "eq null" in query else documents}
             elif entity == "Product":
                 model = int(query.split()[2])
@@ -5893,6 +6057,7 @@ class ContractTests(unittest.TestCase):
         with patch.object(auth, "load_auth_helper", return_value=helper), \
                 patch.object(auth, "http", side_effect=request):
             self.assertEqual(auth.manufacturing_model_candidate(deployment, "dab-token"), (7, True))
+        self.assertIn("IllustrationID ge 100041 and IllustrationID le 100043", illustration_filters)
 
     def test_manufacturing_content_profile_requires_opt_in_and_verified_reduced_scope(self):
         report = auth.Report(Path("."))
@@ -8198,6 +8363,32 @@ class OwnershipHandlerTests(unittest.TestCase):
             auth.reconcile_ownership_handlers_requirement(report)
             self.assertEqual(report.checks[0]["status"], "FAIL")
 
+    def test_customer_profile_cells_resolve_only_from_passing_same_run_canary_substitutes(self):
+        with tempfile.TemporaryDirectory() as root:
+            report = auth.Report(Path(root))
+            report.add("dab:owner-rows:rest:Order:consumer:A:own", "live-denials", "BLOCKED",
+                       auth.OWNER_ROW_CLAIM_BLOCKER + " customer_id claims")
+            report.add("dab:owner-rows:rest:Cart:consumer:A:own", "live-denials", "BLOCKED", "network")
+            report.add("mcp-consumer:A:get_customer_orders:foreign-zero", "live-denials", "BLOCKED",
+                       auth.MCP_PROFILE_BLOCKER + "; ...")
+            report.add("mcp-consumer:B:get_order_details:malformed-array", "live-denials", "BLOCKED",
+                       auth.MCP_PROFILE_BLOCKER + "; ...")
+            auth.reconcile_customer_profile_substitutes(report)
+            self.assertEqual([item["status"] for item in report.checks], ["BLOCKED"] * 4)
+            report.add("dab:owner-rows-customer:rest:Order:consumer:A:own", "live-denials", "PASS", "ok")
+            report.add("dab:owner-rows-customer:rest:Cart:consumer:A:own", "live-denials", "PASS", "ok")
+            report.add("order:mcp:owner:get_customer_orders:zero", "orders", "PASS", "ok")
+            report.add("order:mcp:foreign:get_customer_orders:zero", "orders", "PASS", "ok")
+            report.add("order:mcp:owner:get_order_details:malformed-array", "orders", "PASS", "ok")
+            report.add("order:mcp:foreign:get_order_details:malformed-array", "orders", "FAIL", "leak")
+            auth.reconcile_customer_profile_substitutes(report)
+            status = {item["id"]: item["status"] for item in report.checks}
+            self.assertEqual(status["dab:owner-rows:rest:Order:consumer:A:own"], "PASS")
+            self.assertEqual(status["dab:owner-rows:rest:Cart:consumer:A:own"], "BLOCKED")
+            self.assertEqual(status["mcp-consumer:A:get_customer_orders:foreign-zero"], "PASS")
+            self.assertEqual(status["mcp-consumer:B:get_order_details:malformed-array"], "BLOCKED")
+            self.assertIn("order:mcp:foreign:get_customer_orders:zero", report.checks[2]["detail"])
+
     def test_umbrella_accepts_customer_canary_rows_only_for_claim_blocked_cells(self):
         with tempfile.TemporaryDirectory() as root:
             report = auth.Report(Path(root))
@@ -8513,6 +8704,22 @@ class TransportTests(unittest.TestCase):
         self.assertIn("test-internal-browser-auth.mjs:123:4", message)
         self.assertNotIn("secret", message)
         self.assertNotIn("private.example", message)
+
+    def test_inspector_child_failure_reports_sanitized_inspector_locations(self):
+        result = SimpleNamespace(
+            returncode=1, stdout="",
+            stderr="UnhandledPromiseRejection password=secret\n"
+                   "at file:///private/test-inspector-browser-auth.mjs:77:9\n"
+                   "at file:///private/test-internal-browser-auth.mjs:5:5\n",
+        )
+        with patch.object(auth.subprocess, "run", return_value=result):
+            with self.assertRaises(auth.EvidenceError) as error:
+                auth.command(["node", "tests/scripts/test-inspector-browser-auth.mjs"])
+        message = str(error.exception)
+        self.assertIn("unhandled-rejection", message)
+        self.assertIn("test-inspector-browser-auth.mjs:77:9", message)
+        self.assertNotIn("test-internal-browser-auth.mjs", message)
+        self.assertNotIn("secret", message)
 
     def test_redirects_are_not_followed(self):
         redirect = auth.NoRedirect()

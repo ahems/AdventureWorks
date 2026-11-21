@@ -59,7 +59,9 @@ def command(args, *, environment=None, timeout=180):
                 result.stderr, re.MULTILINE)
             if failures:
                 message += "; failed tests: " + ", ".join(failures[:20])
-        elif args[:2] == ["node", "tests/scripts/test-internal-browser-auth.mjs"]:
+        elif args[:2] in (["node", "tests/scripts/test-internal-browser-auth.mjs"],
+                          ["node", "tests/scripts/test-inspector-browser-auth.mjs"]):
+            script = args[1].rsplit("/", 1)[-1]
             signatures = (
                 ("closed-target", "Target page, context or browser has been closed"),
                 ("route-fulfill", "route.fulfill"), ("route-abort", "route.abort"),
@@ -69,7 +71,7 @@ def command(args, *, environment=None, timeout=180):
             )
             categories = [name for name, marker in signatures if marker in result.stderr]
             locations = sorted(set(re.findall(
-                r"test-internal-browser-auth\.mjs:\d{1,5}:\d{1,5}", result.stderr)))
+                re.escape(script) + r":\d{1,5}:\d{1,5}", result.stderr)))
             message += "; sanitized browser failure: " + (", ".join(categories) or "unclassified")
             if locations:
                 message += "; source locations: " + ", ".join(locations[:5])
@@ -241,7 +243,7 @@ def is_reviewed_function_read(function, routes):
             set(methods) == set(expected_methods) and route == function.get("Route"))
 
 
-def http(method, url, *, token=None, data=None, form=None, headers=None, timeout=90, opener=None):
+def http(method, url, *, token=None, data=None, form=None, headers=None, timeout=90, opener=None, raw=None):
     parsed = urllib.parse.urlsplit(url)
     https_url(urllib.parse.urlunsplit(parsed._replace(query="", fragment="")))
     if parsed.fragment:
@@ -250,7 +252,11 @@ def http(method, url, *, token=None, data=None, form=None, headers=None, timeout
     request_headers.update(headers or {})
     if token:
         request_headers["Authorization"] = "Bearer " + token
+    if raw is not None and (data is not None or form is not None):
+        raise EvidenceError("HTTP request cannot combine a raw body with JSON or form data")
     body = None if data is None else json.dumps(data).encode()
+    if raw is not None:
+        body = raw.encode()
     if body is not None:
         request_headers["Content-Type"] = "application/json"
     if form is not None:
@@ -2713,6 +2719,40 @@ OWNERSHIP_DEPENDENCIES = ["required:consumer-handlers-offline", "required:mcp-to
                           "contract:dab:write-decisions"]
 
 
+MCP_PROFILE_BLOCKER = "Retained consumer has no Customer profile"
+
+
+def reconcile_customer_profile_substitutes(report):
+    """Resolve retained-consumer cells that need a Customer profile from same-run canary evidence.
+
+    Retained fixtures have no customer_id claim; the order canary binds two real Customers. A cell is
+    resolved only when every substitute exists exactly once and passed; otherwise it stays BLOCKED.
+    """
+    by_id = {}
+    for item in report.checks:
+        by_id.setdefault(item["id"], []).append(item)
+
+    def proven(check_ids):
+        return all(len(by_id.get(check_id, [])) == 1 and by_id[check_id][0]["status"] == "PASS"
+                   for check_id in check_ids)
+
+    for item in report.checks:
+        if item["status"] != "BLOCKED":
+            continue
+        substitutes = None
+        if item["id"].startswith("dab:owner-rows:") and item["detail"].startswith(OWNER_ROW_CLAIM_BLOCKER):
+            substitutes = ["dab:owner-rows-customer:" + item["id"].removeprefix("dab:owner-rows:")]
+        elif item["id"].startswith("mcp-consumer:") and item["detail"].startswith(MCP_PROFILE_BLOCKER):
+            parts = item["id"].split(":")
+            if len(parts) == 4:
+                label = "zero" if parts[3] == "foreign-zero" else parts[3]
+                substitutes = [f"order:mcp:{role}:{parts[2]}:{label}" for role in ("owner", "foreign")]
+        if substitutes and proven(substitutes):
+            item.update({"status": "PASS", "detail": (
+                "Proven in this run by " + ", ".join(substitutes) + " using the order canary's two real "
+                "Customers; the retained fixture has no customer_id claim.")})
+
+
 def reconcile_ownership_handlers_requirement(report):
     required = [item for item in report.checks if item["id"] == "required:all-ownership-handlers-two-owners"]
     if len(required) != 1:
@@ -4086,6 +4126,25 @@ def infra(report, deployment):
         report.add("infra:" + check_id, "infra", "BLOCKED", detail)
 
 
+def latest_successful_seed_end(executions):
+    if not isinstance(executions, list):
+        raise EvidenceError("Seed execution list has an unsupported shape")
+    ends = []
+    for execution in executions:
+        properties = execution.get("properties") if isinstance(execution, dict) else None
+        if not isinstance(properties, dict) or properties.get("status") != "Succeeded":
+            continue
+        end = properties.get("endTime")
+        try:
+            parsed = datetime.fromisoformat(re.sub(r"(\.\d{6})\d+", r"\1", end).replace("Z", "+00:00"))
+        except (TypeError, ValueError) as error:
+            raise EvidenceError("Succeeded seed execution has an invalid end time") from error
+        if parsed.tzinfo is None:
+            raise EvidenceError("Succeeded seed execution end time has no timezone")
+        ends.append(parsed.astimezone(timezone.utc))
+    return max(ends, default=None)
+
+
 def guest_cart_cleanup_telemetry(report, deployment):
     resources = deployment.azure("resource", "list", "--resource-group",
                                  deployment.required("AZURE_RESOURCE_GROUP"),
@@ -4093,19 +4152,35 @@ def guest_cart_cleanup_telemetry(report, deployment):
     if (not isinstance(resources, list) or len(resources) != 1 or
             not isinstance(resources[0], str) or not resources[0]):
         raise EvidenceError("A unique selected-environment telemetry resource is required")
+    seeded = latest_successful_seed_end(deployment.azure(
+        "containerapp", "job", "execution", "list", "-g", deployment.required("AZURE_RESOURCE_GROUP"),
+        "-n", deployment.required("SERVICE_SEED_JOB_NAME")))
+    if seeded is None:
+        report.add("guest-cart:cleanup:timer-execution", "infra", "BLOCKED",
+                   "No successful seed execution was found, so the guest-cart table may not exist yet; "
+                   "timer telemetry is not evaluated.")
+        return
+    boundary = seeded.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    # The seed job creates Sales.GuestCartSession asynchronously after deployment, so
+    # ticks that start before it succeeds are expected to fail and are reported separately.
     result = deployment.azure(
         "monitor", "app-insights", "query", "--app", resources[0], "--analytics-query",
         "requests | where timestamp > ago(24h) | where name == 'CleanupExpiredGuestCarts' "
-        "| summarize invocations=count(), successes=countif(success == true), "
-        "failures=countif(success == false), latest=max(timestamp)")
+        f"| extend afterSeed = timestamp > datetime({boundary}) "
+        "| summarize invocations=countif(afterSeed), successes=countif(afterSeed and success == true), "
+        "failures=countif(afterSeed and success == false), latest=maxif(timestamp, afterSeed), "
+        "preSeedFailures=countif(not(afterSeed) and success == false)")
     try:
         table, = result["tables"]
         row, = table["rows"]
         names = [column["name"] for column in table["columns"]]
-        if names != ["invocations", "successes", "failures", "latest"] or len(row) != 4:
+        if (names != ["invocations", "successes", "failures", "latest", "preSeedFailures"] or
+                len(row) != 5):
             raise ValueError("Unexpected aggregate columns")
-        total, succeeded, failed, latest = row
-        if (any(type(value) is not int or value < 0 for value in [total, succeeded, failed]) or
+        total, succeeded, failed, latest, pre_seed = row
+        if total == 0 and latest == "":
+            latest = None
+        if (any(type(value) is not int or value < 0 for value in [total, succeeded, failed, pre_seed]) or
                 succeeded + failed > total or (total == 0 and latest is not None)):
             raise ValueError("Invalid aggregate values")
         if total > 0:
@@ -4117,10 +4192,13 @@ def guest_cart_cleanup_telemetry(report, deployment):
                 raise ValueError("Missing aggregate timezone")
     except (KeyError, TypeError, ValueError) as error:
         raise EvidenceError("Guest-cart timer telemetry has an unsupported aggregate shape") from error
-    report.inventory["guestCartCleanupTimer"] = dict(zip(names, row))
+    report.inventory["guestCartCleanupTimer"] = {
+        **dict(zip(names, [total, succeeded, failed, latest, pre_seed])), "seedCompleted": boundary}
     report.add("guest-cart:cleanup:timer-execution", "infra",
                "FAIL" if failed else "PASS" if succeeded else "BLOCKED",
-               f"Last 24h sampled timer requests: total={total}, successful={succeeded}, failed={failed}. "
+               f"Sampled timer requests in the last 24h after the latest successful seed ({boundary}): "
+               f"total={total}, successful={succeeded}, failed={failed}; {pre_seed} earlier failure(s) "
+               "before the seed created the table are excluded. "
                "Only aggregate telemetry is read; no timer, SQL mutation or clock change is triggered. "
                "Successful invocation does not prove expired-row selection, batch size or deletion effects; "
                "missing samples are not proof the timer never ran.")
@@ -4655,7 +4733,7 @@ def consumer_mcp_owner_denials(report, deployment, consumers):
                 check_id = f"mcp-consumer:{consumer.label}:{tool}:{label}"
                 if denied and text == ["No customer profile is associated with your account."]:
                     report.add(check_id, "live-denials", "BLOCKED",
-                               "Retained consumer has no Customer profile; its earlier profile denial "
+                               MCP_PROFILE_BLOCKER + "; its earlier profile denial "
                                "does not prove the owner-argument boundary. No SQL fixture was created. "
                                "The opt-in --order-cancellation-canary proves this cell with two real Customers.")
                 else:
@@ -5576,6 +5654,8 @@ def inspector_browser(report, deployment):
     blocked = any(item["status"] == "BLOCKED" for item in checks)
     diagnostic = ""
     if not complete:
+        if failure is not None:
+            diagnostic += "; " + str(failure)
         ui = document.get("dabUiDiagnostics")
         if isinstance(ui, dict):
             for key in ["targetInputMatches", "targetUrlMatches", "targetConnectError", "proxyHealthError"]:
@@ -5598,7 +5678,32 @@ def inspector_browser(report, deployment):
                "In-flight exchange, natural expiry and full role/tool matrices remain separate obligations" + diagnostic)
 
 
+class DabMcpSessionLost(Exception):
+    pass
+
+
 def native_dab_mcp(report, deployment, dab_token, functions_token, role):
+    # DAB keeps MCP sessions in replica memory; autoscaling can drop one mid-scenario.
+    start = len(report.checks)
+    for attempt in range(2):
+        try:
+            native_dab_mcp_attempt(report, deployment, dab_token, functions_token, role)
+            return
+        except DabMcpSessionLost:
+            cleanup = [item for item in report.checks[start:] if item["id"] == "dab-mcp:session-cleanup"]
+            del report.checks[start:]
+            if not attempt:
+                lost_cleanup = [{**item, "id": "dab-mcp:lost-session-cleanup"} for item in cleanup]
+                report.checks.extend(lost_cleanup)
+                start = len(report.checks)
+            else:
+                report.add("dab-mcp:session-continuity", "live-allows", "BLOCKED",
+                           "Native MCP session was lost (HTTP 404) in two consecutive fresh sessions; "
+                           "authorization outcomes were not evaluated")
+                report.checks.extend(cleanup)
+
+
+def native_dab_mcp_attempt(report, deployment, dab_token, functions_token, role):
     url = origin(deployment.required("API_URL")) + "/mcp"
     headers = {"X-MS-API-ROLE": role}
     request_id = 0
@@ -5615,6 +5720,8 @@ def native_dab_mcp(report, deployment, dab_token, functions_token, role):
         status, response_headers, body = http("POST", url, token=bearer,
                                               headers=headers if request_headers is None else request_headers,
                                               data=data, opener=opener)
+        if status == 404 and session_id:
+            raise DabMcpSessionLost()
         document = None
         if status == 200:
             document = mcp_document(body)
@@ -5671,6 +5778,8 @@ def native_dab_mcp(report, deployment, dab_token, functions_token, role):
         headers.update({"Mcp-Session-Id": session_id, "MCP-Protocol-Version": result["protocolVersion"]})
         status, _, _ = http("POST", url, token=dab_token, headers=headers,
                              data={"jsonrpc": "2.0", "method": "notifications/initialized"}, opener=opener)
+        if status == 404:
+            raise DabMcpSessionLost()
         report.check("dab-mcp:initialized", "live-allows", status == 202,
                      f"Session accepts the protocol's initialized notification; HTTP {status}")
         if status != 202:
@@ -5720,13 +5829,15 @@ def native_dab_mcp(report, deployment, dab_token, functions_token, role):
         status, is_error, payload = read("Employee", "BusinessEntityID")
         report.check("dab-mcp:private-role-denial", "live-denials",
                      permission_denied(status, is_error, payload),
-                     "Manufacturing role cannot read Employee; HTTP success alone is not permission")
+                     "Manufacturing role cannot read Employee; HTTP success alone is not permission; "
+                     f"HTTP {status}, tool error {is_error}")
         anonymous_headers = {name: value for name, value in headers.items() if name != "X-MS-API-ROLE"}
         status, is_error, payload = read("WorkOrder", "WorkOrderID", bearer=None,
                                          request_headers=anonymous_headers)
         report.check("dab-mcp:session-is-not-authority", "live-denials",
                      permission_denied(status, is_error, payload),
-                     "Reusing the session without a bearer token does not retain manufacturing permissions")
+                     "Reusing the session without a bearer token does not retain manufacturing permissions; "
+                     f"HTTP {status}")
         for label, bearer, request_headers, expected_status in [
             ("forged", "invalid-auth-validation-token", headers, 401),
             ("wrong-audience", functions_token, headers, 401),
@@ -7105,15 +7216,78 @@ def illustration_export_fixture():
 
 SIDE_EFFECT_DETAIL = ("Reviewed side-effecting GET ({}); live denial not sent because an authorization "
                       "regression would execute the effect. Isolated-host denial evidence covers this route.")
+MUTATION_FIXTURE_DETAIL = "Mutation denial probe requires reviewed per-operation safe fixture; no resets/queue clears"
+FUNCTIONS_CHALLENGE_REALM = 'realm="adventureworks-functions"'
+
+
+class RawBody(str):
+    """A reviewed request body sent verbatim (for example deliberately malformed JSON)."""
+
+
+def function_mutation_denial_fixtures():
+    """Reviewed bodies/path values whose handler fails before any side effect if authorization regressed."""
+    try:
+        fixtures = json.loads(CONTRACTS.read_text()).get("functionMutationDenialFixtures", {})
+    except (OSError, ValueError, AttributeError) as error:
+        raise EvidenceError("The reviewed mutation denial fixtures are unavailable or invalid") from error
+    if not isinstance(fixtures, dict):
+        raise EvidenceError("The reviewed mutation denial fixtures are unavailable or invalid")
+    for key, fixture in fixtures.items():
+        name, _, method = key.rpartition(":")
+        placeholders = {match.split(":")[0] for match in re.findall(r"\{([^{}]+)\}", fixture.get("route", ""))
+                        } if isinstance(fixture, dict) else None
+        path = fixture.get("path", {}) if isinstance(fixture, dict) else None
+        if (not name or method not in {"POST", "PUT", "PATCH", "DELETE"} or
+                not isinstance(fixture, dict) or
+                not set(fixture) <= {"route", "path", "body", "rawBody", "regression", "reason"} or
+                {"route", "regression", "reason"} - set(fixture) or "body" in fixture and "rawBody" in fixture or
+                not isinstance(path, dict) or set(path) != placeholders or
+                not all(isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9-]{1,64}", value)
+                        for value in path.values()) or
+                "rawBody" in fixture and (not isinstance(fixture["rawBody"], str) or len(fixture["rawBody"]) > 64) or
+                type(fixture["regression"]) is not int or not 400 <= fixture["regression"] <= 599 or
+                not isinstance(fixture["reason"], str) or not fixture["reason"]):
+            raise EvidenceError("Reviewed mutation denial fixture is invalid: " + str(key))
+    return fixtures
+
+
+def mutation_fixture_obligations(report, function, method, functions_base, fixtures):
+    fixture = fixtures.get(function["Name"] + ":" + method)
+    if fixture is None:
+        return None
+    if fixture["route"] != function["Route"]:
+        raise EvidenceError("Reviewed mutation fixture route no longer matches the handler route: " +
+                            function["Name"] + ":" + method + "; re-review before probing")
+    path = re.sub(r"\{([^{}:]+)(?::[^{}]*)?\}", lambda match: fixture["path"][match.group(1)], function["Route"])
+    body = RawBody(fixture["rawBody"]) if "rawBody" in fixture else fixture.get("body")
+    prefix = f"functions:{function['Name']}:{method}"
+    return [(prefix + ":" + label, method, functions_base + "/api/" + path, token, body)
+            for label, token in [("anonymous", None), ("forged", "invalid-auth-validation-token")]]
+
+
+def guarded_fixture_obligations(report, function, method, functions_base, fixtures):
+    try:
+        return mutation_fixture_obligations(report, function, method, functions_base, fixtures)
+    except EvidenceError as error:
+        report.add(f"functions:{function['Name']}:{method}:deny", "live-denials", "BLOCKED", str(error))
+        return []
 
 
 def function_denial_obligations(report, functions_base):
     safe_reads = reviewed_function_read_routes()
     side_effects = side_effecting_function_reads()
+    mutation_fixtures = function_mutation_denial_fixtures()
     functions = report.inventory.get("functions", [])
     names = [item.get("Name") for item in functions]
     if len(names) != len(set(names)):
         raise EvidenceError("Duplicate Functions inventory names; no denial probes started")
+    bindings = {f"{item['Name']}:{method}" for item in functions
+                if isinstance(item.get("Policy"), dict) and item["Policy"].get("IsAnonymous") is False
+                for method in item.get("Methods") or []}
+    stale = sorted(set(mutation_fixtures) - bindings)
+    report.check("inventory:function-mutation-fixtures", "inventory", not stale,
+                 f"{len(mutation_fixtures)} reviewed mutation denial fixtures each bind a protected handler/method"
+                 + ("; stale: " + ", ".join(stale) if stale else ""))
     obligations = []
     for function in functions:
         policy = function.get("Policy")
@@ -7133,25 +7307,42 @@ def function_denial_obligations(report, functions_base):
                 fixture = illustration_export_fixture()
                 for label, token in [("anonymous", None), ("forged", "invalid-auth-validation-token")]:
                     obligations.append((prefix + ":" + label, method, url, token, fixture))
+            elif method not in {"GET", "HEAD"} and (
+                    fixture_obligations := guarded_fixture_obligations(
+                        report, function, method, functions_base, mutation_fixtures)) is not None:
+                obligations.extend(fixture_obligations)
             else:
                 reason = side_effecting_read_reason(function, side_effects) if method == "GET" else None
                 detail = (SIDE_EFFECT_DETAIL.format(reason) if reason else
                           "GET/HEAD denial probe has no exact reviewed read-only route; no request sent"
-                          if method in {"GET", "HEAD"} else
-                          "Mutation denial probe requires reviewed per-operation safe fixture; no resets/queue clears")
+                          if method in {"GET", "HEAD"} else MUTATION_FIXTURE_DETAIL)
                 report.add(prefix + ":deny", "live-denials", "BLOCKED", detail)
     return obligations
+
+
+def functions_challenge_valid(check_id, headers):
+    """Only the authorization middleware emits this realm, so a handler's own 401 cannot pass."""
+    challenge = headers.get("WWW-Authenticate", "") if headers is not None else ""
+    expected = 'error="invalid_token"' if check_id.endswith(":forged") else 'error="missing_token"'
+    return challenge.startswith("Bearer ") and FUNCTIONS_CHALLENGE_REALM in challenge and expected in challenge
 
 
 def live_denial_probes(report, obligations):
     def probe(obligation):
         check_id, method, url, token, body = obligation
         try:
-            status, headers, _ = http(method, url, token=token, data=body)
+            if isinstance(body, RawBody):
+                status, headers, _ = http(method, url, token=token, raw=str(body))
+            else:
+                status, headers, _ = http(method, url, token=token, data=body)
             valid = status == 401
             if check_id.startswith("mcp:"):
                 valid = valid and "resource_metadata" in headers.get("WWW-Authenticate", "")
-            return check_id, "PASS" if valid else "FAIL", f"Expected 401; received {status}"
+            elif check_id.startswith("functions:"):
+                valid = valid and functions_challenge_valid(check_id, headers)
+            return check_id, "PASS" if valid else "FAIL", (
+                f"Expected 401; received {status}" + ("" if valid or status != 401 else
+                                                     " without the middleware challenge"))
         except EvidenceError as error:
             return check_id, "BLOCKED", str(error)
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -7883,6 +8074,14 @@ def manufacturing_model_candidate(deployment, dab_token):
     now = datetime.now(timezone.utc)
 
     def eligible(model_id):
+        # Mirrors ManufacturingInstructionValidator.Reservations: slots 1-3 at 100000 + modelId * 10.
+        reserved = 100000 + model_id * 10
+        illustrations, _ = rows("Illustration", {"$first": "3", "$select": "IllustrationID",
+                                                 "$filter": f"IllustrationID ge {reserved + 1} and "
+                                                            f"IllustrationID le {reserved + 3}"},
+                                {"IllustrationID"})
+        if illustrations:
+            return False
         variants, more = rows("Product", {"$first": "100", "$select": "ProductID,MakeFlag,ProductModelID",
                                           "$filter": f"ProductModelID eq {model_id} and MakeFlag eq true"},
                               {"ProductID", "MakeFlag", "ProductModelID"})
@@ -7928,6 +8127,61 @@ def manufacturing_model_candidate(deployment, dab_token):
     raise EvidenceError("No usable manufacturing model candidate was found in the bounded discovery set")
 
 
+MANUFACTURING_FIXTURE_PREFIX = "AuthCanary Part "
+
+
+def manufacturing_part_fixture(deployment, dab_token):
+    """Create a disposable manufactured part with one BOM edge; returns (product_id, cleanup)."""
+    dab = origin(deployment.required("API_URL"))
+    headers = {"X-MS-API-ROLE": load_auth_helper().IDENTITIES["manufacturing"][4]}
+    created = []
+
+    def cleanup():
+        failures = []
+        for entity, key, value in reversed(created):
+            status, _, _ = http("DELETE", f"{dab}/api/{entity}/{key}/{value}", token=dab_token, headers=headers)
+            if status not in (200, 204, 404):
+                failures.append(f"{entity} HTTP {status}")
+        created.clear()
+        return failures
+
+    def insert(entity, key, payload):
+        status, _, raw = http("POST", f"{dab}/api/{entity}", token=dab_token, headers=headers, data=payload)
+        try:
+            values = json.loads(raw).get("value")
+            identifier = values[0][key]
+        except (ValueError, AttributeError, IndexError, KeyError, TypeError):
+            identifier = None
+        if status != 201 or type(identifier) is not int:
+            raise EvidenceError(f"Disposable manufacturing fixture {entity} insert returned HTTP {status}")
+        created.append((entity, key, identifier))
+        return identifier
+
+    suffix = secrets.token_hex(4)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
+    try:
+        product_id = insert("Product", "ProductID", {
+            "Name": MANUFACTURING_FIXTURE_PREFIX + suffix, "ProductNumber": "AC-" + suffix,
+            "MakeFlag": True, "FinishedGoodsFlag": False, "SafetyStockLevel": 1, "ReorderPoint": 1,
+            "StandardCost": 0, "ListPrice": 0, "DaysToManufacture": 1, "SellStartDate": today})
+        insert("BillOfMaterials", "BillOfMaterialsID", {
+            "ProductAssemblyID": product_id, "ComponentID": 1, "StartDate": today,
+            "UnitMeasureCode": "EA", "BOMLevel": 1, "PerAssemblyQty": 2})
+        # Mirrors the part reservation rule: slots 1-3 at 2000000 + productId * 10.
+        reserved = 2000000 + product_id * 10
+        status, _, raw = http("GET", dab + "/api/Illustration?" + urllib.parse.urlencode({
+            "$first": "3", "$select": "IllustrationID",
+            "$filter": f"IllustrationID ge {reserved + 1} and IllustrationID le {reserved + 3}"}),
+            token=dab_token, headers=headers)
+        values = json.loads(raw).get("value") if status == 200 else None
+        if not isinstance(values, list) or values:
+            raise EvidenceError("Disposable manufacturing fixture's reserved illustration IDs are not free")
+    except Exception:
+        cleanup()
+        raise
+    return product_id, cleanup
+
+
 def manufacturing_content_agent_authorization(report, deployment, functions_token, reduced_token, dab_token):
     functions = https_url(deployment.required("API_FUNCTIONS_URL"))
     base = functions + "/api/manufacturing/content/parts/instructions/generate"
@@ -7944,7 +8198,27 @@ def manufacturing_content_agent_authorization(report, deployment, functions_toke
     except EvidenceError as part_error:
         if not str(part_error).startswith("No usable manufacturing content candidate"):
             raise
-        subject_id, supplement = manufacturing_model_candidate(deployment, dab_token)
+        try:
+            subject_id, supplement = manufacturing_model_candidate(deployment, dab_token)
+        except EvidenceError as model_error:
+            if not str(model_error).startswith("No usable manufacturing model candidate"):
+                raise
+            subject_id, cleanup = manufacturing_part_fixture(deployment, dab_token)
+            subject_kind = "product"
+            request_data = {"productId": subject_id}
+            report.add("agent:manufacturing-content:fixture", "agents", "PASS",
+                       "Seeded content covers every bounded part and model, so a disposable manufactured part "
+                       f"('{MANUFACTURING_FIXTURE_PREFIX}<random>') with one BOM edge was created through DAB as "
+                       "the manufacturing identity. The draft is unsaved and both rows are deleted afterwards.")
+            try:
+                manufacturing_content_generation(report, deployment, base, functions_token, request_data,
+                                                 subject_kind, subject_id)
+            finally:
+                failures = cleanup()
+                report.check("agent:manufacturing-content:fixture-cleanup", "agents", not failures,
+                             "Disposable manufacturing part and BOM rows were deleted" if not failures else
+                             "Disposable fixture cleanup failed: " + ", ".join(failures))
+            return
         subject_kind = "model"
         base = functions + "/api/manufacturing/content/instructions/generate"
         report.add("agent:manufacturing-content:fixture", "agents", "PASS",
@@ -7955,7 +8229,12 @@ def manufacturing_content_agent_authorization(report, deployment, functions_toke
         request_data = {"productModelId": subject_id}
         if supplement:
             request_data["supplementExistingInstructions"] = True
+    manufacturing_content_generation(report, deployment, base, functions_token, request_data,
+                                     subject_kind, subject_id)
 
+
+def manufacturing_content_generation(report, deployment, base, functions_token, request_data,
+                                     subject_kind, subject_id):
     trace = uuid.uuid4().hex
     report.inventory["manufacturingContentTraceId"] = trace
     status, _, raw = http("POST", base, token=functions_token, data=request_data, timeout=300,
@@ -9738,6 +10017,7 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
     reconcile_browser_auth_requirement(report)
     reconcile_mcp_task_requirement(report)
     reconcile_dab_operation_requirement(report)
+    reconcile_customer_profile_substitutes(report)
     reconcile_ownership_handlers_requirement(report)
     reconcile_session_transition_requirement(report)
 

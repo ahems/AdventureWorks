@@ -249,7 +249,7 @@ jobs:
           azd env set OBJECT_ID "$DEPLOYER_OBJECT_ID" --no-prompt
           azd env set DEPLOYER_PRINCIPAL_TYPE ServicePrincipal --no-prompt
           azd env set SQL_DATABASE_NAME AdventureWorks --no-prompt
-          # Optional repository variable; preup otherwise ranks available chat models automatically.
+          # Optional adventureworks-demo environment variable; preup otherwise ranks available chat models automatically.
           if [[ -n "${CHAT_MODEL_NAME_REGEX:-}" ]]; then
             azd env set CHAT_MODEL_NAME_REGEX "$CHAT_MODEL_NAME_REGEX" --no-prompt
           fi
