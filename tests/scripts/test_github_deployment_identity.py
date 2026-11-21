@@ -120,6 +120,25 @@ class GitHubDeploymentIdentityTests(unittest.TestCase):
         self.assertLess(WORKFLOW.index("name: Verify deployment service principal"),
                         WORKFLOW.index("name: Provision and deploy with azd"))
 
+    def test_foundry_extension_is_installed_before_deploy(self):
+        install = WORKFLOW.index("name: Install Foundry agents azd extension")
+        verify = WORKFLOW.index("name: Verify host tools")
+        deploy = WORKFLOW.index("name: Provision and deploy with azd")
+        self.assertLess(install, verify)
+        self.assertLess(verify, deploy)
+        self.assertIn("az containerapp --help >/dev/null", WORKFLOW)
+        self.assertIn(
+            "azd extension install azure.ai.agents --version 1.2.0 --no-prompt",
+            WORKFLOW,
+        )
+
+    def test_deploy_uses_node_22_without_installing_containerapp_extension(self):
+        node_step = WORKFLOW.split("      - name: Set up Node.js\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn('node-version: "22"', node_step)
+        self.assertNotIn("az extension add --name containerapp", WORKFLOW)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -346,8 +346,13 @@ lookup or an identity mismatch stops deployment.
    [End-to-end authentication](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md#service-principal-github-actions-deployment-path).
 
 The runner uses the repository's existing lifecycle hooks and service deploy
-definitions. The seed remains asynchronous for local deployments; only this
-workflow waits for its own seed execution. Deployments with the same resolved
+definitions. Before `azd up`, it installs the `azure.ai.agents` azd extension
+(pinned to 1.2.0, with its dependencies) required by the hosted
+`manufacturing-agent` service; a local `azd up` offers to install it instead.
+The runner uses Node.js 22 for the storefront build and checks that the Azure
+CLI's built-in `containerapp` commands are available. The seed remains
+asynchronous for local deployments; only this workflow waits for its own seed
+execution. Deployments with the same resolved
 environment name are serialized; a running deployment is not canceled by a
 new run, although GitHub may replace a pending run in the same group.
 
