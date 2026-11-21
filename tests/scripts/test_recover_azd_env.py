@@ -59,11 +59,17 @@ class FakeCli:
         self.environments = environments
         self.settings = settings if settings is not None else [
             {"name": "AI_AGENT_CHAT_ID", "value": "chat-agent:3"},
+            {"name": "AI_AGENT_ORDER_ID", "value": "order-agent:1"},
+            {"name": "AI_AGENT_PROMOTION_ID", "value": "promotion-agent:1"},
+            {"name": "AI_AGENT_HELP_ME_CHOOSE_ID", "value": "help-agent:1"},
+            {"name": "AI_AGENT_CART_RECOVERY_ID", "value": "cart-agent:1"},
+            {"name": "AI_AGENT_PRODUCT_CONTENT_ID", "value": "product-agent:1"},
             {"name": "AI_AGENT_REVIEW_ID", "value": ""},
             {"name": "MANUFACTURING_AGENT_ENDPOINT", "value": "https://agent.example"},
             {"name": "SQL_CONNECTION_STRING", "value": "do-not-copy"},
         ]
         self.tags = tags if tags is not None else {"azd-env-name": ENV}
+        self.template = {"outputs": {name: {} for name in deployment("template", "")["properties"]["outputs"]}}
         self.commands = []
 
     def run(self, command):
@@ -79,6 +85,8 @@ class FakeCli:
             return json.dumps({"location": "eastus2", "tags": self.tags})
         if joined.startswith("az deployment group list"):
             return json.dumps(self.deployments)
+        if joined.startswith("az deployment group export"):
+            return json.dumps(self.template)
         if joined.startswith("az functionapp config appsettings list"):
             return json.dumps(self.settings)
         if joined.startswith("azd env new") or joined.startswith("azd env set"):
@@ -130,12 +138,69 @@ class RecoverAzdEnvTests(unittest.TestCase):
         self.assertFalse(any(c[:2] == ["azd", "env"] and c[2] in ("new", "set") for c in cli.commands))
         self.assertFalse(any("functionapp" in c for c in cli.commands))
 
+    def test_recovers_arm_changed_output_casing_and_excludes_token(self):
+        item = deployment("latest", "2026-11-02T00:00:00Z")
+        outputs = item["properties"]["outputs"]
+        for original, returned in (
+            ("API_URL", "apI_URL"),
+            ("API_FUNCTIONS_URL", "apI_FUNCTIONS_URL"),
+            ("API_MCP_URL", "apI_MCP_URL"),
+            ("SERVICE_API_FUNCTIONS_NAME", "servicE_API_FUNCTIONS_NAME"),
+            ("AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN", "azurE_STATIC_WEB_APP_DEPLOYMENT_TOKEN"),
+            ("chatGptDeploymentName", "chatgptdeploymentname"),
+        ):
+            outputs[returned] = outputs.pop(original)
+        cli = FakeCli(deployments=[item])
+        code, out, err = invoke(cli)
+        self.assertEqual(code, 0, err)
+        values = cli.written()
+        self.assertEqual(values["API_URL"], "https://api.example/graphql/")
+        self.assertEqual(values["SERVICE_API_FUNCTIONS_NAME"], "av-func-abc")
+        self.assertEqual(values["chatGptDeploymentName"], "chat")
+        self.assertNotIn("azurE_STATIC_WEB_APP_DEPLOYMENT_TOKEN", values)
+        self.assertNotIn("AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN", values)
+        self.assertNotIn("swa-secret", out)
+
+    def test_excludes_sensitive_output_even_if_template_name_casing_changes(self):
+        item = deployment("latest", "2026-11-02T00:00:00Z")
+        cli = FakeCli(deployments=[item])
+        secret_name = "AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN"
+        cli.template["outputs"][secret_name.lower()] = cli.template["outputs"].pop(secret_name)
+        code, out, err = invoke(cli)
+        self.assertEqual(code, 0, err)
+        self.assertNotIn(secret_name.lower(), cli.written())
+        self.assertNotIn("swa-secret", out)
+
+    def test_refuses_unrecognized_or_ambiguous_output_names(self):
+        for scenario in ("unknown", "deployment-duplicate", "template-duplicate"):
+            with self.subTest(scenario=scenario):
+                item = deployment("latest", "2026-11-02T00:00:00Z")
+                cli = FakeCli(deployments=[item])
+                if scenario == "unknown":
+                    item["properties"]["outputs"]["unknown"] = {"type": "String", "value": "value"}
+                elif scenario == "deployment-duplicate":
+                    item["properties"]["outputs"]["apI_URL"] = {"type": "String", "value": "value"}
+                else:
+                    cli.template["outputs"]["apI_URL"] = {}
+                code, _, err = invoke(cli)
+                self.assertEqual(code, 1)
+                self.assertIn("output", err)
+                self.assertFalse(any(c[:3] == ["azd", "env", "new"] for c in cli.commands))
+
     def test_refuses_existing_local_environment(self):
         cli = FakeCli(environments=[ENV])
         code, _, err = invoke(cli)
         self.assertEqual(code, 1)
         self.assertIn("already exists", err)
         self.assertEqual(len(cli.commands), 1)
+
+    def test_refuses_incomplete_agent_settings_before_creating_environment(self):
+        cli = FakeCli(settings=[{"name": "AI_AGENT_CHAT_ID", "value": "chat-agent:3"}])
+        code, _, err = invoke(cli)
+        self.assertEqual(code, 1)
+        self.assertIn("AI_AGENT_ORDER_ID", err)
+        self.assertIn("--skip-app-settings", err)
+        self.assertFalse(any(c[:3] == ["azd", "env", "new"] for c in cli.commands))
 
     def test_rejects_resource_group_of_another_environment(self):
         code, _, err = invoke(FakeCli(tags={"azd-env-name": "adventureworks999"}))

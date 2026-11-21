@@ -32,6 +32,15 @@ Vault temporary network access was cleaned up, and writes the deployed URLs
 and status to the run summary. It never uploads Azure credential caches or
 prints all azd environment values.
 
+For long runs, azd uses its GitHub OIDC credential provider, while a
+workflow-only `az` wrapper renews the Azure CLI's short-lived GitHub assertion
+throughout `azd up` and the subsequent checks. Concurrent CLI commands use
+separate temporary profiles with Azure CLI telemetry disabled; an always-run
+cleanup step removes them. Local `azd up` and local Azure CLI authentication
+are unchanged. An individual long-running Azure CLI command cannot renew its
+assertion after it starts, so it may still fail if it needs a new token after
+the assertion expires.
+
 ### One-time Azure and GitHub setup
 
 The following creates an Entra app registration and its service principal,
@@ -379,14 +388,17 @@ calls and refuses to overwrite an existing local azd environment. It creates
 and selects the azd environment, then writes:
 
 - the non-secret outputs of the latest successful `infra/main.bicep` deployment
-  for that environment in `rg-<environment-name>` (`--resource-group` overrides);
+  for that environment in `rg-<environment-name>` (`--resource-group` overrides),
+  using the exported deployment template to restore their original casing;
 - the azd inputs from `infra/main.parameters.json`, recovered from that
   deployment's parameters (model selections, `OBJECT_ID`,
   `DEPLOYER_PRINCIPAL_TYPE`, and so on);
 - `AZURE_*`, `TENANT_ID`, and the hook-derived `VITE_API_URL` and
   `VITE_API_FUNCTIONS_URL`;
 - the `AI_AGENT_*_ID` and `MANUFACTURING_AGENT_ENDPOINT` values copied to the
-  Function App during deployment (`--skip-app-settings` omits them).
+  Function App during deployment. The script refuses normal recovery if the
+  required agent settings are missing, which can indicate an incomplete
+  deployment. `--skip-app-settings` explicitly omits them for partial recovery.
 
 It deliberately does not write the Static Web App deployment token or
 `FOUNDRY_AGENT_CONFIG_HASH`, and it cannot recover the `AI_AGENT_*_MEMORY_STORE`

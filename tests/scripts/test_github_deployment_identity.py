@@ -23,6 +23,10 @@ VALIDATE_INPUTS = step_script("Validate deployment inputs", "Set up .NET")
 VERIFY_PRINCIPAL = step_script(
     "Verify deployment service principal", "Log in to azd with GitHub OIDC"
 )
+ENABLE_RENEWAL = step_script(
+    "Enable renewable Azure CLI credentials", "Verify renewable Azure CLI credentials"
+)
+CONFIGURE_ENVIRONMENT = step_script("Configure azd environment", "Provision and deploy with azd")
 CLIENT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 OBJECT_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 TENANT_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
@@ -138,6 +142,83 @@ class GitHubDeploymentIdentityTests(unittest.TestCase):
         )[0]
         self.assertIn('node-version: "22"', node_step)
         self.assertNotIn("az extension add --name containerapp", WORKFLOW)
+
+    def test_renewal_wrapper_is_enabled_before_environment_creation_and_cleaned_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            az = path / "az"
+            az.write_text("#!/bin/sh\nexit 0\n")
+            az.chmod(0o755)
+            github_env = path / "github-env"
+            github_path = path / "github-path"
+            environ = {
+                **os.environ,
+                "PATH": f"{path}:{os.environ['PATH']}",
+                "GITHUB_WORKSPACE": str(ROOT),
+                "RUNNER_TEMP": str(path),
+                "GITHUB_ENV": str(github_env),
+                "GITHUB_PATH": str(github_path),
+                "DEPLOYER_CLIENT_ID": CLIENT_ID,
+                "DEPLOYER_TENANT_ID": TENANT_ID,
+                "DEPLOYER_SUBSCRIPTION_ID": SUBSCRIPTION_ID,
+            }
+            result = subprocess.run(
+                ["bash", "-c", ENABLE_RENEWAL], env=environ,
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            values = dict(line.split("=", 1) for line in github_env.read_text().splitlines())
+            session = Path(values["AW_GITHUB_AZ_STATE"])
+            self.assertEqual(values["AW_GITHUB_AZ_CLI"], str(az))
+            self.assertEqual(values["AW_GITHUB_AZ_SUBSCRIPTION_ID"], SUBSCRIPTION_ID)
+            self.assertEqual(Path(github_path.read_text().strip()), session / "bin")
+            self.assertEqual((session / "bin/az").resolve(), ROOT / "scripts/utilities/github-oidc-az.py")
+            result = subprocess.run(
+                ["python3", str(ROOT / "scripts/utilities/github-oidc-az.py"), "--cleanup"],
+                env={**environ, **values}, capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(session.exists())
+            missing = subprocess.run(
+                ["bash", "-c", ENABLE_RENEWAL],
+                env={**environ, "GITHUB_WORKSPACE": str(path)},
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("OIDC wrapper is missing or not executable", missing.stderr)
+            self.assertEqual(list(path.glob("adventureworks-az-oidc.*")), [])
+
+        self.assertLess(WORKFLOW.index("name: Enable renewable Azure CLI credentials"),
+                        WORKFLOW.index("name: Verify renewable Azure CLI credentials"))
+        self.assertLess(WORKFLOW.index("name: Verify renewable Azure CLI credentials"),
+                        WORKFLOW.index("name: Configure azd environment"))
+        cleanup = WORKFLOW.split("      - name: Remove temporary Azure CLI credentials\n", 1)[1]
+        self.assertIn("if: ${{ always() }}", cleanup)
+
+    def test_resource_group_lookup_failure_does_not_create_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            az = path / "az"
+            az.write_text("#!/bin/sh\nexit 1\n")
+            az.chmod(0o755)
+            azd = path / "azd"
+            azd.write_text('#!/bin/sh\ntouch "$AZD_CALLED"\n')
+            azd.chmod(0o755)
+            marker = path / "azd-called"
+            environ = {
+                **os.environ,
+                "PATH": f"{path}:{os.environ['PATH']}",
+                "AZD_CALLED": str(marker),
+                "ENVIRONMENT_NAME": "adventureworks123",
+                "DEPLOYER_SUBSCRIPTION_ID": SUBSCRIPTION_ID,
+            }
+            result = subprocess.run(
+                ["bash", "-c", CONFIGURE_ENVIRONMENT], env=environ,
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Could not check whether resource group", result.stderr)
+            self.assertFalse(marker.exists())
 
 
 if __name__ == "__main__":

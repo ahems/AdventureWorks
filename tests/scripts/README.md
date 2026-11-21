@@ -81,11 +81,16 @@ and templates instead.
   existing state stops it; a changed subject updates the script's credential. Run
   `python3 -m unittest tests/scripts/test_github_deployer_setup.py`.
 
+- **[test_github_oidc_az.py](test_github_oidc_az.py)** - Offline tests of the
+  GitHub deployment's Azure CLI OIDC renewal, including long runs, parallel
+  commands, isolated profiles, failures and command output. Run
+  `python3 -m unittest tests/scripts/test_github_oidc_az.py`.
+
 - **[test_recover_azd_env.py](test_recover_azd_env.py)** - Offline tests of
   `scripts/utilities/recover-azd-env.py` with mocked `az`/`azd`: latest
-  successful root deployment selection, secret/token exclusion, parameter
-  mapping, the Function App settings allowlist, refusal to overwrite, dry run,
-  and missing-value failures. Run
+  successful root deployment selection, output casing, secret/token exclusion,
+  parameter mapping, the Function App settings allowlist and completeness,
+  refusal to overwrite, dry run, and missing-value failures. Run
   `python3 -m unittest tests/scripts/test_recover_azd_env.py`.
 
 - **test-chat-model-selection.sh** - Runs the actual preup chat-selection block

@@ -186,6 +186,37 @@ jobs:
           test "$(az account show --query id --output tsv)" = "$DEPLOYER_SUBSCRIPTION_ID"
           azd auth login --check-status
 
+      - name: Enable renewable Azure CLI credentials
+        env:
+          DEPLOYER_CLIENT_ID: ${{ vars.DEPLOYER_CLIENT_ID }}
+          DEPLOYER_TENANT_ID: ${{ vars.DEPLOYER_TENANT_ID }}
+          DEPLOYER_SUBSCRIPTION_ID: ${{ vars.DEPLOYER_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          WRAPPER="$GITHUB_WORKSPACE/scripts/utilities/github-oidc-az.py"
+          if ! REAL_AZ=$(command -v az) || [[ ! -x "$REAL_AZ" || ! -x "$WRAPPER" ]]; then
+            echo "Azure CLI or its GitHub OIDC wrapper is missing or not executable." >&2
+            exit 1
+          fi
+          AZ_SESSION=$(mktemp -d "$RUNNER_TEMP/adventureworks-az-oidc.XXXXXX")
+          mkdir "$AZ_SESSION/bin"
+          ln -s "$WRAPPER" "$AZ_SESSION/bin/az"
+          {
+            printf 'AW_GITHUB_AZ_CLI=%s\n' "$REAL_AZ"
+            printf 'AW_GITHUB_AZ_STATE=%s\n' "$AZ_SESSION"
+            printf 'AW_GITHUB_AZ_CLIENT_ID=%s\n' "$DEPLOYER_CLIENT_ID"
+            printf 'AW_GITHUB_AZ_TENANT_ID=%s\n' "$DEPLOYER_TENANT_ID"
+            printf 'AW_GITHUB_AZ_SUBSCRIPTION_ID=%s\n' "$DEPLOYER_SUBSCRIPTION_ID"
+          } >> "$GITHUB_ENV"
+          printf '%s\n' "$AZ_SESSION/bin" >> "$GITHUB_PATH"
+
+      - name: Verify renewable Azure CLI credentials
+        env:
+          DEPLOYER_SUBSCRIPTION_ID: ${{ vars.DEPLOYER_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          test "$(az account show --query id --output tsv)" = "$DEPLOYER_SUBSCRIPTION_ID"
+
       - name: Configure azd environment
         env:
           ENVIRONMENT_NAME: ${{ needs.prepare.outputs.environment_name }}
@@ -198,7 +229,11 @@ jobs:
         run: |
           set -euo pipefail
           RESOURCE_GROUP="rg-$ENVIRONMENT_NAME"
-          if [[ "$(az group exists --name "$RESOURCE_GROUP" --subscription "$DEPLOYER_SUBSCRIPTION_ID")" == true ]]; then
+          if ! GROUP_EXISTS=$(az group exists --name "$RESOURCE_GROUP" --subscription "$DEPLOYER_SUBSCRIPTION_ID"); then
+            echo "Could not check whether resource group $RESOURCE_GROUP already exists." >&2
+            exit 1
+          fi
+          if [[ "$GROUP_EXISTS" == true ]]; then
             echo "Resource group $RESOURCE_GROUP already exists. This workflow only creates fresh demo environments; choose a new environment name." >&2
             exit 1
           fi
@@ -376,3 +411,10 @@ jobs:
           path: .auth-results/ci-infra/summary.md
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Remove temporary Azure CLI credentials
+        if: ${{ always() }}
+        run: |
+          if [[ -n "${AW_GITHUB_AZ_STATE:-}" ]]; then
+            python3 scripts/utilities/github-oidc-az.py --cleanup
+          fi

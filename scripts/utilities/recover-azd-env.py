@@ -31,6 +31,10 @@ EXCLUDED_OUTPUTS = {"AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN"}
 SECRET_OUTPUT_TYPES = {"securestring", "secureobject"}
 APP_SETTING_PATTERN = re.compile(r"^AI_AGENT_[A-Z0-9_]+_ID$")
 APP_SETTING_NAMES = {"MANUFACTURING_AGENT_ENDPOINT"}
+REQUIRED_AGENT_SETTINGS = (
+    "AI_AGENT_CHAT_ID", "AI_AGENT_ORDER_ID", "AI_AGENT_PROMOTION_ID",
+    "AI_AGENT_HELP_ME_CHOOSE_ID", "AI_AGENT_CART_RECOVERY_ID", "AI_AGENT_PRODUCT_CONTENT_ID",
+)
 REQUIRED_KEYS = (
     "AZURE_ENV_NAME", "AZURE_SUBSCRIPTION_ID", "AZURE_RESOURCE_GROUP", "AZURE_LOCATION",
     "API_URL", "API_FUNCTIONS_URL", "API_MCP_URL", "SERVICE_API_FUNCTIONS_NAME",
@@ -89,7 +93,8 @@ def select_deployment(deployments, environment):
             continue
         if (parameters.get("environmentName") or {}).get("value") != environment:
             continue
-        if not all(key in outputs for key in ROOT_DEPLOYMENT_OUTPUTS):
+        output_keys = {key.casefold() for key in outputs}
+        if not all(key.casefold() in output_keys for key in ROOT_DEPLOYMENT_OUTPUTS):
             continue
         candidates.append(deployment)
     if not candidates:
@@ -99,7 +104,20 @@ def select_deployment(deployments, environment):
     return max(candidates, key=lambda item: item["properties"].get("timestamp") or "")
 
 
-def deployment_values(deployment, parameter_map):
+def output_name_map(template):
+    outputs = template.get("outputs") if isinstance(template, dict) else None
+    if not isinstance(outputs, dict):
+        raise RecoveryError("The exported deployment template has no output definitions.")
+    names = {}
+    for name in outputs:
+        normalized = name.casefold()
+        if normalized in names:
+            raise RecoveryError("The exported deployment template has ambiguous output names.")
+        names[normalized] = name
+    return names
+
+
+def deployment_values(deployment, parameter_map, output_names):
     properties = deployment["properties"]
     values = {}
     sources = {}
@@ -109,8 +127,16 @@ def deployment_values(deployment, parameter_map):
             value = as_env_value(parameter["value"])
             if value != "":
                 values[key], sources[key] = value, "parameter"
-    for name, output in (properties.get("outputs") or {}).items():
-        if name in EXCLUDED_OUTPUTS or str(output.get("type", "")).lower() in SECRET_OUTPUT_TYPES:
+    seen = set()
+    for raw_name, output in (properties.get("outputs") or {}).items():
+        normalized = raw_name.casefold()
+        if normalized in seen:
+            raise RecoveryError("The deployment has ambiguous output names.")
+        seen.add(normalized)
+        name = output_names.get(normalized)
+        if name is None:
+            raise RecoveryError(f"Deployment output '{raw_name}' is absent from the exported template.")
+        if name.upper() in EXCLUDED_OUTPUTS or str(output.get("type", "")).lower() in SECRET_OUTPUT_TYPES:
             continue
         values[name], sources[name] = as_env_value(output.get("value")), "output"
     return values, sources
@@ -149,7 +175,11 @@ def collect(args):
 
     deployments = run_json(["az", "deployment", "group", "list", "--resource-group", resource_group, *scope])
     deployment = select_deployment(deployments, args.environment)
-    values, sources = deployment_values(deployment, parameter_env_map())
+    template = run_json([
+        "az", "deployment", "group", "export", "--name", deployment["name"],
+        "--resource-group", resource_group, *scope,
+    ])
+    values, sources = deployment_values(deployment, parameter_env_map(), output_name_map(template))
 
     base = {
         "AZURE_ENV_NAME": args.environment,
@@ -169,7 +199,14 @@ def collect(args):
             "az", "functionapp", "config", "appsettings", "list",
             "--name", values["SERVICE_API_FUNCTIONS_NAME"], "--resource-group", resource_group, *scope,
         ])
-        for key, value in app_setting_values(settings).items():
+        agent_settings = app_setting_values(settings)
+        missing_agents = [key for key in REQUIRED_AGENT_SETTINGS if not agent_settings.get(key)]
+        if missing_agents:
+            raise RecoveryError(
+                "Function App is missing required agent settings: " + ", ".join(missing_agents) +
+                ". The deployment may not have completed; use --skip-app-settings only for partial recovery."
+            )
+        for key, value in agent_settings.items():
             values[key], sources[key] = value, "function app setting"
 
     missing = [key for key in REQUIRED_KEYS if not values.get(key)]
