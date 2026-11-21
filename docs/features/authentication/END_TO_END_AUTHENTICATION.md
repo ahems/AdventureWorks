@@ -1411,6 +1411,19 @@ are withheld. The SP path adds three `infra:` checks and one
 Application, MCP and agent profiles still require local `azd` access and the
 seeded demo logins.
 
+To run those profiles locally after an SP deployment, recover the azd state
+with `scripts/utilities/recover-azd-env.py`. `OBJECT_ID` then remains the SP, so
+the template grants Foundry data-plane roles to the SP, not to the local
+operator. Without separately granted Foundry `agents/read` access (the template's
+deployer role is Azure AI Developer on the account and project), the
+operator's run reports Foundry-derived checks
+as **BLOCKED** with a sanitized permission-denied cause. These checks include
+deployed-agent discovery, the Help-Me-Choose definition, hosted-agent api-mcp
+trust and agent dependency closure. They are not FAIL or PASS. The SP's workflow
+`--infra` run, which has that access, covers deployed-agent discovery. Do not
+add an operator role assignment in place. Per the demo policy, any template
+change is applied by recreating the environment.
+
 ### Seed log mount: approved SMB managed identity migration
 
 The user separately approved migrating the existing Azure Files seed-log mount
@@ -3490,6 +3503,25 @@ reported as blocked because its condition cannot be established from the
 subscription assignment view. The service-principal workflow can run the
 read-only infra profile with `validate_auth_infra=true`; it does not run the
 application, browser, MCP or agent checks.
+
+**Live service-principal reference.** A service-principal-deployed environment
+was validated locally after `recover-azd-env.py` restored azd state. The full
+profile (`--all --functions-host --order-cancellation-canary`) recorded
+**4,081 PASS, 26 accepted exceptions, 231 BLOCKED and zero FAIL**, and every
+`required:` obligation passed. All SP deployer checks passed live, and the
+conditioned RBAC Administrator grant was the expected `ACCEPTED_EXCEPTION`. The
+local operator had no Foundry `agents/read` access in that path, so
+`infra:deployed-agents`, `infra:revisions` and
+`agent:helpme-choose:definition` were BLOCKED. Because deployed-agent discovery
+was blocked, the run did not enumerate per-agent path and workflow-invocation
+obligations, so it had fewer agent checks than the user-path reference. These
+totals are not comparable to the user-path reference. Two harness
+reliability fixes came from this run: long live profiles now renew the shared
+ten-minute internal tokens (with paced logins) before later scenarios instead
+of reporting expired-token 401s, and a Foundry 401/403 is BLOCKED rather than a
+definition FAIL. If the host suspends during a run, browser suites may time out
+on cold services; rerun `--browsers` (or the full profile) before treating such
+a failure as an authorization regression.
 
 ## Remaining work required for complete assurance
 

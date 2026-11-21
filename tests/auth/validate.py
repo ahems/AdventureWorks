@@ -73,6 +73,11 @@ def command(args, *, environment=None, timeout=180):
             message += "; sanitized browser failure: " + (", ".join(categories) or "unclassified")
             if locations:
                 message += "; source locations: " + ", ".join(locations[:5])
+        elif args[:2] == ["az", "rest"]:
+            if re.search(r"\b(Forbidden|403)\b|does not have permissions", result.stderr):
+                message += "; sanitized cause: permission denied for the validating identity"
+            elif re.search(r"\b(Unauthorized|401)\b", result.stderr):
+                message += "; sanitized cause: authentication rejected"
         raise EvidenceError(message)
     return result.stdout
 
@@ -8707,6 +8712,10 @@ def help_me_choose_agent_definition(report, deployment):
         endpoint + "/agents/" + urllib.parse.quote(agent_id, safe="") + "?api-version=v1",
         token=token,
     )
+    if status in (401, 403):
+        # Service-principal deployments do not grant the local operator Foundry agent read access.
+        raise EvidenceError(f"Foundry agent definition read returned HTTP {status}; the validating identity "
+                            "needs Foundry agents/read (the template grants Azure AI Developer to the deployer)")
     try:
         document = json.loads(raw)
         definition = (document.get("versions", {}).get("latest", {}).get("definition")
@@ -9540,6 +9549,33 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
         manufacturing_tokens = {}
         admin_functions_token = None
         admin_dab_token = None
+        shared = {"issued": time.monotonic()}
+
+        def renew_shared_tokens(max_age=420):
+            """Internal tokens live ten minutes; renew before later scenarios instead of sending expired ones."""
+            nonlocal admin_functions_token, admin_dab_token
+            if time.monotonic() - shared["issued"] <= max_age:
+                return
+            interval = json.loads((Path(__file__).with_name("browser-policy.json")).read_text())[
+                "internalLoginMinimumIntervalMs"] / 1000
+            issued = time.monotonic()
+            for index, (identity, resource) in enumerate(
+                    [("manufacturing", "functions"), ("manufacturing", "dab"), ("manufacturing", "mcp"),
+                     ("admin", "functions"), ("admin", "dab")]):
+                if index:
+                    time.sleep(interval)
+                token = internal_token(d, identity, resource)
+                if identity == "manufacturing":
+                    manufacturing_tokens[resource] = token
+                elif resource == "functions":
+                    admin_functions_token = token
+                else:
+                    admin_dab_token = token
+            shared["issued"] = issued
+
+        def fresh(work):
+            return lambda: (renew_shared_tokens(), work())
+
         for identity in ["admin", "manufacturing"]:
             for resource in ["functions", "dab", "mcp"]:
                 base, audience = internal_token_target(d, resource)
@@ -9618,44 +9654,46 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
             report, d, admin_dab_token, manufacturing_tokens["dab"], consumers))
         if len(consumers) == 2:
             report.guarded("functions:receipts:scenario", "live-denials",
-                           lambda: receipt_reads(report, d, admin_functions_token, admin_dab_token, consumers))
+                           fresh(lambda: receipt_reads(report, d, admin_functions_token, admin_dab_token, consumers)))
             report.guarded("functions:orders:detail:scenario", "live-denials",
-                           lambda: order_detail_read_boundaries(
-                               report, d, admin_functions_token, admin_dab_token, consumers))
-            report.guarded("functions:payments:scenario", "live-allows", lambda: payment_method_reads(
-                report, d, admin_functions_token, admin_dab_token, consumers))
+                           fresh(lambda: order_detail_read_boundaries(
+                               report, d, admin_functions_token, admin_dab_token, consumers)))
+            report.guarded("functions:payments:scenario", "live-allows", fresh(lambda: payment_method_reads(
+                report, d, admin_functions_token, admin_dab_token, consumers)))
             report.guarded("dab:password:field-restrictions", "live-denials",
-                           lambda: dab_credential_field_restrictions(
-                               report, d, admin_dab_token, manufacturing_tokens["dab"], consumers))
+                           fresh(lambda: dab_credential_field_restrictions(
+                               report, d, admin_dab_token, manufacturing_tokens["dab"], consumers)))
             report.guarded("dab:catalog:field-restrictions", "live-denials",
-                           lambda: dab_catalog_field_restrictions(
-                               report, d, admin_dab_token, manufacturing_tokens["dab"], consumers))
+                           fresh(lambda: dab_catalog_field_restrictions(
+                               report, d, admin_dab_token, manufacturing_tokens["dab"], consumers)))
             report.guarded("dab:read-role:matrix", "live-denials",
-                           lambda: dab_read_role_matrix(
-                               report, d, admin_dab_token, manufacturing_tokens["dab"], consumers))
-        report.guarded("functions-host:scenario", "live-denials", lambda: functions_host_read_denials(
-            report, d, manufacturing_tokens, consumers[0] if consumers else None))
-        report.guarded("illustration-export:scenario", "live-denials", lambda: illustration_export_authorization(
-            report, d, manufacturing_tokens, consumers[0] if consumers else None))
+                           fresh(lambda: dab_read_role_matrix(
+                               report, d, admin_dab_token, manufacturing_tokens["dab"], consumers)))
+        report.guarded("functions-host:scenario", "live-denials", fresh(lambda: functions_host_read_denials(
+            report, d, manufacturing_tokens, consumers[0] if consumers else None)))
+        report.guarded("illustration-export:scenario", "live-denials", fresh(
+            lambda: illustration_export_authorization(
+                report, d, manufacturing_tokens, consumers[0] if consumers else None)))
         if consumers:
             report.guarded("mcp-consumer:owner-denials", "live-denials",
                            lambda: available_products.update(consumer_mcp_owner_denials(report, d, consumers)))
             report.guarded("mcp-task:ownership", "live-denials",
                            lambda: mcp_task_ownership_live(report, d, consumers))
         report.guarded("mcp-task:scope-denial", "live-denials",
-                       lambda: mcp_task_scope_denial(report, d, manufacturing_tokens["mcp"]))
-        report.guarded("webpubsub:authorization", "live-denials", lambda: webpubsub_authorization(
+                       fresh(lambda: mcp_task_scope_denial(report, d, manufacturing_tokens["mcp"])))
+        report.guarded("webpubsub:authorization", "live-denials", fresh(lambda: webpubsub_authorization(
             report, d, manufacturing_tokens["functions"], admin_functions_token,
-            admin_dab_token, consumers[0] if consumers else None))
+            admin_dab_token, consumers[0] if consumers else None)))
         for name in ["AnalyzeReviewsBatch", "AnalyzeCartRecovery"]:
             report.guarded("analysis-empty-input:" + name, "agents",
-                           lambda name=name: analysis_empty_input_authorization(
+                           fresh(lambda name=name: analysis_empty_input_authorization(
                                report, d, name, admin_functions_token,
-                               manufacturing_tokens["functions"], admin_dab_token))
+                               manufacturing_tokens["functions"], admin_dab_token)))
+        report.guarded("promotion:shared-token-renewal", "agents", renew_shared_tokens)
         promotion_agent_scenario(report, d, admin_functions_token, manufacturing_tokens["functions"], admin_dab_token,
                                  allow_agent_canary=allow_promotion_agent_canary)
-        report.guarded("subcategory-count:scenario", "live-denials", lambda: subcategory_count_authorization(
-            report, d, admin_functions_token, manufacturing_tokens, consumers))
+        report.guarded("subcategory-count:scenario", "live-denials", fresh(lambda: subcategory_count_authorization(
+            report, d, admin_functions_token, manufacturing_tokens, consumers)))
     report.guarded("live:authenticated-paths", "live-allows", authenticated)
     if len(consumers) == 2:
         # Runs after the shared ten-minute tokens are no longer needed and renews its own.

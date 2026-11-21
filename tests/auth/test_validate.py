@@ -5183,7 +5183,24 @@ class ContractTests(unittest.TestCase):
                 self.assertEqual(report.checks[0]["status"], "FAIL")
                 self.assertNotIn("PRIVATE", json.dumps(report.checks))
 
-    def test_help_me_choose_public_flow_is_anonymous_and_rejects_fallback_or_thread_ids(self):
+        for status in [401, 403]:
+            with self.subTest(denied=status):
+                report = auth.Report(Path("."))
+                with patch.object(auth, "command", return_value="foundry-token"), \
+                        patch.object(auth, "http", return_value=(status, {}, b'{"error":{}}')):
+                    report.guarded("agent:helpme-choose:definition", "agent-policy",
+                                   lambda: auth.help_me_choose_agent_definition(report, deployment))
+                self.assertEqual([check["status"] for check in report.checks], ["BLOCKED"])
+                self.assertIn("agents/read", report.checks[0]["detail"])
+
+    def test_az_rest_failure_reports_only_a_sanitized_permission_cause(self):
+        stderr = "ERROR: (Forbidden) Identity does not have permissions; token=PRIVATE"
+        result = subprocess.CompletedProcess([], 1, stdout="", stderr=stderr)
+        with patch.object(auth.subprocess, "run", return_value=result):
+            with self.assertRaises(auth.EvidenceError) as raised:
+                auth.command(["az", "rest", "--method", "get"])
+        self.assertIn("permission denied", str(raised.exception))
+        self.assertNotIn("PRIVATE", str(raised.exception))
         deployment = SimpleNamespace(required=lambda _: "https://functions.example.test")
         calls = []
         questions = {
