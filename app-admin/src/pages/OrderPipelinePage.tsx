@@ -1,4 +1,6 @@
 import React from "react";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import { Link } from "react-router-dom";
 import {
@@ -66,6 +68,8 @@ const EMPTY_STATUS: OrderPipelineStatus = {
 // ── component ────────────────────────────────────────────────────────────────
 
 export default function OrderPipelinePage() {
+  // Pipeline config and manual promotion require orders.write.
+  const canWrite = useCan(Scopes.OrdersWrite);
   // ── state ─────────────────────────────────────────────────────────────────
   const [config, setConfig] =
     React.useState<OrderPipelineConfig>(DEFAULT_CONFIG);
@@ -279,6 +283,7 @@ export default function OrderPipelinePage() {
                           {fmtMinutes(config.processingToApprovedMinMinutes)}
                         </Label>
                         <Slider
+                          disabled={!canWrite}
                           min={1}
                           max={Math.min(
                             config.processingToApprovedMaxMinutes,
@@ -303,6 +308,7 @@ export default function OrderPipelinePage() {
                           {fmtMinutes(config.processingToApprovedMaxMinutes)}
                         </Label>
                         <Slider
+                          disabled={!canWrite}
                           min={config.processingToApprovedMinMinutes}
                           max={1440}
                           step={5}
@@ -345,6 +351,7 @@ export default function OrderPipelinePage() {
                           Minimum — {fmtHours(config.approvedToShippedMinHours)}
                         </Label>
                         <Slider
+                          disabled={!canWrite}
                           min={0}
                           max={Math.min(config.approvedToShippedMaxHours, 48)}
                           step={1}
@@ -365,6 +372,7 @@ export default function OrderPipelinePage() {
                           Maximum — {fmtHours(config.approvedToShippedMaxHours)}
                         </Label>
                         <Slider
+                          disabled={!canWrite}
                           min={config.approvedToShippedMinHours}
                           max={168}
                           step={1}
@@ -386,7 +394,7 @@ export default function OrderPipelinePage() {
                   {/* Save button */}
                   <Button
                     onClick={handleSaveConfig}
-                    disabled={!isDirty || savingConfig}
+                    disabled={!canWrite || !isDirty || savingConfig}
                     className="w-full font-doodle"
                   >
                     {savingConfig ? (
@@ -512,7 +520,7 @@ export default function OrderPipelinePage() {
                     size="sm"
                     variant="outline"
                     onClick={handlePromotePending}
-                    disabled={promotingPending || pendingCount === 0}
+                    disabled={!canWrite || promotingPending || pendingCount === 0}
                     className="font-doodle shrink-0"
                   >
                     {promotingPending ? (
@@ -540,7 +548,7 @@ export default function OrderPipelinePage() {
                     size="sm"
                     variant="outline"
                     onClick={handlePromoteApproved}
-                    disabled={promotingApproved || approvedCount === 0}
+                    disabled={!canWrite || promotingApproved || approvedCount === 0}
                     className="font-doodle shrink-0"
                   >
                     {promotingApproved ? (

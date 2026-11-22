@@ -5,8 +5,6 @@
       "appLocation": ".",
       "outputLocation": "dist",
       "appBuildCommand": "bash scripts/build-with-env.sh",
-      "run": "npm run dev",
-      "appDevserverUrl": "http://localhost:5173",
       "env": "production"
     }
   }

@@ -38,6 +38,8 @@ import {
 import ClearancePromotionDialog, {
   type ClearanceProduct,
 } from "@/components/ClearancePromotionDialog";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -150,6 +152,8 @@ const LossMakersPage: React.FC = () => {
     isLoading,
     isError,
   } = useProductProfitabilityDetailData(channel);
+  // Price, promotion and retire actions write catalogue data through DAB (admin.write roles).
+  const canWrite = useCan(Scopes.AdminWrite);
   const { mutateAsync: updatePrice, isPending: isPriceSaving } =
     useUpdateProductPrice();
   const { mutateAsync: discontinue, isPending: isDiscontinuePending } =
@@ -567,6 +571,7 @@ const LossMakersPage: React.FC = () => {
                                 ) : (
                                   <button
                                     onClick={() => startEdit(row)}
+                                    disabled={!canWrite}
                                     className="flex items-center gap-1 text-doodle-text hover:text-doodle-accent group"
                                     title="Edit price"
                                   >
@@ -610,6 +615,7 @@ const LossMakersPage: React.FC = () => {
                                   {!isEditing && (
                                     <button
                                       onClick={() => startEdit(row)}
+                                      disabled={!canWrite}
                                       className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
                                       title="Edit list price"
                                     >
@@ -625,6 +631,7 @@ const LossMakersPage: React.FC = () => {
                                       });
                                       setClearanceDialogOpen(true);
                                     }}
+                                    disabled={!canWrite}
                                     className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
                                     title="Add clearance promotion"
                                   >
@@ -633,6 +640,7 @@ const LossMakersPage: React.FC = () => {
                                   </button>
                                   <button
                                     onClick={() => setDiscontinueTarget(row)}
+                                    disabled={!canWrite}
                                     className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1 text-red-600 border-red-300 hover:border-red-500"
                                     title="Discontinue product"
                                   >

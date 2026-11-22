@@ -34,7 +34,7 @@ The load order, delimiters and per-file options are defined in the seed job. See
 
 Embedding columns are `VECTOR(1536)`. In the CSVs, each embedding is stored as a JSON array of floats, for example `"[0.0123,-0.0456,...]"`. The seed job casts the array into the vector column during import. A file with the wrong dimension or a non-JSON value fails to load for that table.
 
-DAB GraphQL cannot serialize `VECTOR` columns. DAB REST returns them as arrays when the column is requested explicitly with `$select`. [`scripts/utilities/export-product-description-embeddings-from-source-api.sh`](../../scripts/utilities/export-product-description-embeddings-from-source-api.sh) uses that behavior to export description embeddings from a source DAB deployment.
+DAB GraphQL cannot serialize `VECTOR` columns. DAB REST returns them as arrays when the column is requested explicitly with `$select`. [`scripts/data-management/export-ai-seed-data.py`](../../scripts/data-management/export-ai-seed-data.py) uses that behavior to export description and review embeddings.
 
 ## Generators
 
@@ -44,25 +44,27 @@ The generators live in [`scripts/generators/`](../../scripts/generators/).
 | --- | --- | --- |
 | `generate-category-translations.sh`, `generate-subcategory-translations.sh`, `generate-product-name-translations.sh`, `generate-special-offer-translations.sh` | Translation CSVs; some update non-`-ai` files such as `ProductCategory.csv` and `SpecialOffer.csv` | Call Azure OpenAI with an Entra token from `az account get-access-token --resource https://cognitiveservices.azure.com` |
 | `generate-original-review-embeddings.sh` | Review embeddings | Uses Azure OpenAI in the same way |
-| `generate-reviews-with-embeddings.sh` | Reviews generated through Functions | Posts to the Functions review endpoints. Protected routes need a Functions-audience token from [`azure-auth.py`](../testing/AZURE_AUTHENTICATED_SCRIPTS.md). |
+| `generate-reviews-with-embeddings.sh` | Reviews generated through Functions | Queues review generation as the seeded admin with a Functions-audience token from [`azure-auth.py`](../testing/AZURE_AUTHENTICATED_SCRIPTS.md); review embeddings are queued automatically when generation finishes. |
 | `generate-component-costs.js` | `Product-ai.csv` (updated costs and prices) and generated cost-history rows | Runs offline from the existing CSVs |
 
 These scripts call Azure OpenAI or deployed APIs, which can incur cost. Run them only on purpose.
 
 ## Exporters
 
-The exporters in [`scripts/data-management/`](../../scripts/data-management/) read a populated database and write CSVs to a `sql/` folder next to the script. You then copy reviewed files into `seed-job/sql/`.
+[`scripts/data-management/export-ai-seed-data.py`](../../scripts/data-management/export-ai-seed-data.py) reads the deployed database through authenticated DAB REST. It signs in as the seeded admin with [`azure-auth.py`](../testing/AZURE_AUTHENTICATED_SCRIPTS.md), sends `X-MS-API-ROLE: executive-admin`, follows every `nextLink` page and writes CSVs in the seed-job formats (to `seed-job/sql/` by default, or `--output-dir`). Review the diff before keeping the files.
 
-| Script | Exports | Client |
+| Target | File | Contents |
 | --- | --- | --- |
-| `export-ai-translations.sh` | Translation tables | `sqlcmd` |
-| `export-ai-product-descriptions.sh` | AI product descriptions | `sqlcmd` |
-| `export-product-description-embeddings.js` | `ProductDescription` embeddings | `mssql` npm package |
-| `export-product-review-embeddings.js` | Review embeddings | `mssql` npm package |
-| `export-product-reviews.js` | Reviews (without vectors) | DAB GraphQL at `API_URL`, unauthenticated |
-| `export-all-embeddings.sh` | Runs both embedding exporters | — |
+| `translations` | `ProductModelProductDescriptionCulture-ai.csv` | Model/description/culture mappings for non-base cultures |
+| `descriptions` | `ProductDescription-ai-translations.csv` | AI-only (translated) description text |
+| `description-embeddings` | `ProductDescription-ai-embeddings.csv` | Description embeddings |
+| `review-embeddings` | `ProductReview-ai.csv` | Reviews with embeddings |
 
-The SQL-based exporters connect to SQL directly with credentials supplied through environment variables. Deployed SQL servers are private and use Entra-only authentication, so the exporters cannot reach a deployed demo database. They are kept for offline or historic maintenance against a database you control. `export-product-reviews.js` sends no token and relies on the `ProductReview` entity's anonymous read permission in `api/dab-config.json`. Never commit or print SQL credentials.
+```bash
+python3 scripts/data-management/export-ai-seed-data.py --output-dir seed-export translations review-embeddings
+```
+
+Deployed SQL is private, so no exporter connects to SQL directly.
 
 The related utility `scripts/utilities/generate-product-review-userids.js` builds `ProductReview-ai-UserID.csv`, which links reviews to seeded users. The manufacturing content pipeline (illustrations, instructions, documents and diagrams) has its own scripts and is documented in [Manufacturing content](../features/manufacturing/manufacturing-content.md).
 

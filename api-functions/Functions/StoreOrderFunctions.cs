@@ -300,6 +300,12 @@ public class StoreOrderFunctions
                 await bad.WriteAsJsonAsync(new { error = "storeBusinessEntityId and at least one item are required" });
                 return bad;
             }
+            if (request.Items.Any(i => i == null || i.ProductId <= 0 || i.Quantity > CheckoutRequestValidator.MaximumQuantity))
+            {
+                var bad = req.CreateResponse(HttpStatusCode.BadRequest);
+                await bad.WriteAsJsonAsync(new { error = $"Each item needs a valid productId and a quantity up to {CheckoutRequestValidator.MaximumQuantity}" });
+                return bad;
+            }
 
             var createReq = new CreateStoreOrderRequest
             {
@@ -308,12 +314,11 @@ public class StoreOrderFunctions
                 PurchaseOrderNumber = request.PurchaseOrderNumber,
                 DueDate = request.DueDate,
                 Comment = request.Comment,
+                // Only products and quantities are accepted; prices are resolved server-side.
                 Items = request.Items.Select(i => new StoreOrderLineItem
                 {
                     ProductId = i.ProductId,
                     Quantity = (short)Math.Max(1, i.Quantity),
-                    UnitPrice = i.UnitPrice,
-                    DiscountPct = i.DiscountPct
                 }).ToList()
             };
 
@@ -585,12 +590,14 @@ public class PlaceStoreOrderRequest
     public string? Comment { get; set; }
 }
 
+/// <summary>
+/// One requested B2B line. Any client-sent price or discount fields are ignored: lines are priced
+/// from the catalogue (list price + best active Reseller offer).
+/// </summary>
 public class PlaceStoreOrderItem
 {
     public int ProductId { get; set; }
     public int Quantity { get; set; } = 1;
-    public decimal UnitPrice { get; set; } = 0;
-    public decimal DiscountPct { get; set; } = 0;
 }
 
 public class StoreListItem

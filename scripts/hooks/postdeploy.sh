@@ -123,6 +123,8 @@ if [[ "$foundry_agent_config_hash" != "$deployed_foundry_agent_config_hash" ]]; 
   azd env set "FOUNDRY_AGENT_CONFIG_HASH" "$foundry_agent_config_hash" "${environment_args[@]}" --no-prompt >/dev/null
 fi
 
-# Run after every service has deployed so the Functions app receives the newly
-# published hosted-agent endpoint as well as the other agent settings.
+# The single place Functions agent settings are applied (no api-functions service hook):
+# runs after every service has deployed, so the Functions app receives the newly
+# published hosted-agent endpoint as well as the other agent settings. Prompt-agent
+# definitions are re-applied above only when their fingerprint changes.
 bash scripts/hooks/api-functions-postdeploy.sh

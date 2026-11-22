@@ -62,6 +62,8 @@ import {
   useAdminAllSubcategories,
   useAdminAllProducts,
 } from "@/hooks/useAdminProducts";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 interface LocalizationDialogProps {
   culture: Culture;
@@ -75,6 +77,8 @@ const LocalizationDialog = ({
   onOpenChange,
 }: LocalizationDialogProps) => {
   const { toast } = useToast();
+  // Localized names and descriptions are written through DAB by admin.write roles.
+  const canWrite = useCan(Scopes.AdminWrite);
 
   // ── shared filter state ──────────────────────────────────────────────────────
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
@@ -251,6 +255,7 @@ const LocalizationDialog = ({
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleAddLocalization = async () => {
+    if (!canWrite) return;
     if (!selectedModelId || !newDescription.trim()) {
       toast({ title: "Validation Error", description: "Please select a product model and enter a description.", variant: "destructive" });
       return;
@@ -266,6 +271,7 @@ const LocalizationDialog = ({
   };
 
   const handleRemoveLocalization = async (link: { ProductModelID: number; ProductDescriptionID: number }) => {
+    if (!canWrite) return;
     try {
       await deleteLink.mutateAsync({ productModelId: link.ProductModelID, productDescriptionId: link.ProductDescriptionID });
       toast({ title: "Localization Removed", description: `Removed ${culture.Name} description successfully.` });
@@ -275,6 +281,7 @@ const LocalizationDialog = ({
   };
 
   const handleSaveDescEdit = async (descriptionId: number) => {
+    if (!canWrite) return;
     if (!editingDescText.trim()) {
       toast({ title: "Validation Error", description: "Description cannot be empty.", variant: "destructive" });
       return;
@@ -289,6 +296,7 @@ const LocalizationDialog = ({
   };
 
   const handleAddProductName = async () => {
+    if (!canWrite) return;
     if (!newNameProductId || !newNameText.trim()) {
       toast({ title: "Validation Error", description: "Please select a product and enter a translated name.", variant: "destructive" });
       return;
@@ -304,6 +312,7 @@ const LocalizationDialog = ({
   };
 
   const handleSaveNameEdit = async (productId: number) => {
+    if (!canWrite) return;
     if (!editingNameText.trim()) {
       toast({ title: "Validation Error", description: "Name cannot be empty.", variant: "destructive" });
       return;
@@ -318,6 +327,7 @@ const LocalizationDialog = ({
   };
 
   const handleDeleteProductName = async (productId: number) => {
+    if (!canWrite) return;
     try {
       await deleteProductName.mutateAsync({ productId });
       toast({ title: "Name Translation Removed", description: "Product name translation removed." });
@@ -396,7 +406,7 @@ const LocalizationDialog = ({
               <TabsContent value="descriptions" className="flex flex-col gap-3 flex-1 overflow-hidden mt-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">{cultureLinks.length} model description{cultureLinks.length !== 1 ? "s" : ""} localized</span>
-                  <Button size="sm" onClick={() => setIsAddingNew(true)} disabled={availableModels.length === 0 || isAddingNew}>
+                  <Button size="sm" onClick={() => setIsAddingNew(true)} disabled={!canWrite || availableModels.length === 0 || isAddingNew}>
                     <Plus className="h-4 w-4 mr-2" />Add Description
                   </Button>
                 </div>
@@ -474,14 +484,14 @@ const LocalizationDialog = ({
                                 </div>
                               ) : (
                                 <div className="group cursor-pointer flex items-start gap-2 text-muted-foreground hover:text-foreground"
-                                  onClick={() => { setEditingDescriptionId(loc.ProductDescriptionID); setEditingDescText(loc.productDescription?.Description || ""); }}>
+                                  onClick={() => { if (!canWrite) return; setEditingDescriptionId(loc.ProductDescriptionID); setEditingDescText(loc.productDescription?.Description || ""); }}>
                                   <span className="flex-1">{loc.productDescription?.Description || "—"}</span>
                                   <Pencil className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 shrink-0" />
                                 </div>
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              <Button variant="ghost" size="sm" onClick={() => handleRemoveLocalization(loc)} className="text-destructive hover:text-destructive" disabled={isEditing || deleteLink.isPending}>
+                              <Button variant="ghost" size="sm" onClick={() => handleRemoveLocalization(loc)} className="text-destructive hover:text-destructive" disabled={!canWrite || isEditing || deleteLink.isPending}>
                                 {deleteLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                               </Button>
                             </TableCell>
@@ -508,7 +518,7 @@ const LocalizationDialog = ({
               <TabsContent value="names" className="flex flex-col gap-3 flex-1 overflow-hidden mt-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">{translatedCount} of {finishedProducts.length} product name{finishedProducts.length !== 1 ? "s" : ""} translated</span>
-                  <Button size="sm" onClick={() => setAddingName(true)} disabled={untranslatedProducts.length === 0 || addingName}>
+                  <Button size="sm" onClick={() => setAddingName(true)} disabled={!canWrite || untranslatedProducts.length === 0 || addingName}>
                     <Plus className="h-4 w-4 mr-2" />Add Name
                   </Button>
                 </div>
@@ -586,12 +596,12 @@ const LocalizationDialog = ({
                                 </div>
                               ) : translatedName ? (
                                 <div className="group cursor-pointer flex items-center gap-2 hover:text-foreground"
-                                  onClick={() => { setEditingNameProductId(p.ProductID); setEditingNameText(translatedName); }}>
+                                  onClick={() => { if (!canWrite) return; setEditingNameProductId(p.ProductID); setEditingNameText(translatedName); }}>
                                   <span className="flex-1">{translatedName}</span>
                                   <Pencil className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                                 </div>
                               ) : (
-                                <button className="text-muted-foreground/50 hover:text-muted-foreground italic text-xs"
+                                <button className="text-muted-foreground/50 hover:text-muted-foreground italic text-xs" disabled={!canWrite}
                                   onClick={() => { setEditingNameProductId(p.ProductID); setEditingNameText(""); }}>
                                   Click to add translation
                                 </button>
@@ -599,7 +609,7 @@ const LocalizationDialog = ({
                             </TableCell>
                             <TableCell className="text-right">
                               {translatedName && (
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteProductName(p.ProductID)} className="text-destructive hover:text-destructive" disabled={isEditing || deleteProductName.isPending}>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteProductName(p.ProductID)} className="text-destructive hover:text-destructive" disabled={!canWrite || isEditing || deleteProductName.isPending}>
                                   {deleteProductName.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                 </Button>
                               )}

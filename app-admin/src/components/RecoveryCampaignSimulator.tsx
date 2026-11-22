@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { getGraphQLApiUrl } from "@/lib/utils";
+import { gql } from "graphql-request";
+import { graphqlClient } from "@/lib/graphql-client";
 import {
   BarChart,
   Bar,
@@ -54,6 +55,18 @@ interface SimulationResult {
   netRevenue: number;
 }
 
+const GET_ORDER_STATS = gql`
+  query GetOrderStats($after: String) {
+    salesOrderHeaders(first: 100, after: $after) {
+      items {
+        TotalDue
+      }
+      hasNextPage
+      endCursor
+    }
+  }
+`;
+
 const RecoveryCampaignSimulator: React.FC<RecoveryCampaignSimulatorProps> = ({
   strategies,
 }) => {
@@ -75,23 +88,14 @@ const RecoveryCampaignSimulator: React.FC<RecoveryCampaignSimulatorProps> = ({
         let pages = 0;
 
         do {
-          const response = await fetch(getGraphQLApiUrl(), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              query: `query GetOrderStats($after: String) {
-                salesOrderHeaders(first: 100, after: $after) {
-                  items { TotalDue }
-                  hasNextPage
-                  endCursor
-                }
-              }`,
-              variables: { after: cursor },
-            }),
-          });
-          if (!response.ok) break;
-          const data = await response.json();
-          const page = data?.data?.salesOrderHeaders;
+          const data: {
+            salesOrderHeaders?: {
+              items?: Array<{ TotalDue: number }>;
+              hasNextPage?: boolean;
+              endCursor?: string;
+            };
+          } = await graphqlClient.request(GET_ORDER_STATS, { after: cursor });
+          const page = data?.salesOrderHeaders;
           if (!page) break;
           const items: Array<{ TotalDue: number }> = page.items ?? [];
           orderCount += items.length;
@@ -99,7 +103,7 @@ const RecoveryCampaignSimulator: React.FC<RecoveryCampaignSimulatorProps> = ({
             (sum: number, o: { TotalDue: number }) => sum + (o.TotalDue ?? 0),
             0,
           );
-          if (page.hasNextPage && ++pages < 3) {
+          if (page.hasNextPage && page.endCursor && ++pages < 3) {
             cursor = page.endCursor;
           } else {
             break;

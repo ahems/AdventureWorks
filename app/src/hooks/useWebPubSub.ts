@@ -1,7 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { getFunctionsApiUrl } from "@/lib/utils";
-import { getEshopAccessToken } from "@/services/eshopOAuth";
+import {
+  getEshopAccessToken,
+  getEshopSessionGeneration,
+  subscribeEshopSession,
+} from "@/services/eshopOAuth";
 
 export type WebPubSubStatus = "connecting" | "connected" | "disconnected" | "failed" | "not-configured";
 let connectionStatus: WebPubSubStatus = "connecting";
@@ -23,6 +27,8 @@ function publishStatus(status: WebPubSubStatus) {
  * Calls `onMessage` when a server-sent group message arrives.
  *
  * Reports the existing connection to diagnostics without opening another socket.
+ * Sign-in and sign-out close the socket and negotiate again, because the server
+ * grants groups from the caller's token. `onConnected` then refreshes caches.
  * If push is unavailable, React Query's normal focus refetch remains the fallback.
  */
 export function useWebPubSub(
@@ -36,6 +42,7 @@ export function useWebPubSub(
   onConnectedRef.current = onConnected;
 
   const groupsKey = groups.join(",");
+  const sessionGeneration = useSyncExternalStore(subscribeEshopSession, getEshopSessionGeneration);
 
   useEffect(() => {
     const subscribedGroups = new Set(groupsKey.split(",").filter(Boolean));
@@ -131,5 +138,5 @@ export function useWebPubSub(
       controller.abort();
       client?.stop();
     };
-  }, [groupsKey]);
+  }, [groupsKey, sessionGeneration]);
 }

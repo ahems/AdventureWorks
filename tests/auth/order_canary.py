@@ -19,8 +19,6 @@ from mutation_suite import Mutations
 CANCELLED = 6
 IN_PROCESS = 1
 EMAIL_SETTING = "ORDER_NOTIFICATIONS_EMAIL_ENABLED"
-CANCEL_MUTATION = ("mutation CancelOrder($id: Int!) { updateSalesOrderHeader(SalesOrderID: $id, "
-                   "item: { Status: 6 }) { SalesOrderID Status } }")
 TELEMETRY_ATTEMPTS = 10
 TELEMETRY_INTERVAL_SECONDS = 60
 STORE_SCAN_LIMIT = 25
@@ -143,7 +141,7 @@ class OrderCanary(Mutations):
         pipeline = self.function_get("orders/pipeline/config")
         promotion = self.function_get("auto-promotion/config")
         simulator = self.function_get("shopping-simulator/status")
-        # Side-effecting GET: it can only switch an expired agent Off, which is the safe direction.
+        # Read-only GET: auto-shutoff is reported here and persisted by SimulationMaintenance_Timer.
         agent = self.function_get("manufacturing/agent-config")
         blockers = preflight_blockers(settings, pipeline, promotion, simulator, agent)
         self.report.inventory["orderCanaryPreflight"] = {
@@ -217,14 +215,11 @@ class OrderCanary(Mutations):
                           f"Denied cancellations must leave the order in process; status is {current}.")
 
     def admin_cancel(self, order_id, prefix, started, minimum):
-        status, body = self.call("POST", self.graphql, self.internal("admin", "dab"),
-                                 {"query": CANCEL_MUTATION, "variables": {"id": order_id}}, "executive-admin")
-        result = body.get("data", {}).get("updateSalesOrderHeader") if isinstance(body, dict) and \
-            isinstance(body.get("data"), dict) else None
-        self.require(prefix + "-admin-cancel", status == 200 and isinstance(body, dict) and not body.get("errors") and
-                     isinstance(result, dict) and result.get("SalesOrderID") == order_id and
-                     result.get("Status") == CANCELLED,
-                     "The admin UI's DAB cancellation mutation must set Status 6.")
+        status, body = self.call("POST", self.functions + f"/api/orders/{order_id}/cancel",
+                                 self.internal("admin", "functions"))
+        self.require(prefix + "-admin-cancel", status == 200 and isinstance(body, dict) and
+                     body.get("salesOrderId") == order_id and body.get("status") == CANCELLED,
+                     "The admin UI's Functions cancellation route must set Status 6.")
         elapsed = time.monotonic() - started
         persisted = self.admin_order(order_id).get("Status")
         self.report.check(f"order:{prefix}-cancelled-persisted", "orders", persisted == CANCELLED,
@@ -246,26 +241,26 @@ class OrderCanary(Mutations):
         for caller in [owner, foreign]:
             self.bind_customer(caller, territory)
         address = self.own_address(owner, state)
-        header = {"billToAddressId": address, "shipToAddressId": address, "shipMethodId": ship,
-                  "subTotal": 1.0, "taxAmt": 0.0, "freight": 0.0}
-        detail = {"productId": product, "orderQty": 1, "unitPrice": 1.0, "unitPriceDiscount": 0}
-        status, _ = self.call("POST", self.functions + "/api/orders", None, header)
+        checkout = {"lines": [{"productId": product, "quantity": 1}], "billToAddressId": address,
+                    "shipToAddressId": address, "shipMethodId": ship}
+        status, _ = self.call("POST", self.functions + "/api/orders/checkout", None, checkout)
         self.report.check("order:storefront-anonymous-create-denied", "live-denials", status == 401,
                           f"Anonymous order creation must be rejected before the handler; got HTTP {status}.")
         # Admin tokens are issued before the order exists so cancellation is not delayed by login pacing.
         self.internal("admin", "dab")
+        self.internal("admin", "functions")
         self.internal("manufacturing", "dab")
 
         residual = {"kind": "storefront-order", "owner": owner.customer_id, "state": "creation-requested"}
         self.record_residual(residual)
-        status, body = self.request("POST", self.functions + "/api/orders", owner, header)
+        status, body = self.request("POST", self.functions + "/api/orders/checkout", owner, checkout)
         started = time.monotonic()
         order_id = body.get("salesOrderId") if isinstance(body, dict) else None
         self.require("storefront-create", status == 201 and type(order_id) is int and order_id > 0,
-                     "The bound consumer must create one order header through the storefront API.")
+                     "The bound consumer must place one server-priced order through the storefront checkout API.")
         self.update_residual(residual, id=order_id, state="retained-in-process")
         self.guarded_then_cancel("storefront", order_id, started, minimum,
-                                 lambda: self.storefront_order_checks(order_id, owner, foreign, detail))
+                                 lambda: self.storefront_order_checks(order_id, owner, foreign, checkout))
         self.update_residual(residual, state="cancelled")
         self.report.guarded("order:storefront-reads", "orders",
                             lambda: self.storefront_reads(order_id, owner, foreign, product))
@@ -349,20 +344,14 @@ class OrderCanary(Mutations):
             self.report.add(f"order:{prefix}-post-create", "orders", "BLOCKED", str(error))
         self.admin_cancel(order_id, prefix, started, minimum)
 
-    def storefront_order_checks(self, order_id, owner, foreign, detail):
-        line = {"kind": "storefront-order-line", "order": order_id, "state": "creation-requested"}
-        self.record_residual(line)
-        status, body = self.request("POST", self.functions + f"/api/orders/{order_id}/details", owner, detail)
-        self.report.check("order:storefront-detail-create", "orders",
-                          status == 201 and isinstance(body, dict) and body.get("success") is True,
-                          f"The owner must add one order line; got HTTP {status}.")
-        self.update_residual(line, state="retained" if status == 201 else "uncertain")
-        foreign_line = {"kind": "storefront-foreign-line-denial", "order": order_id, "state": "creation-requested"}
-        self.record_residual(foreign_line)
-        status, _ = self.request("POST", self.functions + f"/api/orders/{order_id}/details", foreign, detail)
-        self.report.check("order:storefront-foreign-detail-denied", "live-denials", status == 403,
-                          f"Another bound customer must not add a line to the order; got HTTP {status}.")
-        self.update_residual(foreign_line, state="denied" if status == 403 else "unexpected-response")
+    def storefront_order_checks(self, order_id, owner, foreign, checkout):
+        foreign_order = {"kind": "storefront-foreign-address-denial", "owner": foreign.customer_id,
+                         "state": "creation-requested"}
+        self.record_residual(foreign_order)
+        status, _ = self.request("POST", self.functions + "/api/orders/checkout", foreign, checkout)
+        self.report.check("order:storefront-foreign-address-denied", "live-denials", status == 403,
+                          f"Another bound customer must not check out to the owner's address; got HTTP {status}.")
+        self.update_residual(foreign_order, state="denied" if status == 403 else "unexpected-response")
         self.cancel_denials(order_id, owner, "storefront")
 
     def storefront_reads(self, order_id, owner, foreign, product):

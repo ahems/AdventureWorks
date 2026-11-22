@@ -17,7 +17,11 @@ QUEUE_MESSAGE='{
 }'
 
 # Get Azure Storage details from environment
-STORAGE_ACCOUNT=$(grep "AzureWebJobsStorage__accountName" api-functions/local.settings.json | cut -d'"' -f4)
+STORAGE_ACCOUNT="${STORAGE_ACCOUNT_NAME:-$(azd env get-value STORAGE_ACCOUNT_NAME --no-prompt 2>/dev/null || true)}"
+if [ -z "$STORAGE_ACCOUNT" ]; then
+  echo "Set STORAGE_ACCOUNT_NAME or select a deployed azd environment." >&2
+  exit 1
+fi
 QUEUE_NAME="order-email-generation"
 
 echo "Storage Account: $STORAGE_ACCOUNT"

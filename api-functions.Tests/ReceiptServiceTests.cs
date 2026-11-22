@@ -98,9 +98,13 @@ public class ReceiptServiceTests
         Assert.Contains("result.CustomerId = receiptData.CustomerID;", agent);
         Assert.Contains("throw new InvalidOperationException($\"Receipt data not found for created order", agent);
         Assert.DoesNotContain("validItems.Sum(", agent);
+        // Simulator/B2B pricing reuses the checkout catalogue query, which keeps DiscountPct as a fraction.
         var orders = File.ReadAllText(Path.Combine(services, "OrderGenerationService.cs"));
-        Assert.Contains("so.DiscountPct AS Pct", orders);
-        Assert.DoesNotContain("so.DiscountPct / 100", orders);
+        Assert.Contains("CatalogPriceQuery.ResellerOffers", orders);
+        Assert.DoesNotContain("DiscountPct / 100", orders);
+        var checkout = File.ReadAllText(Path.Combine(services, "CheckoutService.cs"));
+        Assert.Contains("ISNULL(offer.DiscountPct, 0)) AS SaleDiscountPct", checkout);
+        Assert.DoesNotContain("DiscountPct / 100", checkout);
     }
 
     private sealed class TestReceiptService(ReceiptConnection connection) : ReceiptService("unused")

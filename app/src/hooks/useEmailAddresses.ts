@@ -3,6 +3,12 @@ import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
 import { toast } from "./use-toast";
 import { trackError } from "@/lib/appInsights";
+import { dabFetch } from "@/lib/dabFetch";
+import { getRestApiUrl } from "@/lib/utils";
+import {
+  createEmailAddress,
+  updateEmailAddress,
+} from "@/lib/emailAddressApi";
 
 export interface EmailAddress {
   EmailAddressID: number;
@@ -21,36 +27,6 @@ const GET_EMAIL_ADDRESSES = gql`
         BusinessEntityID
         EmailAddress
       }
-    }
-  }
-`;
-
-const CREATE_EMAIL_ADDRESS = gql`
-  mutation CreateEmailAddress($businessEntityId: Int!, $emailAddress: String!) {
-    createEmailAddress(
-      item: { BusinessEntityID: $businessEntityId, EmailAddress: $emailAddress }
-    ) {
-      EmailAddressID
-      BusinessEntityID
-      EmailAddress
-    }
-  }
-`;
-
-const UPDATE_EMAIL_ADDRESS = gql`
-  mutation UpdateEmailAddress(
-    $businessEntityId: Int!
-    $emailAddressId: Int!
-    $emailAddress: String!
-  ) {
-    updateEmailAddress(
-      BusinessEntityID: $businessEntityId
-      EmailAddressID: $emailAddressId
-      item: { EmailAddress: $emailAddress }
-    ) {
-      EmailAddressID
-      BusinessEntityID
-      EmailAddress
     }
   }
 `;
@@ -90,11 +66,12 @@ export const useCreateEmailAddress = () => {
       businessEntityId: number;
       emailAddress: string;
     }) => {
-      const data = (await graphqlClient.request(CREATE_EMAIL_ADDRESS, {
+      return createEmailAddress(
+        dabFetch,
+        getRestApiUrl(),
         businessEntityId,
         emailAddress,
-      })) as { createEmailAddress: EmailAddress };
-      return data.createEmailAddress;
+      );
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
@@ -133,12 +110,13 @@ export const useUpdateEmailAddress = () => {
       emailAddressId: number;
       emailAddress: string;
     }) => {
-      const data = (await graphqlClient.request(UPDATE_EMAIL_ADDRESS, {
+      return updateEmailAddress(
+        dabFetch,
+        getRestApiUrl(),
         businessEntityId,
         emailAddressId,
         emailAddress,
-      })) as { updateEmailAddress: EmailAddress };
-      return data.updateEmailAddress;
+      );
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({

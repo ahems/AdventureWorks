@@ -82,3 +82,36 @@ test("HTTP errors and unmasked or invalid payloads are reported instead of rende
     assert.equal(updates.filter(Array.isArray).every(rows => rows.length === 0), true);
   }
 });
+
+test("saving a card posts only brand, last four and expiry for a known test card", async () => {
+  const { hook, calls, errors } = await loadPayments({ response: [] });
+  const result = await hook.addPaymentMethod({
+    type: "card", cardNumber: "4242 4242 4242 4242", cardExpiry: "12/99", cardholderName: "Synthetic Shopper",
+  });
+  assert.deepEqual({ ...result }, { ok: true });
+  assert.equal(errors.length, 0);
+  assert.equal(calls[0].url, "https://functions.example.test/api/payment-methods");
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { cardType: "Vista", last4: "4242", expMonth: 12, expYear: 2099 });
+  assert.equal(calls[0].options.body.includes("4242424242424242"), false);
+  assert.equal(calls.length, 2, "the list is re-read after saving");
+});
+
+test("non-test, invalid or expired cards are never sent", async () => {
+  for (const [cardNumber, cardExpiry, reason] of [
+    ["4000 1234 5678 9017", "12/99", "not-test-card"],
+    ["4242 4242 4242 4241", "12/99", "invalid-card"],
+    ["4242 4242 4242 4242", "01/20", "expired"],
+  ]) {
+    const { hook, calls } = await loadPayments();
+    assert.deepEqual({ ...(await hook.addPaymentMethod({ type: "card", cardNumber, cardExpiry })) }, { ok: false, reason });
+    assert.equal(calls.length, 0);
+  }
+});
+
+test("failed saves resolve with a reported error instead of rejecting", async () => {
+  const { hook, errors } = await loadPayments({ status: 400 });
+  assert.deepEqual({ ...(await hook.addPaymentMethod({ type: "card", cardNumber: "5555555555554444", cardExpiry: "01/2099" })) },
+    { ok: false, reason: "request-failed" });
+  assert.equal(errors.length, 1);
+});

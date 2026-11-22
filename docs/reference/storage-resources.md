@@ -28,11 +28,11 @@ AdventureWorks uses one Azure Storage account for application queues, applicatio
 | Shared key access | Disabled; all access uses Microsoft Entra ID (managed identity) |
 | Public network access | Disabled; private endpoints for blob, queue, table and file |
 | Runtime managed identity roles | Storage Blob Data Owner, Storage Queue Data Contributor, Storage Table Data Contributor, Storage File Data Privileged Reader |
-| Deployer roles (for local development) | Storage Blob Data Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, Storage File Data SMB Share Contributor |
+| Deployer roles (deployment hooks and test scripts) | Storage Blob Data Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, Storage File Data SMB Share Contributor |
 
 Functions connects with identity-based settings (`AzureWebJobsStorage__accountName`, `__blobServiceUri`, `__queueServiceUri`, `__tableServiceUri`, `__credential`, `__clientId`). See [environment variables](environment-variables.md).
 
-## Application queues (15, each with a poison queue)
+## Application queues (16, each with a poison queue)
 
 Each queue also has a `<name>-poison` queue. Queue triggers use the `host.json` settings: batch size 16, 5 dequeue attempts before a message moves to the poison queue, 30-minute visibility timeout.
 
@@ -50,6 +50,7 @@ Each queue also has a `<name>-poison` queue. Queue triggers use the `host.json` 
 | `simulation-order-queue` | Shopping simulator: one message per simulated customer order | `ShoppingSimulator_Timer` (through `ShoppingSimulatorService`), the consumer itself | `SimulationOrder_QueueTrigger` |
 | `warehouse-ops-queue` | Drive the warehouse simulation (store, retrieve, receive phases) | `WarehouseService` | `WarehouseOperationProcessor` |
 | `review-moderation-queue` | Background AI review moderation | `ReviewModeration_StartAnalyzeApproveAll` | `ReviewModeration_QueueTrigger` |
+| `verified-reviews-queue` | Verified-review generation, one message per product | `StartBatchVerifiedReviews` | `VerifiedReviews_QueueTrigger` |
 | `manufacturing-agent-queue` | Manufacturing AI agent runs triggered by new sales orders | `OrderPlacedSqlTrigger`, `ManufacturingAgentRunService`, the consumer itself (retry) | `ManufacturingAgentQueue_QueueTrigger` |
 | `auto-promotion-queue` | Automatic AI promotions triggered by order-volume thresholds | `OrderPlacedSqlTrigger` | `AutoPromotion_QueueTrigger` |
 | `utility-status-queue` | Observe Durable utility jobs until they finish | `RegisterUtilityLifecycle`, the consumer itself (3-second re-queue) | `ObserveUtilityLifecycle` |
@@ -71,9 +72,10 @@ Each queue also has a `<name>-poison` queue. Queue triggers use the `host.json` 
 | `verifiedReviewsJob` | `ReviewService` | Verified-review generation job state | — (explicit `reviews` events) |
 | `reviewModerationJob` | `ReviewService` | Review moderation job state | — (explicit `reviews` events) |
 | `awAutoPromotionConfig` | `AutoPromotionConfigService`; counter updated by `OrderPlacedSqlTrigger` | Auto-promotion settings and order counter | `promotions` |
+| `aiRateLimits` | `AiRateLimitService` | Per-client (HMAC-hashed IP) window counters and global daily budgets for the anonymous storefront AI routes | — |
 | `awMcpTasks` | api-mcp `AzureTableMcpTaskStore` | MCP Tasks state for long-running tool calls | — |
 
-The first 13 tables are the Functions application tables checked at startup. `awMcpTasks` belongs to api-mcp and is checked by its `/ready` endpoint instead.
+The first 14 tables are the Functions application tables checked at startup. `awMcpTasks` belongs to api-mcp and is checked by its `/ready` endpoint instead.
 
 ## Blob containers
 

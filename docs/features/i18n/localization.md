@@ -46,7 +46,7 @@ To translate every namespace into every supported language, use [batch-translate
 
 ### Storefront rendering
 
-[app/src/i18n.ts](../../../app/src/i18n.ts) bundles all locale JSON files at build time and initializes react-i18next with `en` as the default and fallback language. [LanguageContext.tsx](../../../app/src/context/LanguageContext.tsx) owns the selected language and keeps i18next, product names and currency in step.
+[app/src/i18n.ts](../../../app/src/i18n.ts) bundles all locale JSON files at build time and initializes react-i18next with `en` as the default and fallback language. [LanguageContext.tsx](../../../app/src/context/LanguageContext.tsx) owns the selected language and keeps i18next, product names and currency in step. A supported `?lang=<code>` query parameter (used by the SEO `hreflang` alternates) overrides the saved choice on load. On every change it sets `<html lang>` and `<html dir>` — `rtl` for Arabic (`ar`) and Hebrew (`he`) — and key storefront components (header, search, product cards) use Tailwind logical classes (`start-*`, `end-*`, `ps-*`, `pe-*`) so they mirror correctly.
 
 | Namespace | Content |
 |-----------|---------|
@@ -56,7 +56,7 @@ To translate every namespace into every supported language, use [batch-translate
 | `account` | Sign-in, profile, orders |
 | `footer` | Footer, newsletter |
 | `chat` | AI chat assistant |
-| `helpme` | Help Me Choose wizard (English only; other languages fall back to `en`) |
+| `helpme` | Help Me Choose wizard |
 
 Data-driven text comes from DAB GraphQL:
 
@@ -106,7 +106,7 @@ sequenceDiagram
 | `POST /api/TranslatePromotion` | `admin.write` | Returns AI translations of a promotion's text for the admin UI to save |
 | `POST /api/TranslateLanguageFile_HttpStart` | `admin.write` | Starts the language-file orchestration |
 | `GET /api/TranslateLanguageFile_Status` | `admin.read` | Orchestration status and output |
-| `GET`/`POST /api/TranslateLanguageFile_Terminate` | `admin.write` | Stops a running orchestration |
+| `POST /api/TranslateLanguageFile_Terminate?instanceId=…` | `admin.write` | Stops a running orchestration |
 
 The admin `/cultures` page uses `LocalizationDialog` to review and edit translated values. Seed data already includes AI-generated translations (`*-ai.csv`) produced by the `scripts/generators/generate-*-translations.sh` scripts; see [Seed data generation](../../operations/seed-data-generation.md).
 
@@ -161,8 +161,8 @@ See [Environment variables](../../reference/environment-variables.md).
 
 ## Limits
 
-- Arabic and Hebrew strings are translated, but the storefront layout is left-to-right.
-- The `helpme` namespace exists only in English.
+- Right-to-left mirroring covers document direction and the main shared components; some page-specific layouts may still use physical left/right classes.
+- The non-English `helpme` files were machine-translated when the namespace was added; review them like other generated translations.
 - UI language files are bundled at build time; translated files must be committed and the storefront redeployed before they appear.
 - Translation quality depends on the model; review output before committing.
 

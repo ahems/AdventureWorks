@@ -16,6 +16,8 @@ import AdminProductModelGroupCard from "@/components/AdminProductModelGroupCard"
 import AdminProductCardSkeleton from "@/components/AdminProductCardSkeleton";
 import CreateProductDialog from "@/components/CreateProductDialog";
 import GenerateProductsWizardDialog from "@/components/GenerateProductsWizardDialog";
+import { Can } from "@/components/Can";
+import { Scopes } from "@/lib/permissions";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminReviews } from "@/hooks/useAdminReviews";
 import {
@@ -283,14 +285,16 @@ const CategoryPage: React.FC = () => {
               • Click any product to edit
             </p>
             <div className="mt-4 flex items-center gap-2 flex-wrap">
-              <GenerateProductsWizardDialog
-                defaultCategoryId={
-                  categoryId ? parseInt(categoryId) : undefined
-                }
-                defaultSubcategoryId={
-                  selectedSubcategory ?? subcategories[0]?.ProductSubcategoryID
-                }
-              />
+              <Can scope={Scopes.AdminWrite}>
+                <GenerateProductsWizardDialog
+                  defaultCategoryId={
+                    categoryId ? parseInt(categoryId) : undefined
+                  }
+                  defaultSubcategoryId={
+                    selectedSubcategory ?? subcategories[0]?.ProductSubcategoryID
+                  }
+                />
+              </Can>
               <CreateProductDialog
                 defaultCategoryId={
                   categoryId ? parseInt(categoryId) : undefined

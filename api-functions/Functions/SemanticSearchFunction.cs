@@ -14,17 +14,20 @@ public class SemanticSearchFunction
     private readonly AIService _aiService;
     private readonly ProductService _productService;
     private readonly ReviewService _reviewService;
+    private readonly AiRateLimitService _rateLimiter;
 
     public SemanticSearchFunction(
         ILogger<SemanticSearchFunction> logger,
         AIService aiService,
         ProductService productService,
-        ReviewService reviewService)
+        ReviewService reviewService,
+        AiRateLimitService rateLimiter)
     {
         _logger = logger;
         _aiService = aiService;
         _productService = productService;
         _reviewService = reviewService;
+        _rateLimiter = rateLimiter;
     }
 
     /// <summary>
@@ -44,7 +47,10 @@ public class SemanticSearchFunction
         try
         {
             // Parse request body
-            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var (requestBody, tooLarge) = await AiRequestGuard.ReadBodyAsync(req);
+            if (tooLarge)
+                return await AiRequestGuard.PayloadTooLargeAsync(req);
+
             var searchRequest = JsonSerializer.Deserialize<SemanticSearchRequest>(requestBody, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -63,6 +69,13 @@ public class SemanticSearchFunction
                 await badRequestResponse.WriteAsJsonAsync(new { error = "CultureId parameter is required" });
                 return badRequestResponse;
             }
+
+            if (AiRequestGuard.ValidateSemanticSearch(searchRequest.Query, searchRequest.TopN, searchRequest.CultureId) is { } invalid)
+                return await AiRequestGuard.BadRequestAsync(req, invalid);
+
+            var limit = await _rateLimiter.CheckAsync(req, AiRateLimitBucket.Search);
+            if (!limit.Allowed)
+                return await AiRequestGuard.TooManyRequestsAsync(req, limit);
 
             _logger.LogInformation("Searching for: {Query} (culture: {CultureId})", searchRequest.Query, searchRequest.CultureId);
 

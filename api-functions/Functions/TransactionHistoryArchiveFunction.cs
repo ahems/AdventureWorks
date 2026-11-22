@@ -42,11 +42,11 @@ public class TransactionHistoryArchiveFunction
 
     /// <summary>
     /// HTTP trigger for manual archive invocation.
-    /// GET /api/archive/trigger
+    /// POST /api/archive/trigger
     /// </summary>
     [Function("ArchiveTransactionHistoryHttp")]
     public async Task<HttpResponseData> RunHttp(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "archive/trigger")] HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "archive/trigger")] HttpRequestData req)
     {
         _logger.LogInformation("TransactionHistory archive HTTP trigger invoked at {Time}", DateTimeOffset.UtcNow);
 

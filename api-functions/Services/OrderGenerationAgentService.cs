@@ -35,6 +35,7 @@ public class OrderGenerationAgentService
     private readonly ReceiptService _receiptService;
     private readonly PdfReceiptGenerator _pdfGenerator;
     private readonly FoundryAgentClient _foundryClient;
+    private readonly ICheckoutService? _checkoutService;
     private readonly string _agentId;
 
     public OrderGenerationAgentService(
@@ -44,7 +45,8 @@ public class OrderGenerationAgentService
         OrderGenerationService orderGenService,
         ReceiptService receiptService,
         PdfReceiptGenerator pdfGenerator,
-        FoundryAgentClient foundryClient)
+        FoundryAgentClient foundryClient,
+        ICheckoutService? checkoutService = null)
     {
         _logger = logger;
         _configuration = configuration;
@@ -53,6 +55,7 @@ public class OrderGenerationAgentService
         _receiptService = receiptService;
         _pdfGenerator = pdfGenerator;
         _foundryClient = foundryClient;
+        _checkoutService = checkoutService;
 
         _agentId = configuration["AI_AGENT_ORDER_ID"]
             ?? throw new InvalidOperationException(
@@ -267,50 +270,54 @@ public class OrderGenerationAgentService
             }
 
             // ── Validate items & check stock ─────────────────────────────────
+            // The AI plan is untrusted input: only product identities and quantities are used.
+            // Any AI-suggested price or offer is ignored; lines are priced from the catalogue by
+            // the same rules as storefront checkout (Customer offers) or B2B (Reseller offers).
             Log("Validating items and checking live inventory...", "info");
-            var validItems = new List<OrderLineItem>();
-            var orderItems = plan.OrderItems ?? new List<PlannedOrderItem>();
+            var validItems = new List<(int ProductId, short Quantity)>();
+            var orderItems = (plan.OrderItems ?? new List<PlannedOrderItem>())
+                .Where(i => i is not null)
+                .ToList();
+            var invalidItems = orderItems.Where(i => i.ProductId <= 0).ToList();
+            foreach (var item in invalidItems)
+                Log($"  Skipping invalid item: ProductId={item.ProductId}", "dim");
 
-            foreach (var item in orderItems)
+            var requested = orderItems
+                .Where(i => i.ProductId > 0)
+                .GroupBy(i => i.ProductId)
+                .Select(g => (ProductId: g.Key, Name: g.First().ProductName, Quantity: g.Sum(i => Math.Max(1, i.Quantity))))
+                .ToList();
+            var isStoreOrder = orderMode == "b2b-store" && storeId is > 0;
+            var catalogue = (await _orderGenService.GetSellableProductPricesAsync(
+                    requested.Select(r => r.ProductId).ToArray(),
+                    isStoreOrder ? CatalogPriceQuery.ResellerOffers : CatalogPriceQuery.CustomerOffers))
+                .ToDictionary(p => p.ProductId);
+
+            foreach (var (productId, productName, quantity) in requested)
             {
-                // Guard against out-of-range values in the AI-generated plan
-                // (treats agent output as untrusted input per tool best practices).
-                if (item.ProductId <= 0)
+                if (!catalogue.TryGetValue(productId, out var price))
                 {
-                    Log($"  Skipping invalid item: ProductId={item.ProductId}", "dim");
+                    Log($"  Skipping ProductID={productId} ({productName}): not for sale", "dim");
                     continue;
                 }
-                var clampedQty = Math.Clamp(item.Quantity, 1, 10);
+                var clampedQty = Math.Clamp(quantity, 1, 10);
 
-                var stock = await _orderGenService.GetProductStockAsync(item.ProductId);
+                var stock = await _orderGenService.GetProductStockAsync(productId);
                 if (stock <= 0)
                 {
-                    Log($"  Skipping ProductID={item.ProductId} ({item.ProductName}): out of stock", "dim");
+                    Log($"  Skipping ProductID={productId} ({productName}): out of stock", "dim");
                     continue;
                 }
                 if (stock < clampedQty)
                 {
-                    Log($"  Reducing qty for ProductID={item.ProductId} ({item.ProductName}): stock={stock} < requested={clampedQty}", "dim");
+                    Log($"  Reducing qty for ProductID={productId} ({productName}): stock={stock} < requested={clampedQty}", "dim");
                     clampedQty = stock;
                 }
 
-                var price = item.UnitPrice > 0 ? item.UnitPrice
-                    : await _orderGenService.GetProductPriceAsync(item.ProductId);
-
-                var rawOfferId = item.SpecialOfferID ?? 0;
-                var offerId = rawOfferId > 0 ? rawOfferId
-                    : await _orderGenService.GetBestSpecialOfferAsync(item.ProductId);
-
-                validItems.Add(new OrderLineItem
-                {
-                    ProductId = item.ProductId,
-                    Quantity = (short)clampedQty,
-                    UnitPrice = price,
-                    SpecialOfferID = offerId
-                });
-
-                var offerNote = offerId > 1 ? $" (promotion ID={offerId})" : "";
-                Log($"  ✓ {item.ProductName} × {clampedQty} @ ${price:N2}{offerNote} — stock: {stock}", "success");
+                validItems.Add((productId, (short)clampedQty));
+                var line = CheckoutPricingCalculator.PriceLine(price, (short)clampedQty);
+                var offerNote = line.SpecialOfferId > 1 ? $" (promotion ID={line.SpecialOfferId}, -{line.UnitPriceDiscount:P0})" : "";
+                Log($"  ✓ {productName} × {clampedQty} @ ${line.UnitPrice:N2}{offerNote} — stock: {stock}", "success");
             }
 
             if (!validItems.Any())
@@ -320,38 +327,42 @@ public class OrderGenerationAgentService
 
             // ── Create the order ─────────────────────────────────────────────
             int salesOrderId;
-            if (orderMode == "b2b-store" && storeId.HasValue && storeId.Value > 0)
+            if (isStoreOrder)
             {
-                Log($"Creating B2B store order for StoreID={storeId.Value}...", "info");
-                var storeItems = new List<StoreOrderLineItem>();
-                foreach (var vi in validItems)
-                {
-                    var resellerOffer = await _orderGenService.GetBestResellerOfferAsync(vi.ProductId);
-                    storeItems.Add(new StoreOrderLineItem
-                    {
-                        ProductId = vi.ProductId,
-                        Quantity = vi.Quantity,
-                        UnitPrice = vi.UnitPrice,
-                        DiscountPct = resellerOffer.DiscountPct
-                    });
-                }
-
+                Log($"Creating B2B store order for StoreID={storeId!.Value}...", "info");
                 salesOrderId = await _orderGenService.CreateStoreOrderAsync(new CreateStoreOrderRequest
                 {
                     StoreBusinessEntityId = storeId.Value,
-                    Items = storeItems,
+                    Items = validItems
+                        .Select(v => new StoreOrderLineItem { ProductId = v.ProductId, Quantity = v.Quantity })
+                        .ToList(),
                     PurchaseOrderNumber = $"SIM-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
                     Comment = "Simulated B2B replenishment order (AI-generated)"
                 });
             }
             else
             {
-                Log("Creating order in database...", "info");
-                salesOrderId = await _orderGenService.CreateOrderAsync(new CreateOrderRequest
-                {
-                    CustomerId = customerId,
-                    Items = validItems
-                });
+                Log("Placing order through server-side checkout...", "info");
+                var context = await _orderGenService.GetCheckoutContextAsync(customerId)
+                    ?? throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.CheckoutRejected,
+                        $"CustomerID={customerId} is not a person-backed consumer and cannot check out");
+                var checkout = _checkoutService
+                    ?? throw new InvalidOperationException("Checkout service is not configured for simulated consumer orders");
+                var outcome = await checkout.PlaceOrderAsync(customerId, context.PersonId, new CheckoutRequest(
+                    validItems.Select(v => new CheckoutLineRequest(v.ProductId, v.Quantity)).ToList(),
+                    context.AddressId,
+                    context.AddressId,
+                    context.ShipMethodId,
+                    DiscountCode: null,
+                    DisplayCurrency: context.CurrencyCode));
+                if (outcome.Failure != CheckoutFailure.None || outcome.Result?.SalesOrderId is not int placedId)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.CheckoutRejected,
+                        $"Checkout rejected the simulated order: {outcome.Error ?? outcome.Failure.ToString()}");
+                salesOrderId = placedId;
+                var pricing = outcome.Result.Pricing;
+                Log($"Checkout priced {pricing.Lines.Count} line(s): subtotal ${pricing.SubTotal:N2}, tax ${pricing.TaxAmt:N2}, freight ${pricing.Freight:N2}", "info");
             }
 
             Log($"Order created: SalesOrderID={salesOrderId}", "success");
@@ -398,6 +409,7 @@ public class OrderGenerationAgentService
             var failureCode = ex switch
             {
                 OrderPlanValidationException validationEx => validationEx.FailureCode,
+                DuplicateEmailAddressException => OrderPlanFailureCodes.DuplicateCustomerEmail,
                 JsonException => OrderPlanFailureCodes.InvalidJson,
                 _ => OrderPlanFailureCodes.UnhandledError,
             };
@@ -747,5 +759,7 @@ public static class OrderPlanFailureCodes
     public const string InvalidStoreCustomerPayload = "invalid_store_customer_payload";
     public const string NoPlannedItems = "no_planned_items";
     public const string NoValidAiPlannedItems = "no_valid_ai_planned_items";
+    public const string DuplicateCustomerEmail = "duplicate_customer_email";
+    public const string CheckoutRejected = "checkout_rejected";
     public const string UnhandledError = "unhandled_error";
 }

@@ -8,8 +8,10 @@ set -e
 
 echo "Configuring Azure resources for the demo..."
 
-# Incremental ARM deployments do not remove role assignments retired from Bicep.
-python3 "$(dirname "${BASH_SOURCE[0]}")/../utilities/reconcile-runtime-rbac.py" --apply
+# Incremental ARM deployments do not remove role assignments retired from Bicep. Report
+# any legacy runtime grants (report-only: the conditioned deployer may not delete roles
+# outside infra/azd-role-assignment-allowlist.json; legacy environments are recreated).
+python3 "$(dirname "${BASH_SOURCE[0]}")/../utilities/reconcile-runtime-rbac.py"
 
 RESOURCE_GROUP=$(azd env get-value 'AZURE_RESOURCE_GROUP' 2>/dev/null | head -n1 | tr -d '\n\r ')
 

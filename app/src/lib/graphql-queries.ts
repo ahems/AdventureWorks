@@ -27,19 +27,12 @@ export const GET_PRODUCT_REVIEWS = gql`
   }
 `;
 
-export const UPDATE_REVIEW_VOTES = gql`
-  mutation UpdateReviewVotes($id: Int!, $votes: Int!) {
-    updateProductReview(ProductReviewID: $id, item: { HelpfulVotes: $votes }) {
-      ProductReviewID
-      HelpfulVotes
-    }
-  }
-`;
-
 // Query to get all product reviews
 export const GET_ALL_REVIEWS = gql`
-  query GetAllReviews {
-    productReviews(first: 1000) {
+  query GetAllReviews($first: Int = 500, $after: String) {
+    productReviews(first: $first, after: $after) {
+      hasNextPage
+      endCursor
       items {
         ProductReviewID
         ProductID
@@ -151,8 +144,14 @@ export const GET_SUBCATEGORIES_BY_CATEGORY = gql`
 
 // Query to get all products (only finished goods for retail)
 export const GET_PRODUCTS = gql`
-  query GetProducts {
-    products(first: 1000, filter: { FinishedGoodsFlag: { eq: true } }) {
+  query GetProducts($first: Int = 500, $after: String) {
+    products(
+      first: $first
+      after: $after
+      filter: { FinishedGoodsFlag: { eq: true } }
+    ) {
+      hasNextPage
+      endCursor
       items {
         ProductID
         Name
@@ -299,14 +298,21 @@ export const GET_PRODUCTS_BY_CATEGORY = gql`
 
 // Query to get products by multiple subcategory IDs (used for category filtering, only finished goods)
 export const GET_PRODUCTS_BY_SUBCATEGORY_IDS = gql`
-  query GetProductsBySubcategoryIds($subcategoryIds: [Int!]!) {
+  query GetProductsBySubcategoryIds(
+    $subcategoryIds: [Int!]!
+    $first: Int = 500
+    $after: String
+  ) {
     products(
       filter: {
         ProductSubcategoryID: { in: $subcategoryIds }
         FinishedGoodsFlag: { eq: true }
       }
-      first: 1000
+      first: $first
+      after: $after
     ) {
+      hasNextPage
+      endCursor
       items {
         ProductID
         Name
@@ -386,14 +392,21 @@ export const GET_PHOTOS_BY_IDS = gql`
 
 // Query to get products by subcategory ID (only finished goods)
 export const GET_PRODUCTS_BY_SUBCATEGORY = gql`
-  query GetProductsBySubcategory($subcategoryId: Int!) {
+  query GetProductsBySubcategory(
+    $subcategoryId: Int!
+    $first: Int = 500
+    $after: String
+  ) {
     products(
       filter: {
         ProductSubcategoryID: { eq: $subcategoryId }
         FinishedGoodsFlag: { eq: true }
       }
-      first: 1000
+      first: $first
+      after: $after
     ) {
+      hasNextPage
+      endCursor
       items {
         ProductID
         Name
@@ -473,11 +486,18 @@ export const GET_PRODUCT_INVENTORY = gql`
 
 // Query to get inventory for multiple products
 export const GET_PRODUCTS_INVENTORY = gql`
-  query GetProductsInventory($productIds: [Int!]!) {
+  query GetProductsInventory(
+    $productIds: [Int!]!
+    $first: Int = 500
+    $after: String
+  ) {
     productInventories(
       filter: { ProductID: { in: $productIds } }
-      first: 10000
+      first: $first
+      after: $after
     ) {
+      hasNextPage
+      endCursor
       items {
         ProductID
         LocationID
@@ -680,10 +700,20 @@ export const DELETE_CART_ITEM = gql`
 
 // Query to get all translated product names for a given culture.
 // ProductNameEmbedding is intentionally excluded — it is large and only needed server-side.
-// DAB defaults to 100 items; request enough to cover all products (~504).
+// DAB pages list results; callers follow hasNextPage/endCursor via fetchAllPages.
 export const GET_PRODUCT_NAMES_BY_CULTURE = gql`
-  query GetProductNamesByCulture($cultureId: String!) {
-    productNames(filter: { CultureID: { eq: $cultureId } }, first: 2000) {
+  query GetProductNamesByCulture(
+    $cultureId: String!
+    $first: Int = 500
+    $after: String
+  ) {
+    productNames(
+      filter: { CultureID: { eq: $cultureId } }
+      first: $first
+      after: $after
+    ) {
+      hasNextPage
+      endCursor
       items {
         ProductID
         Name

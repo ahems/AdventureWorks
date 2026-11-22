@@ -25,11 +25,11 @@ This page is the map. Each linked page goes deeper.
 | Admin portal | Employee back office: catalog, orders, customers, reviews, promotions, simulators | [`app-admin/`](../../app-admin/) | [Admin portal](../apps/admin-portal.md) |
 | Manufacturing portal | Shop floor, planning, supply chain, warehouse, finance, AI agent control | [`app-manufacturing/`](../../app-manufacturing/) | [Manufacturing portal](../apps/manufacturing-portal.md) |
 | DAB API | Data API Builder: REST, GraphQL and MCP over 69 entities (66 tables + 3 views) | [`api/`](../../api/) | [DAB API](../services/dab-api.md) |
-| Functions API | 245 Azure Functions (200 HTTP) for business logic, AI, simulators and eventing | [`api-functions/`](../../api-functions/) | [Functions](../services/functions.md) |
+| Functions API | 238 Azure Functions (205 HTTP) for business logic, AI, simulators and eventing | [`api-functions/`](../../api-functions/) | [Functions](../services/functions.md) |
 | OAuth + MCP server | OpenIddict authorization server and 63 protected MCP tools | [`api-mcp/`](../../api-mcp/) | [api-mcp](../services/api-mcp.md) |
 | MCP Inspector | Hosted, authenticated MCP Inspector for the two MCP endpoints | [`mcp-inspector/`](../../mcp-inspector/) | [MCP Inspector](../apps/mcp-inspector.md) |
 | Manufacturing agent | Foundry hosted agent that analyses and acts on manufacturing state | [`manufacturing-agent/`](../../manufacturing-agent/) | [Manufacturing agent](../services/manufacturing-agent.md) |
-| Foundry agents | 21 prompt, workflow and intent agents (chat, search, generation) | [`scripts/utilities/agents/`](../../scripts/utilities/agents/) | [Foundry agents](../features/ai/foundry-agents.md) |
+| Foundry agents | 15 prompt agents (chat, search, generation) | [`scripts/utilities/agents/`](../../scripts/utilities/agents/) | [Foundry agents](../features/ai/foundry-agents.md) |
 | Seed job | Container Apps Job that creates the schema, loads data and grants runtime SQL access | [`seed-job/`](../../seed-job/) | [Seed job](../services/seed-job.md) |
 | Infrastructure | Bicep modules and azd hooks | [`infra/`](../../infra/), [`scripts/hooks/`](../../scripts/hooks/) | [Deployment](../operations/deployment.md) |
 
@@ -55,7 +55,7 @@ flowchart LR
   end
 
   subgraph ai["Microsoft Foundry"]
-    agents["21 Foundry agents<br/>Responses API"]
+    agents["15 Foundry agents<br/>Responses API"]
     hosted["Hosted manufacturing-agent"]
     models["Model deployments<br/>chat · embedding"]
   end

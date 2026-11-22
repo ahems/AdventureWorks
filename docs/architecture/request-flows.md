@@ -89,18 +89,16 @@ sequenceDiagram
   participant ST as ProcessSalesOrderStatus
   participant TMR as OrderDelivery_Timer
 
-  SPA->>FN: POST /api/orders (Functions token, orders.write)
-  Note over FN: Customer IDs taken from signed claims
-  FN->>SQL: INSERT SalesOrderHeader (Status 1 Pending)
-  SPA->>FN: POST /api/orders/{id}/details
-  FN->>SQL: INSERT SalesOrderDetail
+  SPA->>FN: POST /api/orders/checkout (Functions token, orders.write)
+  Note over FN: Customer IDs from signed claims; prices, discount, tax, freight computed server-side
+  FN->>SQL: One transaction: INSERT SalesOrderHeader (Status 1 Pending) + SalesOrderDetail rows
   SQL-->>TRG: Change Tracking: new header row
-  TRG->>WPS: orders: database-changed
+  TRG->>WPS: orders: database-changed, order-placed
   TRG->>Q: order-receipt-generation
   TRG->>Q: sales-order-status {Status 1} (delayed)
   opt Manufacturing agent mode is not Off
     TRG->>Q: manufacturing-agent-queue (new run)
-    TRG->>WPS: orders: order-placed, manufacturing-agent: run-created
+    TRG->>WPS: manufacturing-agent: run-created
   end
   TRG->>Q: auto-promotion-queue (when counter hits threshold)
   Q-->>ST: Status message

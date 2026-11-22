@@ -6,22 +6,32 @@
  * for each. The seed-job uses this CSV to update Production.ProductReview.UserID
  * after loading the other review CSVs.
  *
- * Usage: API_URL=https://your-dab-api/graphql node generate-product-review-userids.js
- *        Or set VITE_API_URL; script uses API_URL or VITE_API_URL (with /graphql stripped if present).
+ * Usage: node scripts/utilities/generate-product-review-userids.js
+ * Reads API_URL from the selected azd environment and authenticates as the seeded
+ * admin identity through scripts/utilities/azure-auth.py (DAB audience). Person
+ * records are not anonymously readable.
  */
 
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { randomInt } = require("crypto");
-
-const graphqlEndpoint = process.env.API_URL || process.env.VITE_API_URL || "";
-const baseUrl =
-  graphqlEndpoint.replace(/\/graphql\/?$/i, "") ||
-  "https://av-api-pdnyzls7xb2ye.yellowdesert-d26d8c44.eastus2.azurecontainerapps.io";
-const endpoint = baseUrl + (baseUrl.endsWith("/graphql") ? "" : "/graphql");
+const { execFileSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "../..");
+const DAB_ROLE = "executive-admin";
+const apiUrl = execFileSync("azd", ["env", "get-value", "API_URL", "--no-prompt"], {
+  encoding: "utf8",
+}).trim();
+if (!apiUrl.startsWith("https://")) {
+  throw new Error("API_URL is not an https URL in the selected azd environment.");
+}
+const endpoint = apiUrl.replace(/\/graphql\/?$/i, "") + "/graphql";
+const dabToken = execFileSync(
+  "python3",
+  [path.join(repoRoot, "scripts/utilities/azure-auth.py"), "token", "--identity", "admin", "--resource", "dab"],
+  { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+).trim();
 const sqlDir = path.join(repoRoot, "seed-job", "sql");
 const productReviewCsv = path.join(sqlDir, "ProductReview.csv");
 const productReviewAiCsv = path.join(sqlDir, "ProductReview-ai.csv");
@@ -39,6 +49,8 @@ function makeGraphQLRequest(query) {
       headers: {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(postData),
+        Authorization: "Bearer " + dabToken,
+        "X-MS-API-ROLE": DAB_ROLE,
       },
     };
     const req = https.request(options, (res) => {

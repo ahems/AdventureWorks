@@ -161,7 +161,7 @@ public class BankService
 
     private async Task SeedInitialBalancesAsync()
     {
-        _logger.LogInformation("[Bank] Seeding initial bank balances from Sales.usp_GetTotalProfit…");
+        _logger.LogInformation("[Bank] Seeding initial bank balances from historical finished-goods profit…");
 
         decimal totalProfit;
         List<(string Code, string Name)> currencies;
@@ -222,7 +222,7 @@ public class BankService
 
         // Log the opening transaction
         await AppendTransactionAsync(USD_CODE, totalProfit, totalProfit,
-            "initial", "Opening balance seeded from Sales.usp_GetTotalProfit total profit", null);
+            "initial", "Opening balance seeded from historical finished-goods profit", null);
 
         // Create zero-balance accounts for every other currency
         foreach (var (code, name) in currencies.Where(c => c.Code != USD_CODE))

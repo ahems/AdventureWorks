@@ -23,35 +23,45 @@ Query and Recharts, packaged as a container (remote ACR build) and hosted on
 | Path | Contents |
 |---|---|
 | `src/pages/` | One component per admin page |
-| `src/services/` | Functions/DAB/MCP API helpers, including the Functions OAuth interceptor |
+| `src/services/` | Functions/DAB/MCP API helpers, including the Functions OAuth interceptor and `dabFetch` (authenticated DAB GraphQL/REST fetch) |
+| `src/lib/permissions.ts`, `src/hooks/useCan.ts`, `src/components/Can.tsx` | Scope-based UI gating from the token's `scope` claim |
 | `src/hooks/` | React Query hooks and live-update listeners |
 | `src/context/AuthContext.tsx` | OAuth sign-in state and resource tokens |
 | `docker-entrypoint.sh` | Writes `config.js` from Container App environment variables at start-up |
 
-## Run, build and test
+## Build and test
+
+The portal runs only in Azure; build and test locally, then deploy.
 
 ```bash
 cd app-admin
-npm install
-npm run dev          # Vite dev server on http://localhost:8080
+npm ci
 npm run build
 npm run lint
+npm run typecheck
+npm test
 ```
 
-> **Dev-port caveat:** api-mcp's built-in development redirect for this client is
-> `http://localhost:5174/oauth/callback`, but Vite listens on 8080. For local sign-in,
-> run `npm run dev -- --port 5174` (or register your own callback on api-mcp).
-
-There is no unit test suite; the cross-frontend live-updates regression
+`npm test` runs the Vitest suite (jsdom): `dabFetch` headers and token-refresh retry,
+the DAB REST hooks using it, and scope gating. The cross-frontend live-updates regression
 (`node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs`) covers its
 event batching and no-polling rule.
+
+## API calls and permissions
+
+- Send every DAB call (GraphQL or REST) through `graphqlClient` or `dabFetch` from
+  `@/services/dabFetch`; they attach the DAB-audience bearer token and `X-MS-API-ROLE`.
+  Do not call DAB with plain `fetch`. Functions calls use plain `fetch`; the
+  interceptor in `src/services/functionsAuthInterceptor.ts` adds the Functions token.
+- Gate actions with `useCan(Scopes.X)` or `<Can scope={Scopes.X}>` so roles without the
+  required scope do not see (or cannot click) them. This is UI only; DAB and Functions
+  remain authoritative.
 
 ## Configuration
 
 At container start `docker-entrypoint.sh` writes `window.APP_CONFIG` (`API_URL`,
 `API_FUNCTIONS_URL`, `API_MCP_URL`, `APPINSIGHTS_CONNECTIONSTRING` and app links).
-Locally, set `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` and `VITE_API_MCP_URL` in
-`app-admin/.env`. See [runtime configuration](../docs/apps/admin-portal.md#runtime-configuration)
+See [runtime configuration](../docs/apps/admin-portal.md#runtime-configuration)
 and the [environment variables reference](../docs/reference/environment-variables.md).
 
 ## Deploy

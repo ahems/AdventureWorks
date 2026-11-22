@@ -1,5 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using api_functions.Services;
 using api_functions.Models;
@@ -13,11 +14,38 @@ public class SitemapFunction
 {
     private readonly ILogger<SitemapFunction> _logger;
     private readonly ProductService _productService;
+    private readonly string? _storefrontUrl;
 
-    public SitemapFunction(ILogger<SitemapFunction> logger, ProductService productService)
+    // Only routes declared in app/src/App.tsx that are public and indexable.
+    public static readonly IReadOnlyList<(string Loc, string Priority, string ChangeFreq)> StaticPages =
+    [
+        ("/", "1.0", "daily"),
+        ("/sale", "0.9", "daily"),
+        ("/help-me-choose", "0.6", "monthly"),
+        ("/faq", "0.5", "monthly"),
+        ("/returns", "0.4", "monthly"),
+    ];
+
+    public SitemapFunction(ILogger<SitemapFunction> logger, ProductService productService, IConfiguration configuration)
     {
         _logger = logger;
         _productService = productService;
+        _storefrontUrl = configuration["APP_URL"];
+    }
+
+    /// <summary>
+    /// Sitemap URLs must point at the storefront, not the Functions host. APP_URL (the storefront
+    /// origin) is preferred; the request origin is only a local-development fallback.
+    /// </summary>
+    public static string ResolveBaseUrl(string? storefrontUrl, Uri requestUrl)
+    {
+        if (Uri.TryCreate(storefrontUrl?.Trim(), UriKind.Absolute, out var configured) &&
+            (configured.Scheme == Uri.UriSchemeHttps || configured.Scheme == Uri.UriSchemeHttp))
+        {
+            return configured.GetLeftPart(UriPartial.Authority);
+        }
+
+        return requestUrl.GetLeftPart(UriPartial.Authority);
     }
 
     /// <summary>
@@ -36,13 +64,11 @@ public class SitemapFunction
 
         try
         {
-            // Get base URL from request - force HTTPS in production
-            var scheme = req.Url.Scheme == "http" && req.Url.Port == 80 ? "http" : "https";
-            var baseUrl = $"{scheme}://{req.Url.Host}";
-            if (!req.Url.IsDefaultPort && req.Url.Port != 80 && req.Url.Port != 443)
+            if (string.IsNullOrWhiteSpace(_storefrontUrl))
             {
-                baseUrl += $":{req.Url.Port}";
+                _logger.LogWarning("APP_URL is not configured; sitemap URLs fall back to the request origin.");
             }
+            var baseUrl = ResolveBaseUrl(_storefrontUrl, req.Url);
 
             // Get all products from database
             var products = await _productService.GetFinishedGoodsProductsAsync();
@@ -54,7 +80,7 @@ public class SitemapFunction
             // Write XML directly to response stream to avoid memory limits
             await GenerateSitemapXmlAsync(response.Body, baseUrl, products);
 
-            _logger.LogInformation($"Sitemap generated successfully with {products.Count} products");
+            _logger.LogInformation("Sitemap generated successfully with {ProductCount} products", products.Count);
             return response;
         }
         catch (Exception ex)
@@ -66,7 +92,7 @@ public class SitemapFunction
         }
     }
 
-    private async Task GenerateSitemapXmlAsync(Stream outputStream, string baseUrl, List<ProductData> products)
+    public static async Task GenerateSitemapXmlAsync(Stream outputStream, string baseUrl, List<ProductData> products)
     {
         var settings = new XmlWriterSettings
         {
@@ -99,18 +125,9 @@ public class SitemapFunction
         await xmlWriter.FlushAsync();
     }
 
-    private async Task AddStaticPagesAsync(XmlWriter xmlWriter, string baseUrl)
+    private static async Task AddStaticPagesAsync(XmlWriter xmlWriter, string baseUrl)
     {
-        var staticPages = new[]
-        {
-            new { Loc = "/", Priority = "1.0", ChangeFreq = "daily" },
-            new { Loc = "/products", Priority = "0.9", ChangeFreq = "daily" },
-            new { Loc = "/sale", Priority = "0.9", ChangeFreq = "daily" },
-            new { Loc = "/faq", Priority = "0.5", ChangeFreq = "monthly" },
-            new { Loc = "/contact", Priority = "0.5", ChangeFreq = "monthly" }
-        };
-
-        foreach (var page in staticPages)
+        foreach (var page in StaticPages)
         {
             await xmlWriter.WriteStartElementAsync(null, "url", null);
             await xmlWriter.WriteElementStringAsync(null, "loc", null, $"{baseUrl}{page.Loc}");
@@ -120,27 +137,24 @@ public class SitemapFunction
         }
     }
 
-    private async Task AddCategoryPagesAsync(XmlWriter xmlWriter, string baseUrl, List<ProductData> products)
+    private static async Task AddCategoryPagesAsync(XmlWriter xmlWriter, string baseUrl, List<ProductData> products)
     {
-        // Get unique categories with their latest modified date
+        // CategoryPage parses /category/:categoryId as the numeric ProductCategoryID.
         var categories = products
-            .Where(p => p.ProductCategoryID.HasValue && !string.IsNullOrEmpty(p.ProductCategoryName))
-            .GroupBy(p => new { p.ProductCategoryID, p.ProductCategoryName })
+            .Where(p => p.ProductCategoryID.HasValue)
+            .GroupBy(p => p.ProductCategoryID!.Value)
             .Select(g => new
             {
-                g.Key.ProductCategoryID,
-                g.Key.ProductCategoryName,
+                ProductCategoryID = g.Key,
                 LastModified = g.Max(p => p.ModifiedDate)
             })
-            .OrderBy(c => c.ProductCategoryName);
+            .OrderBy(c => c.ProductCategoryID);
 
         foreach (var category in categories)
         {
             await xmlWriter.WriteStartElementAsync(null, "url", null);
 
-            // Create SEO-friendly URL slug
-            var categorySlug = CreateUrlSlug(category.ProductCategoryName!);
-            await xmlWriter.WriteElementStringAsync(null, "loc", null, $"{baseUrl}/category/{categorySlug}");
+            await xmlWriter.WriteElementStringAsync(null, "loc", null, $"{baseUrl}/category/{category.ProductCategoryID}");
             await xmlWriter.WriteElementStringAsync(null, "lastmod", null, category.LastModified.ToString("yyyy-MM-dd"));
             await xmlWriter.WriteElementStringAsync(null, "changefreq", null, "weekly");
             await xmlWriter.WriteElementStringAsync(null, "priority", null, "0.8");
@@ -149,7 +163,7 @@ public class SitemapFunction
         }
     }
 
-    private async Task AddProductPagesAsync(XmlWriter xmlWriter, string baseUrl, List<ProductData> products)
+    private static async Task AddProductPagesAsync(XmlWriter xmlWriter, string baseUrl, List<ProductData> products)
     {
         foreach (var product in products.OrderBy(p => p.ProductID))
         {
@@ -165,15 +179,5 @@ public class SitemapFunction
 
             await xmlWriter.WriteEndElementAsync();
         }
-    }
-
-    private string CreateUrlSlug(string text)
-    {
-        // Convert to lowercase and replace spaces with hyphens
-        return text.ToLowerInvariant()
-            .Replace(" ", "-")
-            .Replace("&", "and")
-            .Replace(",", "")
-            .Replace("'", "");
     }
 }

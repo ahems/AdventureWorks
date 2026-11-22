@@ -99,6 +99,19 @@ def validate(repo=REPO, require_full=True):
             for figure in metadata["figures"].values():
                 if not figure["guidance"] or not figure["callouts"]:
                     raise ValueError(f"Model {identifier} figure lacks operational guidance or component callouts.")
+    # Part sheets (manufactured parts without a ProductModel) reference generated diagrams from Document-ai.csv.
+    for row in export.records(sql / "Document-ai.csv", "+|", "&|", 13):
+        if not row[10].strip():
+            continue
+        for node in ET.fromstring(row[10]).iter(f"{{{export.drafts.NAMESPACE}}}diag"):
+            illustration = int(node.text)
+            if illustration not in generated_ids:
+                raise ValueError(f"Part sheet {row[0]} references missing generated illustration {illustration}.")
+            svg = ET.fromstring((repo / f"app-manufacturing/public/illustrations/illustration-{illustration}.svg").read_text())
+            if any(node.tag not in ("{http://www.w3.org/2000/svg}" + tag for tag in ("svg", "path", "g")) or
+                   any(key.lower().startswith("on") or key.endswith("href") for key in node.attrib) for node in svg.iter()):
+                raise ValueError(f"Unsafe generated SVG {illustration}.")
+            used_generated.add(illustration)
     if used_generated != generated_ids:
         raise ValueError("Generated illustrations include unreferenced records.")
     if mappings != expected_mappings:

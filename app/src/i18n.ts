@@ -151,8 +151,30 @@ import viChat from "./locales/vi/chat.json";
 import thChat from "./locales/th/chat.json";
 import idChat from "./locales/id/chat.json";
 
-// Help Me Choose namespace (English only — other locales fall back to English)
+// Help Me Choose namespace
 import enHelpme from "./locales/en/helpme.json";
+import enGbHelpme from "./locales/en-gb/helpme.json";
+import enCaHelpme from "./locales/en-ca/helpme.json";
+import enAuHelpme from "./locales/en-au/helpme.json";
+import enNzHelpme from "./locales/en-nz/helpme.json";
+import enIeHelpme from "./locales/en-ie/helpme.json";
+import esHelpme from "./locales/es/helpme.json";
+import frHelpme from "./locales/fr/helpme.json";
+import deHelpme from "./locales/de/helpme.json";
+import ptHelpme from "./locales/pt/helpme.json";
+import itHelpme from "./locales/it/helpme.json";
+import nlHelpme from "./locales/nl/helpme.json";
+import ruHelpme from "./locales/ru/helpme.json";
+import zhHelpme from "./locales/zh/helpme.json";
+import zhChtHelpme from "./locales/zh-cht/helpme.json";
+import jaHelpme from "./locales/ja/helpme.json";
+import koHelpme from "./locales/ko/helpme.json";
+import arHelpme from "./locales/ar/helpme.json";
+import heHelpme from "./locales/he/helpme.json";
+import trHelpme from "./locales/tr/helpme.json";
+import viHelpme from "./locales/vi/helpme.json";
+import thHelpme from "./locales/th/helpme.json";
+import idHelpme from "./locales/id/helpme.json";
 
 const resources = {
   en: {
@@ -171,6 +193,7 @@ const resources = {
     account: enGbAccount,
     footer: enGbFooter,
     chat: enGbChat,
+    helpme: enGbHelpme,
   },
   "en-ca": {
     common: enCaCommon,
@@ -179,6 +202,7 @@ const resources = {
     account: enCaAccount,
     footer: enCaFooter,
     chat: enCaChat,
+    helpme: enCaHelpme,
   },
   "en-au": {
     common: enAuCommon,
@@ -187,6 +211,7 @@ const resources = {
     account: enAuAccount,
     footer: enAuFooter,
     chat: enAuChat,
+    helpme: enAuHelpme,
   },
   "en-nz": {
     common: enNzCommon,
@@ -195,6 +220,7 @@ const resources = {
     account: enNzAccount,
     footer: enNzFooter,
     chat: enNzChat,
+    helpme: enNzHelpme,
   },
   "en-ie": {
     common: enIeCommon,
@@ -203,6 +229,7 @@ const resources = {
     account: enIeAccount,
     footer: enIeFooter,
     chat: enIeChat,
+    helpme: enIeHelpme,
   },
   es: {
     common: esCommon,
@@ -211,6 +238,7 @@ const resources = {
     account: esAccount,
     footer: esFooter,
     chat: esChat,
+    helpme: esHelpme,
   },
   fr: {
     common: frCommon,
@@ -219,6 +247,7 @@ const resources = {
     account: frAccount,
     footer: frFooter,
     chat: frChat,
+    helpme: frHelpme,
   },
   de: {
     common: deCommon,
@@ -227,6 +256,7 @@ const resources = {
     account: deAccount,
     footer: deFooter,
     chat: deChat,
+    helpme: deHelpme,
   },
   pt: {
     common: ptCommon,
@@ -235,6 +265,7 @@ const resources = {
     account: ptAccount,
     footer: ptFooter,
     chat: ptChat,
+    helpme: ptHelpme,
   },
   it: {
     common: itCommon,
@@ -243,6 +274,7 @@ const resources = {
     account: itAccount,
     footer: itFooter,
     chat: itChat,
+    helpme: itHelpme,
   },
   nl: {
     common: nlCommon,
@@ -251,6 +283,7 @@ const resources = {
     account: nlAccount,
     footer: nlFooter,
     chat: nlChat,
+    helpme: nlHelpme,
   },
   ru: {
     common: ruCommon,
@@ -259,6 +292,7 @@ const resources = {
     account: ruAccount,
     footer: ruFooter,
     chat: ruChat,
+    helpme: ruHelpme,
   },
   zh: {
     common: zhCommon,
@@ -267,6 +301,7 @@ const resources = {
     account: zhAccount,
     footer: zhFooter,
     chat: zhChat,
+    helpme: zhHelpme,
   },
   "zh-cht": {
     common: zhChtCommon,
@@ -275,6 +310,7 @@ const resources = {
     account: zhChtAccount,
     footer: zhChtFooter,
     chat: zhChtChat,
+    helpme: zhChtHelpme,
   },
   ja: {
     common: jaCommon,
@@ -283,6 +319,7 @@ const resources = {
     account: jaAccount,
     footer: jaFooter,
     chat: jaChat,
+    helpme: jaHelpme,
   },
   ko: {
     common: koCommon,
@@ -291,6 +328,7 @@ const resources = {
     account: koAccount,
     footer: koFooter,
     chat: koChat,
+    helpme: koHelpme,
   },
   ar: {
     common: arCommon,
@@ -299,6 +337,7 @@ const resources = {
     account: arAccount,
     footer: arFooter,
     chat: arChat,
+    helpme: arHelpme,
   },
   he: {
     common: heCommon,
@@ -307,6 +346,7 @@ const resources = {
     account: heAccount,
     footer: heFooter,
     chat: heChat,
+    helpme: heHelpme,
   },
   tr: {
     common: trCommon,
@@ -315,6 +355,7 @@ const resources = {
     account: trAccount,
     footer: trFooter,
     chat: trChat,
+    helpme: trHelpme,
   },
   vi: {
     common: viCommon,
@@ -323,6 +364,7 @@ const resources = {
     account: viAccount,
     footer: viFooter,
     chat: viChat,
+    helpme: viHelpme,
   },
   th: {
     common: thCommon,
@@ -331,6 +373,7 @@ const resources = {
     account: thAccount,
     footer: thFooter,
     chat: thChat,
+    helpme: thHelpme,
   },
   id: {
     common: idCommon,
@@ -339,6 +382,7 @@ const resources = {
     account: idAccount,
     footer: idFooter,
     chat: idChat,
+    helpme: idHelpme,
   },
 };
 

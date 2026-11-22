@@ -92,7 +92,7 @@ The scripts in `scripts/data-management/` maintain the seeded content:
 | `populate-manufacturing-content.py`, `populate-manufacturing-part-sheets.py` | Assemble accepted drafts |
 | `export-manufacturing-content.py` | Write `seed-job/sql/*-ai.csv` and the portal assets |
 | `refresh-manufacturing-previews.py` | Rebuild preview assets |
-| `validate-manufacturing-assets.py` | Check coverage against `seed-job/manufacturing-content-coverage.json` (61 models) |
+| `validate-manufacturing-assets.py` | Check coverage against `seed-job/manufacturing-content-coverage.json` (61 models); every generated illustration must be referenced by a model instruction or a part sheet in `Document-ai.csv` |
 | `verify-manufacturing-content.py` | Compare deployed content through DAB |
 
 Tests are `tests/scripts/test_manufacturing_*.py`.

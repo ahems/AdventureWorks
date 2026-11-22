@@ -1,0 +1,52 @@
+{
+  "title": "Aidez-moi à choisir",
+  "intro": {
+    "title": "Trouvons l'équipement parfait pour vous !",
+    "description": "Répondez à 5 questions rapides et notre IA parcourra le catalogue pour trouver les produits qui vous correspondent parfaitement.",
+    "cta": "C'est parti",
+    "hint": "Propulsé par l'IA · Environ 1 minute"
+  },
+  "loading": {
+    "questions": "Génération de questions personnalisées…",
+    "recommendations": "Recherche dans le catalogue et préparation de vos recommandations…"
+  },
+  "progress": {
+    "question": "Question {{current}} sur {{total}}"
+  },
+  "nav": {
+    "back": "Retour",
+    "next": "Suivant",
+    "findProducts": "Trouver mes produits"
+  },
+  "results": {
+    "title": "Vos sélections personnalisées",
+    "viewProduct": "Voir le produit",
+    "noResults": "Nous n'avons pas trouvé de correspondance exacte pour le moment. Parcourez nos catégories ou utilisez la barre de recherche.",
+    "startAgain": "Recommencer"
+  },
+  "profile": {
+    "title": "Un peu sur vous",
+    "subtitle": "Cela nous aide à trouver des produits qui vous conviennent vraiment.",
+    "gender": {
+      "label": "Genre (facultatif)",
+      "male": "Homme",
+      "female": "Femme",
+      "preferNotToSay": "Je préfère ne pas répondre"
+    },
+    "height": {
+      "label": "Votre taille",
+      "placeholder": "Sélectionnez votre taille…"
+    },
+    "colors": {
+      "label": "Couleurs préférées",
+      "hint": "Laissez vide si vous n'avez pas de préférence."
+    },
+    "continue": "Continuer"
+  },
+  "error": {
+    "loadQuestions": "Nous n'avons pas pu générer vos questions. Veuillez réessayer.",
+    "loadRecommendations": "Nous n'avons pas pu trouver de recommandations. Veuillez réessayer.",
+    "rateLimited": "Nous avons reçu beaucoup de demandes d'IA de votre part. Veuillez réessayer dans {{minutes}} min.",
+    "tryAgain": "Réessayer"
+  }
+}

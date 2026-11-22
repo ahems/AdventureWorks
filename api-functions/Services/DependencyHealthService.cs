@@ -90,13 +90,14 @@ public class DependencyHealthService(
         "ai-job-chat-queue", "ai-job-embeddings-queue", "product-thumbnail-generation",
         "sales-order-status", "production-wo-queue", "supply-chain-orders-queue",
         "simulation-order-queue", "warehouse-ops-queue", "review-moderation-queue",
-        "manufacturing-agent-queue", "auto-promotion-queue", "utility-status-queue"
+        "manufacturing-agent-queue", "auto-promotion-queue", "utility-status-queue",
+        "verified-reviews-queue"
     ];
     public static readonly string[] ApplicationTables = [
         "shoppingSimulator", "awOrderPipelineConfig", "awSupplyChain", "awManufacturing",
         "awBankAccounts", "awBankTransactions", "awWarehouse", "awManufacturingAgentConfig",
         "awManufacturingAgentRuns", "awManufacturingProposals", "verifiedReviewsJob",
-        "reviewModerationJob", "awAutoPromotionConfig"
+        "reviewModerationJob", "awAutoPromotionConfig", "aiRateLimits"
     ];
     public static readonly string[] ApplicationContainers = [
         "adventureworks-receipts", "locales", "function-releases"
@@ -204,7 +205,7 @@ public class DependencyHealthService(
             var client = new QueueServiceClient(StorageUri(account, "queue"), credential);
             await Task.WhenAll(ApplicationQueues.SelectMany(name => new[] { name, $"{name}-poison" })
                 .Select(name => client.GetQueueClient(name).GetPropertiesAsync(cancellationToken: ct)));
-            return "All 14 application queues and their poison queues are accessible; no messages consumed.";
+            return $"All {ApplicationQueues.Length} application queues and their poison queues are accessible; no messages consumed.";
         });
         yield return StorageProbe("tables", "Table storage", async (account, ct) =>
         {

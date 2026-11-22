@@ -2,6 +2,8 @@ import React from "react";
 import { CreditCard, Trash2, Loader2 } from "lucide-react";
 import { useAdminPaymentMethods } from "@/hooks/useAdminPaymentMethods";
 import { toast } from "sonner";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 interface AdminPaymentMethodsPanelProps {
   businessEntityId: number;
@@ -19,6 +21,8 @@ export const AdminPaymentMethodsPanel: React.FC<
 > = ({ businessEntityId }) => {
   const { paymentMethods, isLoading, removePaymentMethod } =
     useAdminPaymentMethods(businessEntityId);
+  // Customer contact data is writable only by customers.write roles.
+  const canWrite = useCan(Scopes.CustomersWrite);
 
   const handleRemove = async (id: string, cardLast4: string) => {
     if (!confirm(`Remove card ending in ${cardLast4}?`)) return;
@@ -74,6 +78,7 @@ export const AdminPaymentMethodsPanel: React.FC<
             </div>
             <button
               onClick={() => handleRemove(pm.id, pm.cardLast4)}
+              disabled={!canWrite}
               className="p-1.5 text-gray-400 hover:text-red-500 transition-colors shrink-0"
               title="Remove card"
             >

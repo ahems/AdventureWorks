@@ -5,6 +5,8 @@ import { Product, getSalePrice } from "@/types/product";
 import { useReviews } from "@/hooks/useReviews";
 import { getAppUrl } from "@/lib/utils";
 import DeleteProductDialog from "@/components/DeleteProductDialog";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 interface AdminProductCardProps {
   product: Product;
@@ -15,6 +17,7 @@ const AdminProductCard: React.FC<AdminProductCardProps> = ({ product }) => {
   const salePrice = getSalePrice(product);
   const appUrl = getAppUrl();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const canDelete = useCan(Scopes.AdminWrite);
 
   return (
     <>
@@ -28,17 +31,19 @@ const AdminProductCard: React.FC<AdminProductCardProps> = ({ product }) => {
             <Edit className="w-3 h-3" />
             Edit
           </span>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setDeleteOpen(true);
-            }}
-            title="Delete product"
-            className="bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-red-700 flex items-center hover:bg-red-600 transition-colors"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
+          {canDelete && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDeleteOpen(true);
+              }}
+              title="Delete product"
+              className="bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-red-700 flex items-center hover:bg-red-600 transition-colors"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
           {appUrl && (
             <a
               href={`${appUrl}/product/${product.ProductID}`}

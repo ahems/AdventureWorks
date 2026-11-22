@@ -106,6 +106,8 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
       );
       const initialState: VerifiedReviewsJobState = {
         isRunning: true,
+        isStale: false,
+        jobId: result.jobId,
         productId: 0,
         productName: "",
         processedCount: 0,
@@ -142,7 +144,7 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
 
   const canStart =
     !summaryLoading &&
-    !existingJobRunning &&
+    (!existingJobRunning || jobState?.isStale === true) &&
     summary !== null &&
     summary.qualifyingProductCount > 0;
 
@@ -213,7 +215,8 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
                 const minutesSinceActivity = lastActivity
                   ? (Date.now() - new Date(lastActivity).getTime()) / 60_000
                   : null;
-                const appearsStuck = minutesSinceActivity !== null && minutesSinceActivity > 10;
+                const appearsStuck = jobState.isStale === true ||
+                  (minutesSinceActivity !== null && minutesSinceActivity > 10);
                 return (
                   <div className={`flex items-start gap-3 p-3 border-2 rounded-xl ${
                     appearsStuck
@@ -233,28 +236,9 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
                           : ""}
                         {jobState.processedCount}/{jobState.totalCount} reviews.
                         {appearsStuck
-                          ? ` No progress for ${Math.round(minutesSinceActivity!)} min.`
+                          ? ` No progress for ${Math.round(minutesSinceActivity ?? 10)} min. It is released automatically, or you can start a new generation to replace it.`
                           : " Wait for it to finish before starting a new one."}
                       </p>
-                      {appearsStuck && (
-                        <button
-                          onClick={async () => {
-                            // Calling GET /status triggers the backend auto-reset for orphaned jobs
-                            try {
-                              const fresh = await getVerifiedReviewsJobStatus();
-                              if (!fresh.isRunning) {
-                                setExistingJobRunning(false);
-                                setJobState(null);
-                              } else {
-                                setJobState(fresh);
-                              }
-                            } catch { /* ignore */ }
-                          }}
-                          className="mt-2 text-xs underline text-red-600 hover:no-underline"
-                        >
-                          Check again &amp; clear if resolved
-                        </button>
-                      )}
                     </div>
                   </div>
                 );

@@ -1,15 +1,18 @@
 #!/bin/bash
 
 # Test script for Order Receipt PDF Generation
-# This script helps test the receipt generation function locally
+# Tests the receipt generation function in the deployed Functions app
 
 echo "========================================"
 echo "Order Receipt PDF Generation Test Script"
 echo "========================================"
 echo ""
 
-# Check if the function is running
-FUNCTION_URL="${1:-http://localhost:7071}"
+FUNCTION_URL="${1:-${API_FUNCTIONS_URL:-$(azd env get-value API_FUNCTIONS_URL --no-prompt 2>/dev/null || true)}}"
+if [ -z "$FUNCTION_URL" ]; then
+  echo "Pass the Functions URL, set API_FUNCTIONS_URL or select a deployed azd environment." >&2
+  exit 1
+fi
 ENDPOINT="${FUNCTION_URL}/api/GenerateOrderReceipts_HttpStart"
 
 echo "Testing endpoint: $ENDPOINT"

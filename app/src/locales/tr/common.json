@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "Doğal dil sorgularını anlamak için AI gömme teknolojisini kullanır. Deneyin: \"kırmızı bisikletler\", \"yağmurlu yürüyüşler için su geçirmez ekipman\" veya \"bisikletçiler için hafif ekipman\"",
     "matchCounts": "{{descriptionMatches}} açıklama eşleşmesi, {{reviewMatches}} inceleme eşleşmesi ve {{nameMatches}} isim eşleşmesi bulundu",
     "semanticUnavailable": "Anlamsal arama servisi kullanılamıyor. Lütfen AI servisinin çalıştığını ve gömme verilerinin indekslendiğini kontrol edin.",
+    "aiRateLimited": "Yapay zekâ araması şu anda yoğun. Lütfen {{minutes}} dk sonra tekrar deneyin.",
     "noMatchingProducts": "Eşleşen ürün bulunamadı",
     "enterSearchQuery": "Ürünleri bulmak için bir arama sorgusu girin",
     "noResultsForQuery": "Yapay zeka destekli aramamız \"{{query}}\" ile eşleşen ürünler bulamadı. Farklı anahtar kelimeler veya ifadeler deneyin.",
@@ -267,7 +268,11 @@
       "lastName": "Doe",
       "email": "john@example.com.tr",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Yalnızca herkese açık test kartı numaraları (örneğin 4242 4242 4242 4242) kaydedilebilir. Yalnızca kart türü, son dört hane ve son kullanma tarihi saklanır.",
+    "errorSavePayment": "Ödeme yöntemi kaydedilemedi. Lütfen tekrar deneyin.",
+    "addCard": "Kart ekle",
+    "invalidTestCard": "Bu kart kaydedilemez. Geçerli ve süresi dolmamış, herkese açık bir test kartı numarası kullanın."
   },
   "checkout": {
     "backToCart": "Sepete Dön",

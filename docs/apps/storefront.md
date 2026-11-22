@@ -59,7 +59,7 @@ The storefront does **not** redirect to a login page. It sends the shopper's ema
 | Item | Value |
 |---|---|
 | OAuth client | `adventureworks-eshop` (trusted first-party public client) |
-| Allowed user category | `consumer` (any person who is not an employee) |
+| Allowed user category | `consumer` (individual customer, `PersonType` `IN`) |
 | Grant | `urn:adventureworks:params:oauth:grant-type:eshop-credentials` at `POST {api-mcp}/token` |
 | Scopes requested | `mcp.access realtime.connect products.read customers.read customers.write orders.read orders.write offline_access` |
 | Tokens held | Three audience-bound access tokens (DAB `{api-mcp}/dab`, Functions `{api-mcp}/functions`, MCP `{api-mcp}/mcp`) plus a refresh token |
@@ -93,7 +93,7 @@ Details: [identity and auth overview](../architecture/identity-and-auth.md), [mc
 
 ## Page-by-page tour
 
-The `App.tsx` route table has **19 routes plus a catch-all** (`*` → Not Found). Pages marked 🔒 are wrapped in `RequireAuth`. All pages are imported eagerly, with no route-level lazy loading.
+The `App.tsx` route table has **18 routes plus a catch-all** (`*` → Not Found). Pages marked 🔒 are wrapped in `RequireAuth`. All pages are imported eagerly, with no route-level lazy loading.
 
 ### Shopping and discovery
 
@@ -112,10 +112,10 @@ The `App.tsx` route table has **19 routes plus a catch-all** (`*` → Not Found)
 | Route | What the shopper sees and does | Backend calls | Live updates |
 |---|---|---|---|
 | `/cart` | Server-side shopping cart. A guest gets a cart session from `POST /api/cart/session`; its token is kept in `localStorage` and sent in the `X-Guest-Cart-Session` header. Signed-in shoppers use their own cart, and the guest cart is merged into it at sign-in. | Functions: `GET/POST/DELETE /api/cart/items`, `PATCH/DELETE /api/cart/items/{id}`, `POST /api/cart/merge` | `orders` → refresh cart |
-| `/checkout` 🔒 | Choose billing and shipping addresses, see tax (by state or province), shipping and currency-converted totals, then place the order. If the shopper has no customer record yet, one is created and the tokens are refreshed to pick up the `customer_id` claim. | DAB GraphQL: `customers`/`createCustomer`, `salesTaxRates`, `countryRegionCurrencies`, `currencyRates`; Functions: `/api/addresses`, `GET /api/payment-methods`, `POST /api/orders`, `POST /api/orders/{id}/details` | `orders` → refresh cart |
+| `/checkout` 🔒 | Choose billing and shipping addresses, see tax (by state or province), shipping and currency-converted totals, apply a discount code (checked by `POST /api/orders/checkout/quote`), then place the order with one server-priced call; the confirmation shows the server totals. If the shopper has no customer record yet, one is created and the tokens are refreshed to pick up the `customer_id` claim. | DAB GraphQL: `customers`/`createCustomer`, `salesTaxRates`, `countryRegionCurrencies`, `currencyRates`; Functions: `/api/addresses`, `GET /api/payment-methods`, `POST /api/orders/checkout/quote`, `POST /api/orders/checkout` | `orders` → refresh cart |
 | `/order-confirmation` 🔒 | Confirmation summary for `?orderId=SO-{id}` with the shipping address. A PDF receipt is generated and emailed in the background. | DAB GraphQL order header; Functions `GET /api/addresses/{id}` | — |
 | `/order-tracking` 🔒 and `/order-tracking/:orderId` 🔒 | Order list and a step timeline (confirmed → processing → shipped → out for delivery → delivered) derived from the order status code. | DAB GraphQL `salesOrderHeaders` by customer; Functions `GET /api/orders/details?orderIds=` | — |
-| `/account` 🔒 | Account tabs: profile (name, email addresses, phone numbers), addresses, saved payment methods, order history with receipt resend, and change password. | DAB GraphQL `updatePerson`/`updateEmailAddress`; DAB REST `PersonPhone`, `PersonCreditCard`, `StateProvince`, `CountryRegion`; Functions `/api/addresses`, `GET /api/payment-methods`, `POST /api/orders/generate-and-send-receipt`, `POST /api/password/verify`, `POST /api/password` | — |
+| `/account` 🔒 | Account tabs: profile (name, email addresses, phone numbers), addresses, saved payment methods, order history with receipt resend, and change password. | DAB GraphQL `updatePerson`/`updateEmailAddress`; DAB REST `PersonPhone`, `PersonCreditCard`, `StateProvince`, `CountryRegion`; Functions `/api/addresses`, `GET`/`POST /api/payment-methods`, `POST /api/orders/generate-and-send-receipt`, `POST /api/password/verify`, `POST /api/password` | — |
 
 The order status codes are 1 Pending, 2 Approved, 3 Backordered, 4 Rejected, 5 Shipped, 6 Cancelled and 7 Delivered. See [order lifecycle](../features/commerce/order-lifecycle.md).
 
@@ -125,7 +125,6 @@ The order status codes are 1 Pending, 2 Approved, 3 Backordered, 4 Rejected, 5 S
 |---|---|---|---|
 | `/auth` | Sign-in and sign-up tabs, with a "forgot password" link. | api-mcp `POST /token`; Functions `POST /api/signup` (anonymous) | — |
 | `/reset-password` | Request a reset email, then validate the emailed token and set a new password. | Functions (public): `POST /api/password/reset/request`, `/reset/validate`, `/reset/complete` | — |
-| `/oauth/callback` | Retained redirect-callback page. The storefront signs in with the credentials grant, so normal use never lands here. | — | — |
 | `/returns`, `/faq` | Static returns policy and FAQ, translated through i18n. | None | — |
 | `/health` | Health diagnostics dashboard (see below). | Public health and capability endpoints | Shows WebSocket status |
 | `*` | Not Found page (tracked as `Page_NotFound`). | — | — |
@@ -157,7 +156,7 @@ flowchart LR
 
 | Backend | Used for |
 |---|---|
-| **DAB GraphQL** (`API_URL`) | Catalog data (products, categories, models, descriptions, photos, inventory, special offers, reviews, product names, currency and tax rates) and profile and customer records. Catalog queries request large single pages (`first:` 1000–10000) and enrich products in the browser. |
+| **DAB GraphQL** (`API_URL`) | Catalog data (products, categories, models, descriptions, photos, inventory, special offers, reviews, product names, currency and tax rates) and profile and customer records. Catalog list queries follow DAB cursors (`hasNextPage`/`endCursor`, 500 rows per page) through `fetchAllPages` in `app/src/lib/graphql-pagination.ts`, then enrich products in the browser. |
 | **DAB REST** (`API_URL` with `/graphql` replaced by `/api`) | `Person`, `PersonPhone`, `PersonCreditCard` (delete), `ProductReview` (create), `StateProvince`, `CountryRegion`. |
 | **Azure Functions** (`API_FUNCTIONS_URL`) | Cart, addresses (DAB does not expose the `Person.Address` table), orders, payment methods, passwords, signup, semantic search, Help Me Choose, AI chat, Web PubSub negotiation and health. |
 | **api-mcp** (`API_MCP_URL`) | OAuth token endpoint only. The storefront does not call MCP tools directly; the chat agent calls them on the server. |
@@ -168,9 +167,9 @@ The storefront negotiates a connection with `GET /api/webpubsub/negotiate`, usin
 
 | Group | Payload | Effect in the storefront |
 |---|---|---|
-| `orders` | Sanitized `{ "event": "orders-changed" }` with no record IDs or values | Invalidates the `["shoppingCart"]` query, batched in a fixed 250 ms window. Connecting and reconnecting also refresh the cart. |
+| `orders` | Sanitized `{ "event": "orders-changed" }` with no record IDs or values | Invalidates the `["shoppingCart"]` and `["orders"]` (order history) queries, batched in a fixed 250 ms window. Connecting and reconnecting also refresh both. |
 
-There is no polling. If negotiation fails, the **Live updates unavailable** notice appears. See [real-time eventing](../architecture/realtime-eventing.md) and the [Web PubSub event reference](../reference/webpubsub-events.md).
+Signing in or out closes the socket and negotiates again, so the server re-selects groups for the new token. There is no polling. If negotiation fails, the **Live updates unavailable** notice appears. See [real-time eventing](../architecture/realtime-eventing.md) and the [Web PubSub event reference](../reference/webpubsub-events.md).
 
 ## Runtime configuration
 
@@ -205,7 +204,7 @@ sequenceDiagram
 - a 301 redirect from `/sitemap.xml` to the Functions sitemap;
 - security headers: a CSP that allows `wss://*.webpubsub.azure.com`, `X-Frame-Options: DENY` and `nosniff`.
 
-The generated `config.js`, `.env.production` and `staticwebapp.config.json` are git-ignored. `app/Dockerfile`, `app/docker-entrypoint.sh` and `app/hooks/predeploy.ps1` are legacy files; the Static Web Apps deployment does not use them.
+The predeploy hook also writes `public/robots.txt` from `app/robots.template.txt` with the storefront `APP_URL` in its `Sitemap:` directive. The generated `config.js`, `.env.production`, `robots.txt` and `staticwebapp.config.json` are git-ignored.
 
 Full variable list: [environment variables reference](../reference/environment-variables.md).
 
@@ -213,7 +212,7 @@ Full variable list: [environment variables reference](../reference/environment-v
 
 The app uses the Application Insights web SDK with the cloud role name **`app-eshop`**. It provides automatic route tracking and CORS correlation with the APIs. Custom events:
 
-- `User_Login`, `User_Signup`, `User_Logout`
+- `User_Login`, `User_Signup`, `User_Logout` (BusinessEntityID only; no email or name)
 - `Product_View`, `Product_AddToCart`, `Purchase_Complete`, `Order_ReceiptResent`
 - `Page_NotFound`
 - `HelpMeChoose.ProfileCompleted`, `HelpMeChoose.ResultsViewed`
@@ -241,36 +240,33 @@ The page also shows the current Web PubSub connection status. For the contract a
 
 See [localization](../features/i18n/localization.md).
 
-## Local development
+## Building and deploying
 
 ```bash
 cd app
-npm install
-npm run dev        # Vite dev server on http://localhost:8080
+npm ci
+npx vite build   # bundle only; azd runs the full build
 ```
 
-- To use the deployed services, set `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` and `VITE_API_MCP_URL` in `app/.env`. Read the values with `azd env get-value API_URL --no-prompt` and similar commands. Sign-in, cart and search need all three.
-- The Vite dev server proxies `/sitemap.xml` to a local Functions host on port 7071.
-- The storefront signs in with the credentials grant, so there is no OAuth redirect URI to register for local development.
-- Deploy changes with `azd deploy app --no-prompt`. See [deployment](../operations/deployment.md).
+The storefront runs only in Azure. `azd deploy app --no-prompt` runs `predeploy.sh` and `scripts/build-with-env.sh` with the deployed URLs, then publishes to Static Web Apps. Test at `APP_URL`. See [deployment](../operations/deployment.md).
 
 ## Tests
 
 | Suite | Command | Covers |
 |---|---|---|
-| Storefront `node --test` | `cd app && node --test scripts/health-checks.test.mjs scripts/sale-product-model-card.test.mjs` | `/health` page logic and sale-card add-to-cart variants |
+| Storefront `node --test` | `cd app && node --test scripts/*.test.mjs` | `/health` page logic, sale-card add-to-cart variants, AI rate-limit messages, email-address API errors, i18n/RTL/SEO metadata and telemetry privacy (no email in events) |
 | Live-updates regression (all frontends) | `node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs` | Batching, reconnect recovery and the no-polling rule across all three frontends |
 | Lint | `cd app && npm run lint` | ESLint |
+| Typecheck | `cd app && npm run typecheck` | `tsc --noEmit` for the app and node configs |
 
 See [testing strategy](../testing/testing-strategy.md).
 
 ## Limits and scope
 
 - **Compare** holds at most 3 products and is not saved. **Recently viewed** keeps the last 8 products.
-- Catalog pages load large single pages from DAB rather than following pagination cursors.
 - The **notify when available** form stores requests in the browser only; there is no back-end subscription.
 - Only the shopping cart is live-updated. Other pages refresh through React Query's normal refetch when the window regains focus.
-- There is no right-to-left layout, and the Help Me Choose questionnaire text is in English only.
+- Arabic and Hebrew switch the document to right-to-left; mirroring covers the main shared components, not every page-specific layout.
 - AI features (chat, Help Me Choose, semantic search) call Foundry models, so each request has a cost.
 
 ## Related feature docs

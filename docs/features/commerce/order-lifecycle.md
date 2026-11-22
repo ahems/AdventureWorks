@@ -59,9 +59,10 @@ stateDiagram-v2
   Approved --> Backordered: 10% (no warehouse)
   Approved --> Shipped: 90% (no warehouse)
   Backordered --> Shipped: after 2-4 days
-  Shipped --> Delivered: hourly timer after min delivery days
+  Shipped --> Delivered: hourly timer within the min-max delivery window
   Pending --> Cancelled: admin cancel
   Approved --> Cancelled: admin cancel
+  Backordered --> Cancelled: admin cancel
   Rejected --> [*]
   Cancelled --> [*]
   Delivered --> [*]
@@ -88,11 +89,11 @@ flowchart TD
 
 1. **`OrderPlacedSqlTrigger`** enqueues the receipt job, enqueues a Status 1 message on `sales-order-status` with a random visibility delay, creates a manufacturing-agent run unless the agent mode is Off, and updates the auto-promotion counter (see [Promotions](../promotions/promotions.md)).
 2. **`ProcessSalesOrderStatus`** (queue `sales-order-status`):
-   - Status 1 becomes 4 (5%) or 2 (95%).
+   - Status 1 becomes 4 (5%) or 2 (95%). Each status update is conditional on the status the message expects, so a message never overwrites an order that an admin has cancelled or that has already moved on.
    - An approved order is re-queued after the approved-to-shipped delay and handed to the warehouse, which creates pick operations and enqueues Status 5 when every item is picked. See [Warehouse operations](../warehouse/warehouse-operations.md).
    - Without the warehouse service, Status 2 becomes 3 (10%) or 5 (90%); a backorder ships after 2–4 days.
    - On Shipped, it sends the shipped email (when enabled) and records the sale in the [bank simulator](../finance/bank-simulator.md).
-3. **`OrderDelivery_Timer`** (`0 0 * * * *`) promotes Shipped orders to Delivered once `ShipDate` (or `ModifiedDate`) plus the minimum delivery days for the order type has passed, then sends the delivered email (when enabled).
+3. **`OrderDelivery_Timer`** (`0 0 * * * *`) promotes Shipped orders to Delivered, then sends the delivered email (when enabled). Each order gets a deterministic delivery threshold inside the configured window for its type: `min + (SalesOrderID mod (max − min + 1))` days after `ShipDate` (or `ModifiedDate`). Deliveries are therefore spread across the window, and no order waits longer than the maximum. If the stored maximum is below the minimum, the minimum is used for both.
 
 ### Pipeline control routes
 
@@ -100,13 +101,14 @@ flowchart TD
 |---|---|
 | `GET` / `PUT /api/orders/pipeline/config` | Read or change pipeline delays |
 | `GET /api/orders/pipeline/status` | Counts and timing by status |
-| `POST /api/orders/pipeline/promote-pending` | Move Pending orders to Approved now |
+| `POST /api/orders/pipeline/promote-pending` | Approve Pending orders now. Each order is queued on `sales-order-status` with a force-approve flag, so it skips the 5% rejection and goes straight to the normal warehouse pick path. |
 | `POST /api/orders/pipeline/promote-approved` | Move Approved orders forward now |
-| `GET /api/orders/delivery/trigger` | Run the delivery check now |
+| `POST /api/orders/delivery/trigger` | Run the delivery check now |
 | `POST /api/orders/{id}/ship` | Ship one order |
 | `POST /api/orders/begin-processing-order` | Start pipeline processing for an order |
+| `POST /api/orders/{id}/cancel` | Cancel one order |
 
-Admin cancel is a DAB update that sets `Status = 6`.
+Admin cancel calls `POST /api/orders/{id}/cancel`. The function sets `Status = 6` only when the order is still Pending (1), Approved (2) or Backordered (3), as one conditional update. It returns HTTP 409 for Rejected, Shipped, Cancelled or Delivered orders and HTTP 404 for unknown ids. On success it sends a generic `order-status-changed` signal to the `orders` group. The admin app no longer writes order status through DAB.
 
 ### B2B store orders and AI orders
 
@@ -117,6 +119,8 @@ Admin cancel is a DAB update that sets `Status = 6`.
 | `GET /api/orders/{orderId}/lines` | Order lines |
 | `POST /api/store-orders` | Place a B2B order |
 | `POST /api/GenerateOrderWithAI`, `/api/GenerateOrdersBulk` | Generate realistic orders with the order agent |
+
+`POST /api/store-orders` accepts only product ids and quantities (1–999) per line; any `unitPrice` or `discountPct` a client sends is ignored. Each line is priced by the same rules as [storefront checkout](cart-and-checkout.md): `UnitPrice = ListPrice`, `UnitPriceDiscount` and `SpecialOfferID` from the best active `Reseller` special offer (or 1, No Discount). A product that is missing or has no positive list price returns HTTP 400. B2B orders keep their own 8.75% tax, tiered freight and immediate Finished Goods stock decrement. The admin dialog's totals are an estimate.
 
 ## Data & storage
 
@@ -137,8 +141,8 @@ All events go to the `orders` group:
 | Event | Sent by |
 |---|---|
 | `database-changed` | `OrderPlacedSqlTrigger` and the database outbox |
-| `order-placed` | Order trigger (when the manufacturing agent is on) and `POST /api/store-orders` |
-| `order-status-changed` | `ProcessSalesOrderStatus` |
+| `order-placed` | Order trigger (every inserted order, regardless of manufacturing agent mode) and `POST /api/store-orders` |
+| `order-status-changed` | `ProcessSalesOrderStatus` and `POST /api/orders/{id}/cancel` |
 | `orders-delivered` | `OrderDelivery_Timer` |
 | `state-changed` | Pipeline config saves |
 
@@ -149,7 +153,7 @@ All events go to the `orders` group:
 | Route group | Scope |
 |---|---|
 | Pipeline config/status reads | `orders.read` (internal) |
-| Pipeline changes, promote, delivery trigger, ship, begin-processing | `orders.write` (internal; `executive-admin` only) |
+| Pipeline changes, promote, delivery trigger, ship, begin-processing, cancel | `orders.write` (internal; `executive-admin` only) |
 | Store reads | `admin.read` |
 | Store orders and AI order generation | `admin.write` |
 
@@ -168,11 +172,11 @@ Customers see only their own orders through DAB ownership policies. See [Functio
 ## Limits
 
 - Outcomes are randomized for demo purposes; they do not reflect real stock or credit checks.
-- Delivery uses the configured minimum delivery days; the maximum is stored for display.
+- The delivery day within the window is derived from the order id rather than chosen at random, so it is stable across timer runs.
 - The storefront tracking page shows an "out for delivery" step that has no status code of its own.
 
 ## Related code & docs
 
-- `api-functions/Functions/OrderPlacedSqlTrigger.cs`, `ProcessSalesOrderStatus.cs`, `OrderDeliveryTimerFunction.cs`, `OrderPipelineControlFunction.cs`, `OrderStatusFunctions.cs`, `StoreOrderFunctions.cs`
+- `api-functions/Functions/OrderPlacedSqlTrigger.cs`, `ProcessSalesOrderStatus.cs`, `OrderDeliveryTimerFunction.cs`, `OrderPipelineControlFunction.cs`, `OrderStatusFunctions.cs`, `OrderCancelFunctions.cs`, `StoreOrderFunctions.cs`
 - `app-admin/src/pages/` order, order-pipeline and store pages; `app/src/pages/OrderTrackingPage.tsx`
 - [Receipts](receipts.md) · [Email notifications](../email/email-notifications.md) · [Shopping simulator](../simulators/shopping-simulator.md) · [Admin portal](../../apps/admin-portal.md)

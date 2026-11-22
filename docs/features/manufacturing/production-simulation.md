@@ -129,7 +129,7 @@ Use `{"failureRatePct": 0.0, "scrapReasonIds": []}` to turn scrap off for a stat
 
 ### Workforce
 
-On first use, `WorkforceService` loads the active employees of the Manufacturing department group (Production and Production Control) from the `HumanResources` tables, with name, shift and current pay rate. Workers are spread round-robin across the seven production locations:
+On host start, `SimulationMaintenance_Timer` has `WorkforceService` load the active employees of the Manufacturing department group (Production and Production Control) from the `HumanResources` tables, with name, shift and current pay rate. Workers are spread round-robin across the seven production locations:
 
 | LocationID | Name |
 |---|---|
@@ -179,7 +179,7 @@ All routes are under `/api/manufacturing/`.
 | POST | `begin` | Start a run: `{productId, orderQty, dueDate?}` (due date defaults to 7 days); returns `202` with `runId`, `rootWorkOrderId`, work-order counts and inventory warnings | `manufacturing.write` |
 | POST | `stop` | Clear pending `production-wo-queue` messages; in-flight operations finish | `manufacturing.write` |
 | GET | `status` | Queue depth, pending/in-progress/completed-today counts, shortages, last 10 scrap events, station load | `manufacturing.read` |
-| GET | `workforce` | Workforce summary (loaded on first call) | `manufacturing.read` |
+| GET | `workforce` | Workforce summary | `manufacturing.read` |
 | GET | `workforce/detail` | Per-worker status | `manufacturing.read` |
 | GET | `scrap-config` | Scrap rate and reasons per station | `manufacturing.read` |
 | PUT | `scrap-config/{locationId}` | `{failureRatePct 0–1, scrapReasonIds, note?}` | `manufacturing.write` |

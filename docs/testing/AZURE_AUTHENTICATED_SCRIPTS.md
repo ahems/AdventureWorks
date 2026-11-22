@@ -75,10 +75,9 @@ python3 scripts/utilities/azure-auth.py request \
   --identity admin --resource functions --path /api/ai-job-queue/status
 ```
 
-Some Functions `GET` routes change state, including `manufacturing/status`,
-`manufacturing/agent-config`, `bank/*` and `orders/delivery/trigger`. Do not use them
-as read-only checks; see the
-[side-effecting GET routes](../../tests/scripts/README.md#side-effecting-get-routes).
+Functions `GET` routes are read-only. On-demand jobs such as `orders/delivery/trigger`
+and `archive/trigger` are `POST` and change data, so call them only intentionally; see
+[Read-only GET routes](../../tests/scripts/README.md#read-only-get-routes).
 
 `request` logs in anew each invocation, keeps credentials/cookies/tokens in memory,
 prints the API response to stdout, and returns nonzero on transport/HTTP errors

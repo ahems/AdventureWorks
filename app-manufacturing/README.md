@@ -30,28 +30,24 @@ Query; tested with Vitest. Packaged as a container (remote ACR build) and hosted
 | `src/data/manufacturing/`, `public/illustrations/` | Bundled instruction JSON and SVG illustrations |
 | `scripts/export-illustrations.mjs` | Illustration export used by `npm run illustrations:export` |
 
-## Run, test and build
+## Test and build
+
+The portal runs only in Azure; build and test locally, then deploy.
 
 ```bash
 cd app-manufacturing
-npm install
-npm run dev                  # Vite dev server on http://localhost:8080
+npm ci
 npm test                     # Vitest (vitest run); npm run test:watch for watch mode
 npm run lint
+npm run typecheck            # tsc --noEmit (app + node configs)
 npm run build
 npm run illustrations:export # regenerate the illustration export via Functions
 ```
 
-> **Dev-port caveat:** api-mcp's built-in development redirect for this client is
-> `http://localhost:5175/oauth/callback`, but Vite listens on 8080. For local sign-in,
-> run `npm run dev -- --port 5175` (or register your own callback on api-mcp).
-
 ## Configuration
 
 At container start `docker-entrypoint.sh` writes `window.APP_CONFIG`; `src/config/api.ts`
-resolves each value from `APP_CONFIG`, then `VITE_*`, then localhost defaults. Locally,
-set `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` and `VITE_API_MCP_URL` in
-`app-manufacturing/.env`. See
+resolves each value from `APP_CONFIG`, then build-time `VITE_*` values. See
 [runtime configuration](../docs/apps/manufacturing-portal.md#runtime-configuration) and the
 [environment variables reference](../docs/reference/environment-variables.md).
 

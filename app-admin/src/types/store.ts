@@ -72,11 +72,10 @@ export interface StoreOrderLineItem {
 
 export interface PlaceStoreOrderPayload {
   storeBusinessEntityId: number;
+  /** Products and quantities only; the server prices every line from the catalogue. */
   items: Array<{
     productId: number;
     quantity: number;
-    unitPrice: number;
-    discountPct: number;
   }>;
   shipMethodId: number;
   purchaseOrderNumber?: string;

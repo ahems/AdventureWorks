@@ -42,7 +42,7 @@ A client calls `GET /api/webpubsub/negotiate` with a Functions-audience token. T
 | `orders` | `orders.read`, `manufacturing.read` | No | Storefront, admin, manufacturing |
 | `manufacturing-agent` | `manufacturing.read` | Yes | Manufacturing |
 | `manufacturing-ops` | `manufacturing.read` | Yes | Manufacturing |
-| `warehouse` | `inventory.read` | Yes | Admin, manufacturing |
+| `warehouse` | `inventory.read`, `manufacturing.read` | Yes | Admin, manufacturing |
 | `supply-chain` | `inventory.read`, `manufacturing.read` | Yes | Manufacturing |
 | `shopping-simulator` | `admin.read`, `manufacturing.read` | Yes | Admin, manufacturing |
 | `reviews` | `admin.read` | Yes | Admin |
@@ -54,7 +54,7 @@ A client calls `GET /api/webpubsub/negotiate` with a Functions-audience token. T
 
 | App | Groups | Reaction |
 |---|---|---|
-| Storefront (`app/`) | `orders` | Invalidates the `shoppingCart` query (250 ms batch). |
+| Storefront (`app/`) | `orders` | Invalidates the `shoppingCart` and `orders` (prefix) queries (250 ms batch); re-negotiates after sign-in and sign-out. |
 | Admin (`app-admin/`) | `orders`, `warehouse`, `shopping-simulator`, `reviews`, `promotions`, `utilities` | Invalidates the React Query keys mapped to the group and dispatches a `webpubsub` DOM event. Status pages re-read through `useLiveUpdates` (250 ms batch, one read in flight, follow-up read if a change arrives during a read). The utilities panel filters by `instanceId`. |
 | Manufacturing (`app-manufacturing/`) | `manufacturing-agent`, `manufacturing-ops`, `warehouse`, `supply-chain`, `orders`, `shopping-simulator`, `finance` | Invalidates the query keys mapped to the group in a fixed 2-second batch window; a query already fetching gets a follow-up refetch. |
 
@@ -99,9 +99,10 @@ All three apps invalidate their caches when the connection opens or reconnects a
 | `shopping-simulator` | `queue-cleared` | `POST /api/shopping-simulator/clear-queue` (through `ShoppingSimulatorService`) | — |
 | `shopping-simulator` | `state-changed` | `NotifyingTableClient` on `shoppingSimulator` | entity, changeType |
 | `reviews` | `moderation-progress` | `ReviewModeration_QueueTrigger` (`review-moderation-queue`) | jobId |
-| `reviews` | `generation-progress` | `GenerateVerifiedReviews` | processed, total |
-| `reviews` | `generation-state-changed` | `ReviewService` | productId, changeType (`started`, `progress`, `terminal`) |
+| `reviews` | `generation-progress` | `VerifiedReviews_QueueTrigger` (`verified-reviews-queue`) | jobId, processed, total |
+| `reviews` | `generation-state-changed` | `ReviewService` | productId, jobId, changeType (`started`, `progress`, `terminal`) |
 | `reviews` | `moderation-state-changed` | `ReviewService` | jobId, changeType |
+| `reviews` | `review-votes-changed` | `POST`/`DELETE /api/reviews/{id}/vote` | productReviewId, productId |
 | `reviews` | `database-changed` | `DatabaseChanges` (`ProductReview`, `ProductReviewReply`) | entity, changeTypes |
 | `finance` | `transaction` (coalesced) | `BankService` (every recorded bank transaction) | currencyCode, amount, transactionType, referenceId (sanitized) |
 | `finance` | `state-changed` | `NotifyingTableClient` on `awBankAccounts`, `awBankTransactions` | entity, changeType (sanitized) |

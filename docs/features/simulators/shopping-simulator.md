@@ -64,7 +64,9 @@ flowchart LR
    | `new-persona` | A new customer created from a random persona |
    | `no-order-customer` | A registered customer with no orders, drawn to sale items |
 
-3. The queue trigger asks the order-generation agent for a structured order plan, validates it and places the order. Every attempt is saved as a result.
+3. The queue trigger asks the order-generation agent for a structured order plan, validates it and places the order. Every attempt is saved as a result. Only the plan's product ids and quantities are used: duplicate products are merged, quantities are clamped to 1–10 and to Finished Goods stock, and products without a positive list price are skipped. Any AI-suggested price or offer is ignored.
+   - **Consumer orders** go through the same server-side checkout as the storefront (`CheckoutService`): list price plus the best active `Customer` offer, tax from the ship-to address, freight from the cheapest ship method and the ship-to currency rate, written in one transaction. As with storefront checkout, stock is not decremented when the order is created.
+   - **Store orders** use the same catalogue price query and line-pricing rules with the best active `Reseller` offer (see [B2B store orders](../commerce/order-lifecycle.md#b2b-store-orders-and-ai-orders)).
 4. Queue processing scales out on Flex Consumption. At 60 orders per minute the queue fills faster than AI processing drains it.
 
 ### Configuration options
@@ -84,7 +86,7 @@ flowchart LR
 
 `GET shopping-simulator/results?limit=` (1–100, default 50) returns the latest results. A failed plan is saved with a failure code:
 
-`empty_response`, `invalid_json`, `missing_customer_mode`, `invalid_customer_mode`, `unexpected_customer_mode`, `missing_customer_identity`, `both_customer_modes_present`, `seed_customer_mismatch`, `existing_customer_not_found`, `invalid_new_customer_payload`, `invalid_store_customer_payload`, `no_planned_items`, `no_valid_ai_planned_items`, `unhandled_error`, and `processing-exception` for errors in the queue trigger.
+`empty_response`, `invalid_json`, `missing_customer_mode`, `invalid_customer_mode`, `unexpected_customer_mode`, `missing_customer_identity`, `both_customer_modes_present`, `seed_customer_mismatch`, `existing_customer_not_found`, `invalid_new_customer_payload`, `invalid_store_customer_payload`, `no_planned_items`, `no_valid_ai_planned_items`, `duplicate_customer_email` (a generated new customer's email already belongs to another person), `checkout_rejected` (server-side checkout refused the order, for example a customer without a person record), `unhandled_error`, and `processing-exception` for errors in the queue trigger.
 
 Unhandled queue exceptions are rethrown so the Functions runtime retries them and eventually moves them to the poison queue.
 

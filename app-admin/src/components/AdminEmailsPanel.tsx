@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
 import { toast } from "sonner";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 interface EmailAddress {
   EmailAddressID: number;
@@ -151,6 +153,8 @@ export const AdminEmailsPanel: React.FC<AdminEmailsPanelProps> = ({
     onError: () => toast.error("Failed to remove email address"),
   });
 
+  // Customer contact data is writable only by customers.write roles.
+  const canWrite = useCan(Scopes.CustomersWrite);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -244,6 +248,7 @@ export const AdminEmailsPanel: React.FC<AdminEmailsPanelProps> = ({
             <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={() => startEdit(email)}
+                disabled={!canWrite}
                 className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
                 title="Edit email"
               >
@@ -254,7 +259,7 @@ export const AdminEmailsPanel: React.FC<AdminEmailsPanelProps> = ({
                   if (!confirm("Remove this email address?")) return;
                   deleteMutation.mutate(email.EmailAddressID);
                 }}
-                disabled={deleteMutation.isPending}
+                disabled={!canWrite || deleteMutation.isPending}
                 className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
                 title="Delete email"
               >
@@ -309,6 +314,7 @@ export const AdminEmailsPanel: React.FC<AdminEmailsPanelProps> = ({
       ) : (
         <button
           onClick={() => setShowAdd(true)}
+          disabled={!canWrite}
           className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 mt-1"
         >
           <Plus className="w-4 h-4" />

@@ -73,7 +73,9 @@ public class HelpMeChoosePublicContractTests
             ["AI_AGENT_HELP_ME_CHOOSE_ID"] = "agent"
         }).Build();
         var service = new HelpMeChooseService(NullLogger<HelpMeChooseService>.Instance, config, null!, client);
-        var handler = new HelpMeChooseFunctions(NullLogger<HelpMeChooseFunctions>.Instance, service, client);
+        var limiter = new AiRateLimitService(new AllowAllStore(), new AiRateLimitOptions(), TimeProvider.System,
+            NullLogger<AiRateLimitService>.Instance);
+        var handler = new HelpMeChooseFunctions(NullLogger<HelpMeChooseFunctions>.Instance, service, client, limiter);
         using var context = new Context(traceParent);
         using var outer = new Activity("unrelated").SetIdFormat(ActivityIdFormat.W3C).Start();
 
@@ -162,6 +164,12 @@ public class HelpMeChoosePublicContractTests
         public override HttpHeadersCollection Headers { get; set; } = new();
         public override Stream Body { get; set; } = new MemoryStream();
         public override HttpCookies Cookies => throw new NotSupportedException();
+    }
+
+    private sealed class AllowAllStore : IAiRateLimitCounterStore
+    {
+        public Task<long> IncrementAsync(string partitionKey, string rowKey, int limit, DateTimeOffset expiresAt, CancellationToken cancellationToken) =>
+            Task.FromResult(1L);
     }
 
     private sealed class Channel : ITelemetryChannel

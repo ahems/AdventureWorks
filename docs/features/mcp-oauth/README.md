@@ -199,13 +199,18 @@ e-shop uses the first-party e-shop credentials grant (see
 `adventureworks-agents` is used only for the managed-identity grant. Redirect URIs are
 wired from the deployed app URLs at deploy time (`scripts/hooks/postdeploy.sh`) — never hard-coded.
 
-| Client ID | App | Redirect URI (prod) | Local dev redirect |
+| Client ID | App | Redirect URI (prod) | Loopback redirect |
 | --------- | --- | ------------------- | ------------------ |
 | `adventureworks-eshop` | E-shop | `<APP_URL>/oauth/callback` | `http://localhost:5173/oauth/callback` |
 | `adventureworks-admin` | Admin | `<APP_ADMIN_URL>/oauth/callback` | `http://localhost:5174/oauth/callback` |
 | `adventureworks-manufacturing` | Manufacturing | `<APP_MANUFACTURING_URL>/oauth/callback` | `http://localhost:5175/oauth/callback` |
 | `adventureworks-inspector` | Hosted internal Inspector gateway | `<MCP_INSPECTOR_URL>/oauth/callback` | None |
 | `mcp-inspector` | Separately run third-party Inspector | Configured exact Inspector callbacks | `http://localhost:6274/oauth/callback` |
+
+The storefront has no `/oauth/callback` page: it signs in with the custom
+`eshop-credentials` grant, so its registered redirect URIs are never used. The
+loopback redirects are registered by the server but no app is run locally; all
+apps are deployed and tested in Azure.
 
 The hosted Inspector admits employee/manufacturing users only. Its OAuth gateway
 holds separate MCP/DAB resource tokens server-side and exposes only the two exact
@@ -382,10 +387,12 @@ e-shop credentials grant (see [Token acquisition](#token-acquisition)).
 | Authorization code | 5 minutes, single use |
 | Refresh token | 12 hours absolute (not sliding) |
 | Login cookie | 30 minutes |
-| `/token` rate limit | 20 requests per minute per IP, all grants |
+| `/token` rate limit | 20 per minute per IP for the e-shop credentials grant; 300 per minute per IP for code, refresh and managed-identity grants |
 | `/login` rate limit | 10 requests per minute per IP |
 
-The OpenIddict store and the one-time code cache are in memory in each replica.
+The OpenIddict store, the one-time code cache and the rate limiters are in memory, so
+`api-mcp` runs as a single replica (0–1). Access and refresh tokens are self-contained,
+so a scale-to-zero restart only interrupts a sign-in that is still in progress.
 
 ## JWT access-token validation
 

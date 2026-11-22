@@ -8,7 +8,9 @@
 #   ./scripts/utilities/batch-translate-language-file.sh [--missing-only] [-y|--yes]
 #   --missing-only: Only translate files that don't exist yet (skip existing translations)
 #   -y, --yes: Skip the "Continue? (y/n)" prompt
-# This script uses the deployed Azure Function URL and storage account from azd env.
+# This script uses the deployed Azure Function URL and storage account from azd env and
+# authenticates as the seeded admin identity through scripts/utilities/azure-auth.py
+# (Functions audience, admin.write). Each job obtains its own short-lived token.
 #
 # Why audit-locale-gaps.sh can still show gaps after running this script:
 #   1. --missing-only: If you use this flag, the script SKIPS any locale that already has
@@ -17,7 +19,7 @@
 #      initial seeding of brand-new locale files, not after adding keys to en.
 #   2. Failed jobs: If a translation times out or fails (e.g. common.json → tr, vi),
 #      that locale file is not updated. The old file (possibly missing keys) remains.
-#      Re-run with a retry script for failed locales, or run fill-locale-missing-keys.sh
+#      Re-run this script for failed locales, or run fill-locale-missing-keys.sh
 #      to copy missing keys from en (English fallback).
 # Recommended workflow after adding new keys to en:
 #   ./scripts/utilities/fill-locale-missing-keys.sh   # add missing keys from en (English)
@@ -58,7 +60,7 @@ fi
 LOCALES_DIR="$PWD/app/src/locales"
 SOURCE_DIR="$LOCALES_DIR/en"
 BLOB_CONTAINER="locales"
-STORAGE_ACCOUNT_NAME=$(azd env get-values 2>/dev/null | grep "^STORAGE_ACCOUNT_NAME=" | cut -d'=' -f2 | tr -d '"' | tr -d '\r' || true)
+STORAGE_ACCOUNT_NAME=$(azd env get-value STORAGE_ACCOUNT_NAME --no-prompt 2>/dev/null || true)
 
 # All supported languages (excluding source English)
 LANGUAGES=(
@@ -100,13 +102,15 @@ fi
 
 # Get the Azure Function URL from azd environment
 echo "Retrieving Azure Function URL from azd environment..."
-FUNCTION_APP_URL=$(azd env get-values | grep "^VITE_API_FUNCTIONS_URL=" | cut -d'=' -f2 | tr -d '"' | tr -d '\r')
+FUNCTION_APP_URL=$(azd env get-value API_FUNCTIONS_URL --no-prompt 2>/dev/null || true)
+FUNCTION_APP_URL="${FUNCTION_APP_URL%/}"
 
 if [ -z "$FUNCTION_APP_URL" ]; then
-  echo "Error: Could not find VITE_API_FUNCTIONS_URL in azd environment."
+  echo "Error: Could not find API_FUNCTIONS_URL in azd environment."
   echo "Make sure you have deployed the function app with 'azd deploy api-functions'"
   exit 1
 fi
+AUTH_HELPER="$PWD/scripts/utilities/azure-auth.py"
 
 FUNCTION_URL="${FUNCTION_APP_URL}/api/TranslateLanguageFile_HttpStart"
 
@@ -196,7 +200,7 @@ touch "$FAILED_ITEMS_FILE"
 
 echo ""
 echo "If you cancel (Ctrl+C), the current job will keep running in Azure."
-echo "To stop it: curl -X POST \"${FUNCTION_APP_URL}/api/TranslateLanguageFile_Terminate?instanceId=\$(cat $CURRENT_INSTANCE_FILE 2>/dev/null)\""
+echo "To stop it: python3 scripts/utilities/azure-auth.py request --identity admin --resource functions --method POST --path \"/api/TranslateLanguageFile_Terminate?instanceId=\$(cat $CURRENT_INSTANCE_FILE 2>/dev/null)\""
 echo ""
 echo "Starting translations (parallel processing)..."
 echo "========================================="
@@ -217,6 +221,14 @@ translate_job() {
   local FILE_NAME_WITHOUT_EXT="${FILE_NAME%.json}"
   
   echo "[$FILE_NAME → $lang_name] Starting translation..."
+
+  local TOKEN
+  if ! TOKEN=$(python3 "$AUTH_HELPER" token --identity admin --resource functions); then
+    echo "[$FILE_NAME → $lang_name] ✗ Failed: could not obtain a Functions token"
+    echo "$FILE_NAME → $lang_code: auth failed" >> "$FAILED_ITEMS_FILE"
+    echo $(($(cat "$FAILED_FILE") + 1)) > "$FAILED_FILE"
+    return 1
+  fi
   
   # Create request payload with sourceFilename
   REQUEST_PAYLOAD=$(jq -n \
@@ -232,8 +244,9 @@ translate_job() {
   while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # Make the API request to start orchestration
     TEMP_FILE="$TEMP_DIR/translation_${lang_code}_${FILE_NAME}_$$"
-    HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$TEMP_FILE" \
+    HTTP_STATUS=$(printf 'Authorization: Bearer %s\n' "$TOKEN" | curl -s -w "%{http_code}" -o "$TEMP_FILE" \
       -X POST "$FUNCTION_URL" \
+      --header @- \
       -H "Content-Type: application/json" \
       -d "$REQUEST_PAYLOAD")
     
@@ -259,7 +272,7 @@ translate_job() {
         sleep 5
         POLL_ATTEMPT=$((POLL_ATTEMPT + 1))
         
-        STATUS_RESPONSE=$(curl -s "$STATUS_URL")
+        STATUS_RESPONSE=$(printf 'Authorization: Bearer %s\n' "$TOKEN" | curl -s --header @- "$STATUS_URL")
         RUNTIME_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.runtimeStatus' 2>/dev/null)
         
         if [ "$RUNTIME_STATUS" = "Completed" ]; then
@@ -342,7 +355,7 @@ translate_job() {
 
 # Export function and variables for use in subshells
 export -f translate_job
-export FUNCTION_URL LOCALES_DIR TEMP_DIR SUCCESS_FILE FAILED_FILE FAILED_ITEMS_FILE
+export FUNCTION_URL AUTH_HELPER LOCALES_DIR TEMP_DIR SUCCESS_FILE FAILED_FILE FAILED_ITEMS_FILE
 export MAX_RETRIES BASE_DELAY STORAGE_ACCOUNT_NAME BLOB_CONTAINER
 
 # Process each source file

@@ -4,15 +4,18 @@ WORKDIR /config
 
 RUN dotnet new tool-manifest
 
-RUN dotnet tool install Microsoft.DataApiBuilder
+# Keep the CLI and runtime image on the same Data API builder release.
+ARG DAB_VERSION=2.1.7
+
+RUN dotnet tool install Microsoft.DataApiBuilder --version ${DAB_VERSION}
 
 # Cache-bust: update this string when dab-config.json changes to force layer rebuild
-RUN echo "dab-config-v9-2026-05-19-fix-jobcandidate" > /dev/null
+RUN echo "dab-config-v10-2026-11-22-production-review-votes" > /dev/null
 
 # Copy the pre-configured dab-config.json file
 COPY dab-config.json .
 
-FROM mcr.microsoft.com/azure-databases/data-api-builder
+FROM mcr.microsoft.com/azure-databases/data-api-builder:2.1.7
 
 COPY --from=build /config /App
 
@@ -23,16 +26,17 @@ RUN chmod +x /entrypoint.sh
 # Optional tuning via env vars
 # MI_RESOURCE: resource URL for token acquisition (default: https://database.windows.net)
 # MI_INITIAL_DELAY_SECONDS, MI_PERIOD_SECONDS, MI_FAILURE_THRESHOLD to control MI wait behavior
-# DB_INITIAL_DELAY_SECONDS: Initial delay before first DAB start
-# DB_PERIOD_SECONDS: Delay before each DAB start attempt (used on Container Apps restarts)
-# DB_FAILURE_THRESHOLD: Max retries (used for reference, actual retries handled by Container Apps restart policy)
+# DB_INITIAL_DELAY_SECONDS: Initial delay before the first DAB start
+# DB_RETRY_INITIAL_SECONDS / DB_RETRY_MAX_SECONDS: exponential backoff between DAB start attempts
+# DB_START_DEADLINE_SECONDS: stop retrying and exit non-zero after this long (keep below the startup probe window)
 ENV MI_RESOURCE="https://database.windows.net" \
 	MI_INITIAL_DELAY_SECONDS="0" \
 	MI_PERIOD_SECONDS="1" \
 	MI_FAILURE_THRESHOLD="60" \
 	DB_INITIAL_DELAY_SECONDS="0" \
-	DB_PERIOD_SECONDS="30" \
-	DB_FAILURE_THRESHOLD="50" \
+	DB_RETRY_INITIAL_SECONDS="5" \
+	DB_RETRY_MAX_SECONDS="40" \
+	DB_START_DEADLINE_SECONDS="150" \
 	ASPNETCORE_URLS="http://+:80"
 
 ENTRYPOINT ["/entrypoint.sh"]

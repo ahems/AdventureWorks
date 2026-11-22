@@ -19,6 +19,7 @@ SPEC.loader.exec_module(suite)
 class MutationTests(unittest.TestCase):
     def run_suite(self, defect=None):
         accounts, addresses, links, reviews, customers, calls = {}, {}, {}, {}, {}, []
+        votes = {}
         catalog = {
             "ProductCategory": [{"ProductCategoryID": 1, "Name": "Existing category"}],
             "ProductSubcategory": [{"ProductSubcategoryID": 1, "ProductCategoryID": 1, "Name": "Existing subcategory"}],
@@ -163,13 +164,16 @@ class MutationTests(unittest.TestCase):
                 if defect == "catalog-malformed-control" and marker and not marker.startswith("Auth-"):
                     body["value"] = [{"Name": 123}]
                 return 200, {}, json.dumps(body).encode()
-            host_probe = (path in {"/api/password", "/api/password/verify"} or
+            vote_route = path.startswith("/api/reviews/") and path.endswith("/vote")
+            host_probe = (path in {"/api/password", "/api/password/verify"} or vote_route or
                           path == "/api/addresses" and method == "POST" or
                           path.startswith("/api/addresses/") and method in {"PUT", "DELETE"}) and (
                               token is None or token == "invalid-auth-validation-token" or
                               str(token).startswith("dab:"))
             if host_probe:
                 error = "missing_token" if token is None else "invalid_token"
+                if defect == "host-vote-denied-but-written" and vote_route:
+                    reviews[int(path.split("/")[3])]["HelpfulVotes"] += 1
                 if defect == "host-password-denied-but-written" and path == "/api/password":
                     accounts[data["businessEntityID"]]["password"] = data["password"]
                 if defect == "host-address-denied-but-written" and method == "PUT" and not path.endswith("/type"):
@@ -367,6 +371,13 @@ class MutationTests(unittest.TestCase):
                 if "DeniedVote" in data["query"]:
                     if defect == "vote-denied-but-written":
                         reviews[review]["HelpfulVotes"] = variables["votes"]
+                    if token is not None and str(token).startswith("dab:"):
+                        if defect == "dab-vote-write-accepted":
+                            reviews[review]["HelpfulVotes"] = variables["votes"]
+                            return 200, {}, json.dumps({"data": {"updateProductReview": {
+                                "ProductReviewID": review, "HelpfulVotes": variables["votes"]}}}).encode()
+                        return 200, {}, json.dumps({"errors": [{
+                            "message": "The current user is not authorized to access this resource."}]}).encode()
                     if token is not None:
                         if defect == "vote-wrong-audience-accepted" and token != "invalid-auth-validation-token":
                             return 200, {}, b'{"data":{"updateProductReview":null}}'
@@ -386,18 +397,28 @@ class MutationTests(unittest.TestCase):
                     if defect == "graphql-review-denied-but-written":
                         reviews[review].update(variables["item"])
                     message = ("Unknown type" if defect == "graphql-invalid-query" else
-                               "Unauthorized due to one or more fields in this mutation.")
+                               "The current user is not authorized to access this resource.")
                     body = {"errors": [{"message": message}]}
                 else:
-                    if defect != "vote-write-not-persisted":
-                        reviews[review]["HelpfulVotes"] = variables["votes"]
-                    result = {"ProductReviewID": review, "HelpfulVotes": variables["votes"]}
-                    if defect == "graphql-vote-error":
-                        body = {"errors": [{"message": "failed"}], "data": {"updateProductReview": result}}
-                    elif defect == "graphql-vote-wrong-result":
-                        body = {"data": {"updateProductReview": {**result, "ProductReviewID": review + 1}}}
-                    else:
-                        body = {"data": {"updateProductReview": result}}
+                    self.fail("Unexpected GraphQL review update")
+            elif vote_route and method == "POST":
+                review = int(path.split("/")[3])
+                if reviews[review]["UserID"] == owner:
+                    status, body = 403, {"error": "You cannot vote for your own review.", "reason": "own-review"}
+                else:
+                    voters = votes.setdefault(review, set())
+                    changed = owner not in voters
+                    voters.add(owner)
+                    if changed and defect != "vote-write-not-persisted":
+                        reviews[review]["HelpfulVotes"] += 1
+                    if defect == "vote-repeat-counted" and not changed:
+                        reviews[review]["HelpfulVotes"] += 1
+                    count = reviews[review]["HelpfulVotes"]
+                    body = {"productReviewId": review + (1 if defect == "vote-wrong-result" else 0),
+                            "helpfulVotes": len(voters) if defect == "vote-write-not-persisted" else count,
+                            "voted": True, "changed": changed}
+                    if defect == "vote-error":
+                        status = 500
             elif path.startswith("/api/ProductReview/ProductReviewID/"):
                 review = int(path.rsplit("/", 1)[1])
                 if method == "GET":
@@ -405,10 +426,6 @@ class MutationTests(unittest.TestCase):
                             item["id"] == "mutation:review-vote-denied-A-anonymous" for item in report.checks):
                         return 503, {}, b'{"error":"unavailable"}'
                     body = {"value": [public_review(reviews[review])] if review in reviews else []}
-                elif method == "PATCH" and set(data) == {"HelpfulVotes"}:
-                    if defect != "vote-write-not-persisted":
-                        reviews[review].update(data)
-                    body = {"value": [public_review(reviews[review])]}
                 else:
                     if defect == "review-denied-but-written" and method == "PATCH":
                         reviews[review].update(data)
@@ -777,9 +794,11 @@ class MutationTests(unittest.TestCase):
         report, *_ = self.run_suite()
         checks = {item["id"]: item for item in report.checks}
         for owner in ["A", "B"]:
-            for credential in ["anonymous", "forged", "functions-audience"]:
+            for credential in ["anonymous", "forged", "functions-audience", "consumer"]:
                 for suffix in ["-baseline", "", "-unchanged"]:
                     self.assertEqual(checks[f"mutation:review-vote-denied-{owner}-{credential}{suffix}"]["status"], "PASS")
+            for credential in ["anonymous", "forged", "dab-audience"]:
+                self.assertEqual(checks[f"mutation:host-denial-review-vote-{owner}-{credential}"]["status"], "PASS")
             self.assertEqual(checks[f"mutation:review-vote-persisted-{owner}"]["status"], "PASS")
 
     def test_vote_denial_failure_survives_failed_followup_read(self):
@@ -921,7 +940,8 @@ class MutationTests(unittest.TestCase):
                        "old-login-allowed", "address-denied-but-written", "address-write-not-persisted",
                        "wrong-address-link", "review-denied-but-written", "graphql-review-denied-but-written",
                        "graphql-delete-denied-but-written", "graphql-invalid-query", "graphql-delete-invalid-query",
-                       "graphql-vote-error", "graphql-vote-wrong-result", "vote-write-not-persisted",
+                       "vote-error", "vote-wrong-result", "vote-write-not-persisted", "vote-repeat-counted",
+                       "host-vote-denied-but-written", "dab-vote-write-accepted",
                        "host-password-denied-but-written", "host-address-denied-but-written",
                        "host-address-link-denied-but-written", "host-invalid-challenge", "host-false-denial",
                        "host-invalid-dab-control", "review-create-denied-but-written", "review-create-false-denial",

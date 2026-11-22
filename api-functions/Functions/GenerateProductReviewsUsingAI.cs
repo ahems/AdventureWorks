@@ -1,7 +1,5 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.ApplicationInsights;
@@ -30,8 +28,7 @@ public class GenerateProductReviewsUsingAI
 
     [Function(nameof(GenerateProductReviewsUsingAI_HttpStart))]
     public async Task<HttpResponseData> GenerateProductReviewsUsingAI_HttpStart(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
-        [DurableClient] DurableTaskClient client)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req)
     {
         _logger.LogInformation("Review generation request: enqueuing review jobs onto ai-job-chat-queue");
 

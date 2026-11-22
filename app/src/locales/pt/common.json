@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "Utiliza embeddings de IA para compreender consultas em linguagem natural. Experimente: \"bicicletas vermelhas\", \"equipamento impermeável para caminhadas na chuva\" ou \"equipamento leve para ciclistas\"",
     "matchCounts": "Foram encontradas {{descriptionMatches}} correspondências na descrição, {{reviewMatches}} correspondências em avaliações e {{nameMatches}} correspondências no nome",
     "semanticUnavailable": "Serviço de pesquisa semântica indisponível. Por favor, verifique se o serviço de IA está em funcionamento e se os embeddings estão indexados.",
+    "aiRateLimited": "A pesquisa com IA está ocupada no momento. Tente novamente em {{minutes}} min.",
     "noMatchingProducts": "Nenhum produto correspondente encontrado",
     "enterSearchQuery": "Digite uma consulta de pesquisa para encontrar produtos",
     "noResultsForQuery": "A nossa pesquisa com IA não encontrou produtos que correspondam a \"{{query}}\". Experimente palavras-chave ou frases diferentes.",
@@ -267,7 +268,11 @@
       "lastName": "Doar",
       "email": "john@example.pt",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Somente números de cartão de teste públicos (por exemplo, 4242 4242 4242 4242) podem ser salvos. Apenas o tipo do cartão, os quatro últimos dígitos e a validade são armazenados.",
+    "errorSavePayment": "Não foi possível salvar a forma de pagamento. Tente novamente.",
+    "addCard": "Adicionar cartão",
+    "invalidTestCard": "Este cartão não pode ser salvo. Use um número de cartão de teste público válido e dentro da validade."
   },
   "checkout": {
     "backToCart": "Voltar ao Carrinho",

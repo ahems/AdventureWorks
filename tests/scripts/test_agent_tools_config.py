@@ -17,13 +17,12 @@ FINGERPRINT_SPEC.loader.exec_module(agent_fingerprint)
 
 
 class AgentToolConfigurationTests(unittest.TestCase):
-    def build(self, mcp_tools="[]", include_dab=False, dab_tools="[]", connection_id=""):
+    def build(self, mcp_tools="[]", include_dab=False, dab_tools="[]"):
         return agent_tools.build_tools(
             "https://mcp.example.test/mcp",
             "https://dab.example.test/mcp",
             mcp_tools,
             include_dab,
-            connection_id,
             dab_tools,
         )
 
@@ -43,13 +42,13 @@ class AgentToolConfigurationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "explicit non-empty"):
             self.build(include_dab=True)
         self.assertEqual(
-            self.build(include_dab=True, dab_tools='["read_record"]', connection_id="dab-connection"),
+            self.build(include_dab=True, dab_tools='["read_record"]'),
             [{
                 "type": "mcp",
                 "server_label": "dabmcp",
+                "server_url": "https://dab.example.test/mcp",
                 "require_approval": "never",
                 "allowed_tools": ["read_record"],
-                "project_connection_id": "dab-connection",
             }],
         )
 
@@ -62,10 +61,10 @@ class AgentToolConfigurationTests(unittest.TestCase):
 
     def test_server_urls_must_be_https_when_server_is_enabled(self):
         with self.assertRaisesRegex(ValueError, "absolute HTTPS"):
-            agent_tools.build_tools("http://mcp.example.test", "", '["search"]', False, "", "[]")
+            agent_tools.build_tools("http://mcp.example.test", "", '["search"]', False, "[]")
         with self.assertRaisesRegex(ValueError, "absolute HTTPS"):
             agent_tools.build_tools("", "https://user:secret@dab.example.test", "[]",
-                                    True, "", '["read_record"]')
+                                    True, '["read_record"]')
 
     def test_agent_config_fingerprint_is_stable_and_tracks_source_changes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -95,6 +94,8 @@ class AgentToolConfigurationTests(unittest.TestCase):
             root = Path(directory)
             (root / "app").mkdir()
             (root / "app/staticwebapp.config.template.json").write_text('{"api":"{{API_FUNCTIONS_URL}}"}')
+            (root / "app/public").mkdir()
+            (root / "app/robots.template.txt").write_text("User-agent: *\nSitemap: {{APP_URL}}/sitemap.xml\n")
             azd = root / "azd"
             azd.write_text("""#!/bin/sh
 if [ "$1" != env ] || [ "$2" != get-value ] || [ "$4" != --environment ] ||
@@ -105,6 +106,7 @@ case "$3" in
   API_FUNCTIONS_URL) echo https://functions.example.test ;;
   API_MCP_URL) echo https://mcp.example.test/mcp ;;
   APPINSIGHTS_CONNECTIONSTRING) echo local-test-connection ;;
+  APP_URL) echo https://shop.example.test/ ;;
   *) exit 1 ;;
 esac
 """)
@@ -118,6 +120,8 @@ esac
             self.assertIn("VITE_API_FUNCTIONS_URL=https://functions.example.test", generated)
             self.assertIn("VITE_API_MCP_URL=https://mcp.example.test/mcp", generated)
             self.assertIn("VITE_APPINSIGHTS_CONNECTIONSTRING=local-test-connection", generated)
+            self.assertIn("Sitemap: https://shop.example.test/sitemap.xml",
+                          (root / "app/public/robots.txt").read_text())
             self.assertEqual((root / "app/staticwebapp.config.json").read_text(),
                              '{"api":"https://functions.example.test"}')
             environment["MISSING_KEY"] = "API_MCP_URL"
@@ -221,7 +225,6 @@ print("500" if failed else "200" if post else os.environ.get("TEST_GET_STATUS", 
             "PATH": str(binaries) + os.pathsep + os.environ["PATH"],
             "TMPDIR": str(temporary),
             "TEST_EVIDENCE": str(evidence),
-            "FOUNDRY_CONNECTIONS_READY": "1",
         }, temporary, evidence
 
     def test_concurrent_agent_provisioners_isolate_responses_and_cleanup(self):
@@ -250,7 +253,7 @@ print("500" if failed else "200" if post else os.environ.get("TEST_GET_STATUS", 
                                 (evidence / "beta.ready").read_text())
             self.assertEqual(list(temporary.iterdir()), [])
 
-    def test_agent_provisioners_cleanup_after_failure_and_workflow_runs(self):
+    def test_agent_provisioners_cleanup_after_failure_and_successful_runs(self):
         with tempfile.TemporaryDirectory() as directory:
             environment, temporary, _ = self.provisioner_environment(Path(directory))
             environment["TEST_MARKER"] = "mock-id"
@@ -267,23 +270,31 @@ print("500" if failed else "200" if post else os.environ.get("TEST_GET_STATUS", 
             self.assertEqual(interrupted.returncode, 143)
             self.assertEqual(list(temporary.iterdir()), [])
 
-            for name, get_status in (("eshop-workflow-agent.sh", "200"),
-                                     ("admin-promotion-workflow-agent.sh", "404"),
-                                     ("admin-order-workflow-agent.sh", "200")):
-                with self.subTest(script=name):
-                    result = subprocess.run(["bash", str(scripts / name)], cwd=ROOT,
+            for get_status in ("200", "404"):
+                with self.subTest(get_status=get_status):
+                    result = subprocess.run(["bash", str(scripts / "admin-chat-agent.sh")], cwd=ROOT,
                                             env={**environment, "TEST_GET_STATUS": get_status},
                                             capture_output=True, text=True, check=False)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(list(temporary.iterdir()), [])
 
             result = subprocess.run(
-                ["bash", "-c", 'source "$1"; setup_shared_connections; upsert_memory_store demo description schema',
+                ["bash", "-c", 'source "$1"; upsert_memory_store demo description schema',
                  "test", str(scripts / "lib/common.sh")], cwd=ROOT,
                 env={**environment, "TEST_GET_STATUS": "404"}, capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("mock-id", result.stdout)
             self.assertEqual(list(temporary.iterdir()), [])
+
+    def test_functions_settings_apply_once_per_deploy_without_recreating_agents(self):
+        manifest = (ROOT / "azure.yaml").read_text()
+        self.assertNotIn("api-functions-postdeploy.sh", manifest)
+        self.assertNotIn("api-postdeploy.sh", manifest)
+        root_hook = (ROOT / "scripts/hooks/postdeploy.sh").read_text()
+        self.assertEqual(root_hook.count("bash scripts/hooks/api-functions-postdeploy.sh"), 1)
+        functions_hook = (ROOT / "scripts/hooks/api-functions-postdeploy.sh").read_text()
+        self.assertNotIn("scripts/utilities/agents", functions_hook)
+        self.assertNotIn("utilities/agents/", functions_hook)
 
     def test_functions_postdeploy_pins_environment_and_subscription(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,6 +1,6 @@
 ---
 title: Foundry agents
-summary: The 21 Microsoft Foundry agents AdventureWorks creates (15 prompt agents, 3 workflow agents and 3 intent agents) plus the hosted manufacturing agent, how deployment hooks create them, which code calls each one, memory stores and chat guardrails.
+summary: The 15 Microsoft Foundry prompt agents AdventureWorks creates plus the hosted manufacturing agent, how deployment hooks create them, which code calls each one, memory stores and chat guardrails.
 audience: [developer, operator]
 components: [ai-foundry, api-functions, api-mcp, scripts, infra]
 related:
@@ -14,10 +14,7 @@ related:
 
 ## What it does
 
-AdventureWorks keeps its AI instructions and tool lists in Microsoft Foundry agent definitions rather than in application code. The deployment hooks create **21 agents** in the Foundry project:
-
-- **15 prompt agents** called by Azure Functions for chat, order generation, content, reviews, translation and manufacturing content.
-- **3 workflow agents** and **3 intent agents** that show declarative Foundry workflows. They are deployed for exploration in the Foundry portal and are not called by the app.
+AdventureWorks keeps its AI instructions and tool lists in Microsoft Foundry agent definitions rather than in application code. The deployment hooks create **15 prompt agents** in the Foundry project. Azure Functions calls them for chat, order generation, content, reviews, translation and manufacturing content.
 
 The **hosted manufacturing agent** is a separate code-based agent deployed as an azd service; see [manufacturing agent](../manufacturing/manufacturing-agent.md).
 
@@ -40,8 +37,8 @@ azd env get-value AI_AGENT_ORDER_ID --no-prompt
 flowchart LR
     PP["postprovision.sh"] --> C["create-foundry-agents.sh"]
     PD["postdeploy.sh<br/>(only when scripts change)"] --> C
-    C --> S["scripts/utilities/agents/*.sh<br/>18 scripts"]
-    S -->|"upsert prompt / workflow agents<br/>+ memory stores"| F[("Foundry project")]
+    C --> S["scripts/utilities/agents/*.sh<br/>15 scripts"]
+    S -->|"upsert prompt agents<br/>+ memory stores"| F[("Foundry project")]
     C --> ENV["azd env: AI_AGENT_*_ID"]
     AFP["api-functions postdeploy hook"] -->|"AI_AGENT_* app settings"| FN["Azure Functions"]
     FN -->|"Responses API<br/>+ MCP bearer token"| F
@@ -50,7 +47,7 @@ flowchart LR
 
 ### Creation
 
-- `postprovision.sh` runs `scripts/utilities/create-foundry-agents.sh` after RBAC propagates. It runs all 18 scripts in `scripts/utilities/agents/` and stores a hash of the scripts as `FOUNDRY_AGENT_CONFIG_HASH`.
+- `postprovision.sh` runs `scripts/utilities/create-foundry-agents.sh` after RBAC propagates. It runs all 15 agent scripts in `scripts/utilities/agents/` and stores a hash of the scripts as `FOUNDRY_AGENT_CONFIG_HASH`.
 - `postdeploy.sh` re-runs creation only when the hash changes.
 - The `api-functions` postdeploy hook re-upserts the Help-Me-Choose agent and copies the `AI_AGENT_*` IDs, `MCP_SERVICE_URL`, `MANUFACTURING_AGENT_ENDPOINT` and `API_FUNCTIONS_URL` into Function app settings.
 
@@ -87,14 +84,6 @@ To change an agent, edit its script and run `azd deploy --no-prompt`; the hooks 
 | `admin-email-content-agent` | prompt | `AI_AGENT_EMAIL_CONTENT_ID` | Marketing email content | none | yes | `email/generate-ai-content` |
 | `admin-catalog-suggestion-agent` | prompt | `AI_AGENT_CATALOG_SUGGESTION_ID` | New category suggestions | none | yes | `GenerateCategoryWithAI` |
 | `eshop-help-me-choose-agent` | prompt | `AI_AGENT_HELP_ME_CHOOSE_ID` | Anonymous product wizard | 4 catalog tools | no | `/api/helpme/*` (catalog-only service token) |
-| `eshop-workflow-agent` | workflow | `AI_AGENT_WORKFLOW_CHAT_ID` | Routes chat to help-me-choose or support | — | — | Not called by the app |
-| `admin-promotion-workflow-agent` | workflow | `AI_AGENT_WORKFLOW_PROMOTION_ID` | Guided promotion creation | — | — | Not called by the app |
-| `admin-order-workflow-agent` | workflow | `AI_AGENT_WORKFLOW_ORDER_ID` | Guided order generation | — | — | Not called by the app |
-| `eshop-intent-agent` | intent | — | Classifier inside the chat workflow | none | no | Workflow only |
-| `admin-order-intent-agent` | intent | — | Classifier inside the order workflow | none | no | Workflow only |
-| `admin-promotion-intent-agent` | intent | — | Classifier inside the promotion workflow | none | no | Workflow only |
-
-Workflow definitions are in `workflows/*.yaml`.
 
 ### Memory stores
 
@@ -103,10 +92,6 @@ Workflow definitions are in `workflows/*.yaml`.
 ### Guardrails
 
 `infra/modules/eshop-chat-guardrails.bicep` defines the RAI policy `AdventureWorks-Eshop` (blocking): hate, sexual, violence and self-harm filters at medium, jailbreak detection, protected-material text blocking and a custom blocklist that rejects code output. Functions applies it to customer chat requests by policy ID. See [AI chat](ai-chat.md).
-
-### Other project resources
-
-The hooks also create a Foundry connection `adventureworks-dab-mcp` to the DAB MCP endpoint. No agent currently uses it.
 
 ## Data & storage
 
@@ -131,17 +116,14 @@ None directly. Features that call agents publish their own events.
 | `FOUNDRY_AGENT_CONFIG_HASH` | Detects script changes |
 | `MCP_SERVICE_URL` | MCP server used by agent tools |
 
-`AI_AGENT_MANUFACTURING_ID` and `AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID` appear in some settings files but are not used.
-
 ## Limits
 
-- The workflow and intent agents are for portal exploration only.
 - Agent creation needs model capacity in `FOUNDRY_LOCATION`; preup selects available models.
 
 ## Related code & docs
 
 - `scripts/utilities/create-foundry-agents.sh`, `scripts/utilities/agents/`
-- `scripts/hooks/postprovision.sh`, `scripts/hooks/postdeploy.sh`, `scripts/hooks/api-functions-postdeploy.sh`
+- `scripts/hooks/postprovision.sh`, `scripts/hooks/postdeploy.sh`, `scripts/hooks/api-functions-postdeploy.sh` (called by `postdeploy.sh`)
 - `api-functions/Services/FoundryAgentClient.cs`
-- `infra/modules/eshop-chat-guardrails.bicep`, `workflows/`
+- `infra/modules/eshop-chat-guardrails.bicep`
 - [AI architecture](../../architecture/ai-architecture.md) · [AI content generation](ai-content-generation.md)

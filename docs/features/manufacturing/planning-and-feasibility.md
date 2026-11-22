@@ -74,7 +74,7 @@ All routes are under `/api/plan/` and need `manufacturing.read`.
 | `shortage-forecast?days=` | `90` | Purchased components ranked by days until stockout, with affected products |
 | `reorder-recommendations?days=` | `60` | For each forecast stockout: a 30-day order quantity, the best vendor and all vendors by total cost |
 
-The shortage forecast's function name is `PlanShortageForeceast` (spelled that way in code); its route is `plan/shortage-forecast`. `feasibility` (all products) and `reorder-recommendations` initialize the supply chain simulation on first use so vendor stock is available.
+The shortage forecast's function name is `PlanShortageForeceast` (spelled that way in code); its route is `plan/shortage-forecast`. These reads are read-only; `SimulationMaintenance_Timer` initializes the supply chain simulation (on host start and every minute until done) so vendor stock is available.
 
 ### Signals
 
@@ -92,8 +92,8 @@ A component's daily consumption is the sum over finished goods of `dailySalesRat
 
 **Plan → Demand** (`/plan/demand`) is computed in the browser from DAB `SalesOrderHeader` and `SalesOrderDetail`:
 
-- **Open demand** uses orders with `Status lt 5`.
-- **Sales history** uses orders with `Status eq 5`, over 30-, 90- and 365-day windows that end at the most recent shipped order date (the seeded dataset is historical, so windows are anchored to the data rather than today).
+- **Open demand** uses orders with `Status ge 1 and Status le 3` (Pending, Approved, Backordered); Rejected and Cancelled orders are excluded.
+- **Sales history** uses fulfilled orders (`Status eq 5 or Status eq 7`, Shipped or Delivered), over 30-, 90- and 365-day windows that end at the most recent fulfilled order date (the seeded dataset is historical, so windows are anchored to the data rather than today).
 
 ### MCP tools
 

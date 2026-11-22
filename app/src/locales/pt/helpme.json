@@ -1,0 +1,52 @@
+{
+  "title": "Ajude-me a escolher",
+  "intro": {
+    "title": "Vamos encontrar o equipamento perfeito para você!",
+    "description": "Responda a 5 perguntas rápidas e nossa IA vai explorar o catálogo para encontrar produtos perfeitos para você.",
+    "cta": "Vamos começar",
+    "hint": "Com tecnologia de IA · Leva cerca de 1 minuto"
+  },
+  "loading": {
+    "questions": "Gerando perguntas personalizadas…",
+    "recommendations": "Pesquisando o catálogo e preparando suas recomendações…"
+  },
+  "progress": {
+    "question": "Pergunta {{current}} de {{total}}"
+  },
+  "nav": {
+    "back": "Voltar",
+    "next": "Próximo",
+    "findProducts": "Encontrar meus produtos"
+  },
+  "results": {
+    "title": "Suas escolhas personalizadas",
+    "viewProduct": "Ver produto",
+    "noResults": "Não encontramos correspondências exatas agora. Navegue pelas nossas categorias ou use a barra de pesquisa.",
+    "startAgain": "Começar de novo"
+  },
+  "profile": {
+    "title": "Um pouco sobre você",
+    "subtitle": "Ajuda-nos a encontrar produtos que realmente combinam com você.",
+    "gender": {
+      "label": "Gênero (opcional)",
+      "male": "Masculino",
+      "female": "Feminino",
+      "preferNotToSay": "Prefiro não informar"
+    },
+    "height": {
+      "label": "Sua altura",
+      "placeholder": "Selecione sua altura…"
+    },
+    "colors": {
+      "label": "Cores favoritas",
+      "hint": "Deixe em branco se não tiver preferência."
+    },
+    "continue": "Continuar"
+  },
+  "error": {
+    "loadQuestions": "Tivemos um problema ao gerar suas perguntas. Tente novamente.",
+    "loadRecommendations": "Tivemos um problema ao buscar recomendações. Tente novamente.",
+    "rateLimited": "Recebemos muitos pedidos de IA seus. Tente novamente em {{minutes}} min.",
+    "tryAgain": "Tentar novamente"
+  }
+}

@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "자연어 쿼리를 이해하기 위해 AI 임베딩을 사용합니다. 예시: \"빨간 자전거\", \"비 오는 등산용 방수 장비\", 또는 \"자전거 타는 사람을 위한 경량 장비\"",
     "matchCounts": "{{descriptionMatches}}개의 설명 일치, {{reviewMatches}}개의 리뷰 일치, {{nameMatches}}개의 이름 일치가 발견되었습니다",
     "semanticUnavailable": "시맨틱 검색 서비스를 사용할 수 없습니다. AI 서비스가 실행 중이며 임베딩이 인덱싱되었는지 확인해 주세요.",
+    "aiRateLimited": "AI 검색이 현재 혼잡합니다. {{minutes}}분 후에 다시 시도해 주세요.",
     "noMatchingProducts": "일치하는 제품이 없습니다",
     "enterSearchQuery": "제품을 찾으려면 검색어를 입력하세요",
     "noResultsForQuery": "저희 AI 기반 검색에서는 \"{{query}}\"와(과) 일치하는 제품을 찾지 못했습니다. 다른 키워드나 문구를 사용해 보세요.",
@@ -267,7 +268,11 @@
       "lastName": "도우",
       "email": "john@example.kr",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "공개 테스트 카드 번호(예: 4242 4242 4242 4242)만 저장할 수 있습니다. 카드 종류, 마지막 네 자리, 유효 기간만 저장됩니다.",
+    "errorSavePayment": "결제 수단을 저장하지 못했습니다. 다시 시도해 주세요.",
+    "addCard": "카드 추가",
+    "invalidTestCard": "이 카드는 저장할 수 없습니다. 유효 기간이 지나지 않은 올바른 공개 테스트 카드 번호를 사용하세요."
   },
   "checkout": {
     "backToCart": "장바구니로 돌아가기",

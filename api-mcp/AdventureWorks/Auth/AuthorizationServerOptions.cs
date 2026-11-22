@@ -56,6 +56,15 @@ public sealed class AuthorizationServerOptions
     /// </summary>
     public string? FunctionsResourceIdentifier { get; set; }
 
+    public const string DefaultResourceDocumentationUrl =
+        "https://github.com/3cloud-sandbox/AdventureWorks/blob/main/docs/features/mcp-oauth/README.md";
+
+    /// <summary>
+    /// Human-readable documentation advertised as <c>resource_documentation</c> in the
+    /// protected-resource metadata (RFC 9728). Override with <c>MCP_RESOURCE_DOCUMENTATION_URL</c>.
+    /// </summary>
+    public string ResourceDocumentationUrl { get; set; } = DefaultResourceDocumentationUrl;
+
     /// <summary>Access token lifetime. Short-lived per the demo design (~10 minutes).</summary>
     public TimeSpan AccessTokenLifetime { get; set; } = TimeSpan.FromMinutes(10);
 

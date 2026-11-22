@@ -1,4 +1,30 @@
 import { Helmet } from "react-helmet-async";
+import { LANGUAGES } from "@/context/LanguageContext";
+
+// Language is selected client-side (localStorage); `?lang=` lets crawlers and
+// shared links request a specific locale, so hreflang alternates use it.
+export function buildHreflangAlternates(
+  pageUrl: string,
+  languageCodes: string[] = LANGUAGES.map((l) => l.code)
+): Array<{ hrefLang: string; href: string }> {
+  let base: URL;
+  try {
+    base = new URL(pageUrl);
+  } catch {
+    return [];
+  }
+  base.hash = "";
+  const withLang = (code: string | null) => {
+    const u = new URL(base.toString());
+    if (code) u.searchParams.set("lang", code);
+    else u.searchParams.delete("lang");
+    return u.toString();
+  };
+  return [
+    ...languageCodes.map((code) => ({ hrefLang: code, href: withLang(code) })),
+    { hrefLang: "x-default", href: withLang(null) },
+  ];
+}
 
 interface SEOProps {
   title?: string;
@@ -19,12 +45,23 @@ export function SEO({
   type = "website",
   structuredData,
 }: SEOProps) {
+  const alternates = buildHreflangAlternates(url);
+  const canonical =
+    alternates.find((a) => a.hrefLang === "x-default")?.href ?? url;
   return (
     <Helmet>
       {/* Basic Meta Tags */}
       <title>{title}</title>
       <meta name="description" content={description} />
-      <link rel="canonical" href={url} />
+      <link rel="canonical" href={canonical} />
+      {alternates.map((a) => (
+        <link
+          key={a.hrefLang}
+          rel="alternate"
+          hrefLang={a.hrefLang}
+          href={a.href}
+        />
+      ))}
 
       {/* Open Graph */}
       <meta property="og:title" content={title} />
@@ -65,6 +102,8 @@ export function generateProductStructuredData(product: {
   description?: string;
   image?: string;
   price: number;
+  /** ISO 4217 code of `price` (already converted to the active currency). */
+  priceCurrency?: string;
   sku: string;
   availability: "InStock" | "OutOfStock";
 }) {
@@ -77,8 +116,10 @@ export function generateProductStructuredData(product: {
     sku: product.sku,
     offers: {
       "@type": "Offer",
-      price: product.price,
-      priceCurrency: "USD",
+      price: Number(product.price.toFixed(2)),
+      // The app's legacy Turkish lira code TRL is not current ISO 4217.
+      priceCurrency:
+        product.priceCurrency === "TRL" ? "TRY" : product.priceCurrency || "USD",
       availability: `https://schema.org/${product.availability}`,
     },
   };

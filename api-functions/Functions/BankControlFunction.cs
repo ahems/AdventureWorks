@@ -13,8 +13,8 @@ namespace api_functions.Functions;
 ///
 /// The bank maintains one virtual account per currency supported by the website.
 /// The USD account is seeded on first use with the total historical finished-goods
-/// profit of non-rejected, non-cancelled orders (an inline query using the same
-/// calculation as Sales.usp_GetTotalProfit). Foreign-currency accounts start at zero.
+/// profit of non-rejected, non-cancelled orders (an inline SQL query in BankService).
+/// Foreign-currency accounts start at zero.
 /// All balances are persisted in Azure Table Storage (awBankAccounts /
 /// awBankTransactions). Negative balances are permitted; no limits or charges apply.
 /// </summary>
@@ -44,7 +44,6 @@ public class BankControlFunction
     public async Task<HttpResponseData> GetStatus(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "bank/status")] HttpRequestData req)
     {
-        await _bank.InitializeAsync();
         var accounts = await _bank.GetAllAccountsAsync();
         var totalUsd = await _bank.GetTotalUsdAsync(accounts);
         var result   = new
@@ -65,7 +64,6 @@ public class BankControlFunction
     public async Task<HttpResponseData> GetAccounts(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "bank/accounts")] HttpRequestData req)
     {
-        await _bank.InitializeAsync();
         var accounts = await _bank.GetAllAccountsAsync();
         return await OkAsync(req, accounts);
     }
@@ -78,7 +76,6 @@ public class BankControlFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "bank/accounts/{currencyCode}")] HttpRequestData req,
         string currencyCode)
     {
-        await _bank.InitializeAsync();
         var account = await _bank.GetAccountAsync(currencyCode);
         if (account == null)
             return await NotFoundAsync(req, $"No account found for currency '{currencyCode.ToUpperInvariant()}'.");
@@ -95,7 +92,6 @@ public class BankControlFunction
     public async Task<HttpResponseData> GetTransactions(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "bank/transactions")] HttpRequestData req)
     {
-        await _bank.InitializeAsync();
         var maxCount = ParseMaxCount(req.Query["maxCount"], 50);
         var txns     = await _bank.GetTransactionsAsync(null, maxCount);
         return await OkAsync(req, txns);
@@ -110,7 +106,6 @@ public class BankControlFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "bank/transactions/{currencyCode}")] HttpRequestData req,
         string currencyCode)
     {
-        await _bank.InitializeAsync();
         var maxCount = ParseMaxCount(req.Query["maxCount"], 50);
         var txns     = await _bank.GetTransactionsAsync(currencyCode, maxCount);
         return await OkAsync(req, txns);
@@ -204,7 +199,6 @@ public class BankControlFunction
     public async Task<HttpResponseData> GetCurrencies(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "bank/currencies")] HttpRequestData req)
     {
-        await _bank.InitializeAsync();
         var currencies = await _bank.GetSupportedCurrenciesAsync();
         var result = currencies.Select(c => new { currencyCode = c.Code, name = c.Name });
         return await OkAsync(req, result);

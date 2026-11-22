@@ -9,8 +9,6 @@
 # To deploy a single agent without running all, run its script directly
 # (one script per agent in scripts/utilities/agents/; see agent_scripts below), e.g.:
 #   bash scripts/utilities/agents/eshop-chat-agent.sh
-#   bash scripts/utilities/agents/admin-order-workflow-agent.sh
-# Workflow agents reference their base agents, so deploy those first.
 #
 # Prerequisites:
 #   - azd environment populated (run after `azd provision`)
@@ -27,19 +25,6 @@ source "$SCRIPT_DIR/agents/lib/common.sh"
 
 info "Configuring Azure AI agents..."
 
-# ── Set up shared project connections once ────────────────────────────────────
-# This connection allows Foundry to manage the MCP session lifecycle for DAB.
-# Without a project connection, DAB's stateful Streamable HTTP transport would
-# reject requests with 400 ("Mcp-Session-Id header is required") because Foundry's
-# MCP client skips the initialize handshake. With project_connection_id, Foundry's
-# backend performs the full handshake on our behalf.
-setup_shared_connections
-
-# Export flag so each agent script skips the duplicate connection upserts
-export FOUNDRY_CONNECTIONS_READY=1
-
-# Workflow agents must follow their base agents because their YAML definitions
-# reference those agents by name.
 agent_scripts=(
     eshop-chat-agent
     admin-chat-agent
@@ -56,9 +41,6 @@ agent_scripts=(
     admin-email-content-agent
     admin-catalog-suggestion-agent
     eshop-help-me-choose-agent
-    eshop-workflow-agent
-    admin-promotion-workflow-agent
-    admin-order-workflow-agent
 )
 
 for agent_script in "${agent_scripts[@]}"; do

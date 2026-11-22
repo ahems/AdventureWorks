@@ -9,7 +9,7 @@ export interface TestEnvironment {
 
 const getAzdEnvValue = (key: string): string | undefined => {
   try {
-    const output = execSync(`azd env get-value "${key}"`, {
+    const output = execSync(`azd env get-value "${key}" --no-prompt`, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
@@ -19,26 +19,32 @@ const getAzdEnvValue = (key: string): string | undefined => {
   }
 };
 
-const defaultEnv: TestEnvironment = {
-  webBaseUrl:
-    process.env.WEB_BASE_URL ||
-    getAzdEnvValue("APP_REDIRECT_URI") ||
-    "http://localhost:5173",
-  adminWebBaseUrl:
-    process.env.ADMIN_WEB_BASE_URL ||
-    getAzdEnvValue("APP_ADMIN_REDIRECT_URI") ||
-    "http://localhost:5174",
-  functionsBaseUrl:
-    process.env.FUNCTIONS_BASE_URL ||
-    getAzdEnvValue("VITE_API_FUNCTIONS_URL") ||
-    "http://localhost:7071",
-  restApiBaseUrl:
-    process.env.REST_API_BASE_URL ||
-    getAzdEnvValue("VITE_API_URL")?.replace(/\/graphql\/?$/, "/api") ||
-    "http://localhost:5000/api",
+const requireUrl = (envVar: string, azdKey: string, transform: (value: string) => string = (v) => v): string => {
+  const value = process.env[envVar] || getAzdEnvValue(azdKey);
+  if (!value) {
+    throw new Error(
+      `${envVar} is not set and azd value ${azdKey} is unavailable. ` +
+        "Select a deployed azd environment (azd env select) or set the variable explicitly.",
+    );
+  }
+  return transform(value);
 };
 
-export const testEnv: TestEnvironment = defaultEnv;
+// Resolved lazily so a script only needs the deployment URLs it actually uses.
+export const testEnv: TestEnvironment = {
+  get webBaseUrl() {
+    return requireUrl("WEB_BASE_URL", "APP_URL");
+  },
+  get adminWebBaseUrl() {
+    return requireUrl("ADMIN_WEB_BASE_URL", "APP_ADMIN_URL");
+  },
+  get functionsBaseUrl() {
+    return requireUrl("FUNCTIONS_BASE_URL", "API_FUNCTIONS_URL");
+  },
+  get restApiBaseUrl() {
+    return requireUrl("REST_API_BASE_URL", "API_URL", (v) => v.replace(/\/graphql\/?$/, "/api"));
+  },
+};
 
 export const APP_STORAGE_KEYS = {
   language: "adventureworks_language",

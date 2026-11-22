@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "Maakt gebruik van AI-embeddings om natuurlijke taalvragen te begrijpen. Probeer: \"rode fietsen\", \"waterdichte uitrusting voor regenachtige wandelingen\" of \"lichtgewicht uitrusting voor fietsers\"",
     "matchCounts": "{{descriptionMatches}} beschrijvingsmatches gevonden, {{reviewMatches}} beoordelingsmatches en {{nameMatches}} naammatches",
     "semanticUnavailable": "Semantische zoekdienst niet beschikbaar. Controleer of de AI-service actief is en de embeddings zijn geïndexeerd.",
+    "aiRateLimited": "AI-zoeken is momenteel druk. Probeer het over {{minutes}} min. opnieuw.",
     "noMatchingProducts": "Geen overeenkomende producten gevonden",
     "enterSearchQuery": "Voer een zoekopdracht in om producten te vinden",
     "noResultsForQuery": "Onze AI-gestuurde zoekfunctie vond geen producten die overeenkomen met \"{{query}}\". Probeer andere zoekwoorden of zinnen.",
@@ -267,7 +268,11 @@
       "lastName": "Doe",
       "email": "john@example.nl",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Alleen openbare testkaartnummers (bijvoorbeeld 4242 4242 4242 4242) kunnen worden opgeslagen. Alleen het kaarttype, de laatste vier cijfers en de vervaldatum worden bewaard.",
+    "errorSavePayment": "Betaalmethode opslaan mislukt. Probeer het opnieuw.",
+    "addCard": "Kaart toevoegen",
+    "invalidTestCard": "Deze kaart kan niet worden opgeslagen. Gebruik een geldig, niet-verlopen openbaar testkaartnummer."
   },
   "checkout": {
     "backToCart": "Terug naar Winkelwagen",

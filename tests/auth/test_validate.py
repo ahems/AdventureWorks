@@ -659,31 +659,30 @@ class ContractTests(unittest.TestCase):
         names = {
             "CreateAddress", "DeleteAddress", "GetAddressById", "GetAddresses", "GetPersonAddresses",
             "SetAddressType", "UpdateAddress", "SetPassword", "VerifyPassword", "CheckOrderReceipt",
-            "DownloadOrderReceipt", "GenerateAndSendReceipt", "GetPaymentMethods", "CreateOrderDetail",
-            "GetOwnedOrderDetails", "CreateOrderHeader", "MergeGuestCart",
+            "DownloadOrderReceipt", "GenerateAndSendReceipt", "GetPaymentMethods", "QuoteCheckout",
+            "GetOwnedOrderDetails", "PlaceCheckoutOrder", "MergeGuestCart", "CreatePaymentMethod",
+            "VoteReviewHelpful", "RemoveReviewHelpfulVote",
         }
         cases = {
-            f"ApiFunctions.Tests.PaymentMethodFunctionsTests.Reads_only_the_signed_person_even_with_foreign_query_and_headers(owner: {owner})"
-            for owner in [71, 72]}
+            f"ApiFunctions.Tests.PaymentMethodFunctionsTests.{name}(owner: {owner})"
+            for owner in [71, 72]
+            for name in ["Reads_only_the_signed_person_even_with_foreign_query_and_headers",
+                         "Create_links_a_masked_card_to_the_signed_consumer_only"]}
+        cases.update(f"ApiFunctions.Tests.ReviewVoteFunctionsTests.{name}(owner: {owner})" for owner in [71, 72]
+                     for name in ["Vote_is_bound_to_the_signed_consumer_and_ignores_forged_inputs",
+                                  "Removing_a_vote_is_bound_to_the_signed_consumer"])
         cases.update(f"ApiFunctions.Tests.{name}(owner: {owner})" for owner in [7, 8] for name in [
-            "OrderDetailFunctionsTests.Consumer_order_detail_uses_the_validated_customer_claim",
-            "OrderDetailFunctionsTests.Other_owner_order_is_denied_without_a_success_response",
             "OrderDetailFunctionsTests.Consumer_reads_only_signed_owner_even_with_forged_inputs",
             "OrderDetailFunctionsTests.Consumer_cannot_read_other_or_mixed_orders",
             "OwnedCartFunctionsTests.Valid_consumer_resolves_owner_from_signed_claim_not_query",
             "OwnedCartFunctionsTests.Merge_binds_both_signed_owners_and_hashed_guest_proof"])
-        for customer, person, address in [(7, 71, 101), (8, 72, 102)]:
-            cases.update("ApiFunctions.Tests.OrderHeaderFunctionsTests." + name +
+        for customer, person in [(30, 20), (31, 21)]:
+            cases.update("ApiFunctions.Tests.CheckoutFunctionsTests." + name +
                          f"(customer: {customer}, person: {person})" for name in [
-                             "Consumer_header_uses_signed_customer_and_person_not_forged_inputs",
+                             "Consumer_places_order_bound_to_signed_customer_and_ignores_forged_fields",
                              "Foreign_address_or_customer_binding_returns_denial"])
-            cases.add("ApiFunctions.Tests.OrderHeaderServiceTests."
-                      "Customer_and_both_addresses_are_checked_before_insert_in_one_transaction" +
-                      f"(customer: {customer}, person: {person}, address: {address})")
-        cases.update("ApiFunctions.Tests.OrderHeaderServiceTests.Invalid_customer_address_or_ship_method_never_inserts" +
-                     f'(defect: "{defect}")' for defect in
-                     ["customer", "billing", "shipping", "missing-address", "ship-method"])
-        cases.add("ApiFunctions.Tests.OrderHeaderServiceTests.Insert_failure_rolls_back_the_guarded_transaction")
+        cases.add("ApiFunctions.Tests.CheckoutServiceTests.Insert_failure_is_not_committed_and_the_transaction_is_disposed")
+        cases.add("ApiFunctions.Tests.CheckoutServiceTests.Quote_never_inserts_or_commits")
         for scenario, expected in [("complete", "PASS"), ("new-route", "BLOCKED"),
                                    ("missing-owner", "BLOCKED"), ("duplicate", "BLOCKED"),
                                    ("skipped", "BLOCKED"), ("failed", "FAIL"),
@@ -2446,14 +2445,14 @@ class ContractTests(unittest.TestCase):
                     for name, route in [("GetManufacturingAgentQueueStatus", "manufacturing/agent-queue-status"),
                                         ("AIJobQueue_Status", "ai-job-queue/status")]]
                 report.inventory["functions"].append({
-                    "Name": "CreateOrderDetail",
-                    "Route": "orders/{salesOrderId:int}/details",
+                    "Name": "QuoteCheckout",
+                    "Route": "orders/checkout/quote",
                     "Methods": ["POST"],
                     "Policy": {"IsAnonymous": False},
                 })
                 report.inventory["functions"].append({
-                    "Name": "CreateOrderHeader",
-                    "Route": "orders",
+                    "Name": "PlaceCheckoutOrder",
+                    "Route": "orders/checkout",
                     "Methods": ["POST"],
                     "Policy": {"IsAnonymous": False},
                 })
@@ -2462,14 +2461,13 @@ class ContractTests(unittest.TestCase):
                 calls = []
 
                 def http(method, url, *, token=None, headers=None, data=None):
-                    if url.endswith("/api/orders/1/details"):
+                    if url.endswith("/api/orders/checkout/quote"):
+                        self.assertEqual(method, "POST")
+                        self.assertEqual(data, {"lines": []})
+                    elif url.endswith("/api/orders/checkout"):
                         self.assertEqual(method, "POST")
                         self.assertEqual(data, {
-                            "productId": 0, "orderQty": 0, "unitPrice": 0, "unitPriceDiscount": 0})
-                    elif url.endswith("/api/orders"):
-                        self.assertEqual(method, "POST")
-                        self.assertEqual(data, {
-                            "billToAddressId": 0, "shipToAddressId": 0, "shipMethodId": 0, "subTotal": -1})
+                            "lines": [], "billToAddressId": 0, "shipToAddressId": 0, "shipMethodId": 0})
                     else:
                         self.assertEqual(method, "GET")
                     self.assertTrue(url.startswith("https://functions.example.invalid/api/"))
@@ -2551,31 +2549,8 @@ class ContractTests(unittest.TestCase):
             ("FutureFunction", "future", ["GET"]),
             ("ArchiveTransactionHistoryHttp", "archive/trigger", ["GET"]),
             ("OrderDelivery_HttpTrigger", "orders/delivery/trigger", ["GET"]),
-            ("ManufacturingStatus", "manufacturing/status", ["GET"]),
-            ("SupplyChainGetVendors", "supply/vendors", ["GET"]),
-            ("SupplyChainGetVendor", "supply/vendors/{vendorId}", ["GET"]),
-            ("SupplyChainGetCatalog", "supply/catalog", ["GET"]),
-            ("SupplyChainGetCatalogByProduct", "supply/catalog/{productId:int}", ["GET"]),
-            ("SupplyChainGetQuote", "supply/quote", ["GET"]),
-            ("PlanFeasibility", "plan/feasibility/{productId:int}", ["GET"]),
-            ("PlanFeasibilityAll", "plan/feasibility", ["GET"]),
-            ("PlanReorderRecommendations", "plan/reorder-recommendations", ["GET"]),
-            ("ManufacturingWorkforce", "manufacturing/workforce", ["GET"]),
-            ("ManufacturingWorkforceDetail", "manufacturing/workforce/detail", ["GET"]),
-            ("GetManufacturingAgentConfig", "manufacturing/agent-config", ["GET"]),
-            ("GetManufacturingProposals", "manufacturing/proposals", ["GET"]),
-            ("GetVerifiedReviewsStatus", "generate-verified-reviews/status", ["GET"]),
-            ("ReviewModeration_Status", "reviews/moderation/status", ["GET"]),
-            ("WarehouseStatus", "warehouse/status", ["GET"]),
-            ("WarehouseWorkforce", "warehouse/workforce", ["GET"]),
-            ("WarehouseGetDamageConfig", "warehouse/damage-config", ["GET"]),
-            ("WarehouseGetSubcategoryConfig", "warehouse/subcategory-config", ["GET"]),
-            ("WarehouseGetSupplierReceiveConfig", "warehouse/supplier-receive-config", ["GET"]),
-            ("BankGetStatus", "bank/status", ["GET"]),
-            ("BankGetAccounts", "bank/accounts", ["GET"]),
-            ("FinancialSummary", "financials/summary", ["GET"]),
-            ("FinancialProcurement", "financials/procurement", ["GET"]),
-            ("FinancialManufacturing", "financials/manufacturing", ["GET"]),
+            ("ManufacturingStatus", "manufacturing/status/stale", ["GET"]),
+            ("BankGetStatus", "bank/status", ["GET", "POST"]),
             ("TranslateLanguageFile_Terminate", "TranslateLanguageFile_Terminate", ["GET", "POST"]),
             ("MergeGuestCart", "cart/merge", ["POST"]),
             ("GetAddresses", "addresses", ["GET", "POST"]),
@@ -2710,13 +2685,11 @@ class ContractTests(unittest.TestCase):
                 with patch.object(auth, "CONTRACTS", path), self.assertRaises(auth.EvidenceError):
                     auth.reviewed_function_read_routes()
 
-    def test_function_get_review_closure_detects_unclassified_and_stale_routes(self):
+    def test_function_get_review_closure_requires_every_protected_get_to_be_a_reviewed_read(self):
         safe = {"Name": "ReadOnly", "Route": "read", "Methods": ["GET"], "Policy": {"IsAnonymous": False}}
-        effect = {"Name": "Effect", "Route": "effect", "Methods": ["GET"], "Policy": {"IsAnonymous": False}}
         new = {"Name": "NewRead", "Route": "new", "Methods": ["GET"], "Policy": {"IsAnonymous": False}}
-        document = {"safeFunctionReadRoutes": {"ReadOnly": "read"},
-                    "sideEffectingFunctionReads": {"Effect": {"route": "effect", "reason": "seeds table rows"}}}
-        for functions, expected in [([safe, effect], "PASS"), ([safe, effect, new], "FAIL"), ([safe], "FAIL")]:
+        document = {"safeFunctionReadRoutes": {"ReadOnly": "read"}}
+        for functions, expected in [([safe], "PASS"), ([safe, new], "FAIL")]:
             with self.subTest(names=[item["Name"] for item in functions]), \
                     tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "contracts.json"
@@ -2727,22 +2700,17 @@ class ContractTests(unittest.TestCase):
                     auth.function_get_review_closure(report)
                     obligations = auth.function_denial_obligations(report, "https://functions.example.invalid")
                 self.assertEqual(report.checks[0]["status"], expected)
-                if expected == "PASS":
-                    self.assertEqual({item[0].split(":")[1] for item in obligations}, {"ReadOnly"})
-                    blocked = next(item for item in report.checks if item["id"] == "functions:Effect:GET:deny")
-                    self.assertIn("seeds table rows", blocked["detail"])
+                self.assertEqual({item[0].split(":")[1] for item in obligations}, {"ReadOnly"})
+                if expected == "FAIL":
+                    self.assertIn("NewRead", report.checks[0]["detail"])
+                    blocked = next(item for item in report.checks if item["id"] == "functions:NewRead:GET:deny")
+                    self.assertEqual(blocked["status"], "BLOCKED")
 
-    def test_side_effecting_read_contract_rejects_overlap_and_malformed_entries(self):
-        for entry in [{"route": "read", "reason": "seeds table rows"}, {"route": "effect"},
-                      {"route": "/effect", "reason": "seeds table rows"},
-                      {"route": "effect", "reason": "short"}]:
-            name = "ReadOnly" if entry.get("route") == "read" else "Effect"
-            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as directory:
-                path = Path(directory) / "contracts.json"
-                path.write_text(json.dumps({"safeFunctionReadRoutes": {"ReadOnly": "read"},
-                                            "sideEffectingFunctionReads": {name: entry}}))
-                with patch.object(auth, "CONTRACTS", path), self.assertRaises(auth.EvidenceError):
-                    auth.side_effecting_function_reads()
+    def test_reviewed_read_contract_has_no_state_changing_gets(self):
+        routes = auth.reviewed_function_read_routes()
+        for name in ["ArchiveTransactionHistoryHttp", "OrderDelivery_HttpTrigger", "TranslateLanguageFile_Terminate"]:
+            self.assertNotIn(name, routes)
+        self.assertNotIn("sideEffectingFunctionReads", json.loads(auth.CONTRACTS.read_text()))
 
     def test_illustration_export_fixture_rejects_malformed_input(self):
         for fixture in [
@@ -6966,6 +6934,15 @@ class ContractTests(unittest.TestCase):
         report = auth.Report(Path("."))
         auth.cart_contract(report, config)
         self.assertTrue(all(check["status"] == "FAIL" for check in report.checks))
+        for role, actions in [("executive-admin", ["read", "update"]), ("inventory-admin", ["read"])]:
+            with self.subTest(role=role):
+                changed = json.loads((auth.ROOT / "api/dab-config.json").read_text())
+                permissions = changed["entities"]["ShoppingCartItem"]["permissions"]
+                permissions[:] = [item for item in permissions if item["role"] != role]
+                permissions.append({"role": role, "actions": actions})
+                report = auth.Report(Path("."))
+                auth.cart_contract(report, changed)
+                self.assertEqual(report.checks[-1]["status"], "FAIL")
 
     def test_address_link_contract_rejects_unscoped_reads_and_all_direct_writes(self):
         config = json.loads((auth.ROOT / "api/dab-config.json").read_text())
@@ -7021,13 +6998,13 @@ class ContractTests(unittest.TestCase):
                 config = json.loads((auth.ROOT / "api/dab-config.json").read_text())
                 permission = next(item for item in config["entities"]["ProductReview"]["permissions"]
                                   if item["role"] == role)
-                create, _, update = permission["actions"]
+                create, _ = permission["actions"]
                 if defect == "author":
                     create.pop("policy")
                 elif defect == "moderation":
                     create["fields"]["include"].append("IsModerated")
                 elif defect == "vote":
-                    update["fields"]["include"].append("Comments")
+                    permission["actions"].append({"action": "update", "fields": {"include": ["HelpfulVotes"]}})
                 elif defect == "duplicate-create":
                     permission["actions"].append("create")
                 else:
@@ -7792,6 +7769,7 @@ trigger:
             scripts = root / "scripts/utilities/agents"
             scripts.mkdir(parents=True)
             workflows = root / "workflows"
+            self.assertEqual(auth.agent_workflow_inventory(scripts, workflows), {})
             workflows.mkdir()
             source = workflows / "advisor.yaml"
             source.write_text("""
@@ -8233,8 +8211,27 @@ class DabWriteDecisionTests(unittest.TestCase):
         self.assertEqual(violations, [])
         self.assertEqual(len(cells), len(self.CONFIG["entities"]) * len(auth.DAB_ROLES) * 3)
         allowed = {(c["entity"], c["role"], c["operation"]) for c in cells if c["decision"] == "allow"}
-        self.assertIn(("ProductReview", "consumer", "update"), allowed)
+        self.assertNotIn(("ProductReview", "consumer", "update"), allowed)
+        self.assertIn(("EmailAddress", "consumer", "create"), allowed)
         self.assertNotIn(("SalesOrderHeader", "manufacturing-engineer", "create"), allowed)
+
+    def test_admin_writes_follow_api_mcp_role_scopes(self):
+        scopes = auth.application_role_scopes()
+        self.assertIn("customers.write", scopes["sales-admin"])
+        self.assertNotIn("admin.write", scopes["sales-admin"])
+        cells, _ = auth.dab_write_decision_violations(self.CONFIG)
+        allowed = {(c["entity"], c["role"], c["operation"]) for c in cells if c["decision"] == "allow"}
+        self.assertIn(("EmailAddress", "sales-admin", "update"), allowed)
+        self.assertNotIn(("SpecialOffer", "sales-admin", "update"), allowed)
+        self.assertIn(("SpecialOffer", "marketing-admin", "update"), allowed)
+        self.assertNotIn(("SalesOrderHeader", "marketing-admin", "update"), allowed)
+        self.assertFalse([c for c in cells if c["role"] == "inventory-admin" and c["decision"] == "allow"
+                          and c["inheritedFrom"] is None])
+        # Without the scope grant the same config is rejected.
+        reduced = {role: set(granted) for role, granted in scopes.items()}
+        reduced["sales-admin"].discard("customers.write")
+        violations = auth.dab_write_decision_violations(self.CONFIG, reduced)[1]
+        self.assertTrue(any(v.startswith("EmailAddress/sales-admin/") for v in violations))
 
     def mutate(self, change):
         config = copy.deepcopy(self.CONFIG)
@@ -8258,8 +8255,16 @@ class DabWriteDecisionTests(unittest.TestCase):
         def claim_free_inheritance(entities):
             entities["ProductReview"]["permissions"] = [
                 item for item in entities["ProductReview"]["permissions"] if item["role"] != "manufacturing-engineer"]
+            for item in entities["ProductReview"]["permissions"]:
+                if item["role"] in {"authenticated", "consumer"}:
+                    item["actions"].append({"action": "update", "fields": {"include": ["HelpfulVotes"]}})
+        def unscoped_admin(entities):
+            for item in entities["SpecialOffer"]["permissions"]:
+                if item["role"] == "sales-admin":
+                    item["actions"] = ["read", "update"]
         for change, text in [(claim_free_inheritance, "fail-closed owner policy"), (anonymous_write, "anonymous"), (unscoped_consumer, "owner policy"),
-                             (view_write, "read-only"), (manufacturing_sales, "Production")]:
+                             (view_write, "read-only"), (manufacturing_sales, "Production"),
+                             (unscoped_admin, "lacks the Functions write scope (admin.write)")]:
             with self.subTest(text=text):
                 self.assertTrue(any(text in item for item in self.mutate(change)))
         config = copy.deepcopy(self.CONFIG)

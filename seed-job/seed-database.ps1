@@ -406,6 +406,58 @@ function Initialize-GuestCartSchema {
     }
 }
 
+function Initialize-DiscountCodeSchema {
+    param([Parameter(Mandatory)] $Connection)
+    $migration = $Connection.CreateCommand()
+    try {
+        $migration.CommandText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sql/discount-codes.sql'))
+        $migration.CommandTimeout = 120
+        $null = $migration.ExecuteNonQuery()
+        Write-Log 'Checkout discount code table verified.'
+    } finally {
+        $migration.Dispose()
+    }
+}
+
+function Initialize-PasswordResetTokenSchema {
+    param([Parameter(Mandatory)] $Connection)
+    $migration = $Connection.CreateCommand()
+    try {
+        $migration.CommandText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sql/password-reset-tokens.sql'))
+        $migration.CommandTimeout = 120
+        $null = $migration.ExecuteNonQuery()
+        Write-Log 'Password reset token table verified.'
+    } finally {
+        $migration.Dispose()
+    }
+}
+
+function Initialize-ProductReviewVoteSchema {
+    param([Parameter(Mandatory)] $Connection)
+    $migration = $Connection.CreateCommand()
+    try {
+        $migration.CommandText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sql/product-review-votes.sql'))
+        $migration.CommandTimeout = 120
+        $null = $migration.ExecuteNonQuery()
+        Write-Log 'Product review vote table verified.'
+    } finally {
+        $migration.Dispose()
+    }
+}
+
+function Initialize-EmailAddressUniqueness {
+    param([Parameter(Mandatory)] $Connection)
+    $migration = $Connection.CreateCommand()
+    try {
+        $migration.CommandText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sql/email-address-uniqueness.sql'))
+        $migration.CommandTimeout = 120
+        $null = $migration.ExecuteNonQuery()
+        Write-Log 'Person.EmailAddress uniqueness constraint verified.'
+    } finally {
+        $migration.Dispose()
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Acquire Azure AD access token for SQL (scope: https://database.windows.net/.default)
 # Using Managed Identity
@@ -513,6 +565,10 @@ IF NOT EXISTS (SELECT 1 FROM Production.Product)
             $null = $cmd.ExecuteNonQuery()
             Write-Log "Existing base seed detected; preserving schema/data and applying manufacturing overlays only."
             Initialize-GuestCartSchema -Connection $conn
+            Initialize-DiscountCodeSchema -Connection $conn
+            Initialize-PasswordResetTokenSchema -Connection $conn
+            Initialize-ProductReviewVoteSchema -Connection $conn
+            Initialize-EmailAddressUniqueness -Connection $conn
             $result = Import-ManufacturingOverlays -Connection $conn -SqlFolder (Join-Path $PSScriptRoot 'sql')
             Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
             if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
@@ -815,64 +871,6 @@ EXEC sp_executesql @sql;
         Write-Log "`nAI enhancements SQL file not found, skipping..."
     }
     
-    # ---------------------------------------------------------------------
-    # Deterministic demo password for OAuth sign-in.
-    #
-    # Seeded AdventureWorks users carry the original 32-byte (44-char
-    # base64) password hashes, which are INCOMPATIBLE with the app /
-    # api-mcp PBKDF2-SHA256 (96-byte, 128-char) verifier. Without a
-    # compatible password no seeded user could complete the OAuth login.
-    #
-    # We compute ONE PBKDF2 hash (SHA256, 100k iterations, 96 bytes,
-    # 6-byte salt) for a documented demo password and UPSERT it ONLY for
-    # persons whose password is still in the original format
-    # (LEN(PasswordHash) < 100 OR NULL). App-format accounts created at
-    # runtime (128-char hashes) are NEVER overwritten, so the operation is
-    # idempotent and never clobbers real account passwords.
-    #
-    # The plaintext is a well-known demonstration value (overridable via
-    # MCP_DEMO_PASSWORD); only the derived hash is written to the database.
-    # This is a demo mechanism, NOT enterprise identity.
-    # ---------------------------------------------------------------------
-    $demoPassword = if ($env:MCP_DEMO_PASSWORD) { $env:MCP_DEMO_PASSWORD } else { 'AdventureWorks!MCP2024' }
-    $saltBytes = New-Object byte[] 6
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($saltBytes)
-    $demoSalt = [Convert]::ToBase64String($saltBytes)
-    $pbkdf2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
-        $demoPassword, $saltBytes, 100000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
-    try { $demoHashBytes = $pbkdf2.GetBytes(96) } finally { $pbkdf2.Dispose() }
-    $demoHash = [Convert]::ToBase64String($demoHashBytes)
-
-    try {
-        $upsertCmd = $conn.CreateCommand()
-        $upsertCmd.CommandTimeout = 300
-        $upsertCmd.CommandText = @'
-SET NOCOUNT ON;
-UPDATE pw
-    SET pw.PasswordHash = @Hash, pw.PasswordSalt = @Salt, pw.ModifiedDate = SYSUTCDATETIME()
-FROM Person.[Password] pw
-WHERE (pw.PasswordHash IS NULL OR LEN(pw.PasswordHash) < 100)
-  AND EXISTS (SELECT 1 FROM Person.EmailAddress e WHERE e.BusinessEntityID = pw.BusinessEntityID);
-
-INSERT INTO Person.[Password] (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
-SELECT p.BusinessEntityID, @Hash, @Salt, NEWID(), SYSUTCDATETIME()
-FROM Person.Person p
-WHERE EXISTS (SELECT 1 FROM Person.EmailAddress e WHERE e.BusinessEntityID = p.BusinessEntityID)
-  AND NOT EXISTS (SELECT 1 FROM Person.[Password] pw WHERE pw.BusinessEntityID = p.BusinessEntityID);
-'@
-        $hashParam = $upsertCmd.CreateParameter(); $hashParam.ParameterName = '@Hash'; $hashParam.Value = $demoHash
-        $saltParam = $upsertCmd.CreateParameter(); $saltParam.ParameterName = '@Salt'; $saltParam.Value = $demoSalt
-        $null = $upsertCmd.Parameters.Add($hashParam)
-        $null = $upsertCmd.Parameters.Add($saltParam)
-        $affected = $upsertCmd.ExecuteNonQuery()
-        $upsertCmd.Dispose()
-        $elapsed = (Get-Date) - $scriptStartTime
-        Write-Log "Demo OAuth password applied to seeded users (rows affected: $affected) [+$([math]::Floor($elapsed.TotalMinutes))m]"
-    }
-    catch {
-        Write-Warning "Demo OAuth password UPSERT failed: $($_.Exception.Message)"
-    }
-
     # ---------------------------------------------------------------------
     # Generate ProductProductPhoto-ai.csv from filesystem (source of truth)
     # Scan images/product_<ProductID>_photo_<N>.png and assign ProductPhotoIDs 1000+; junction table CSV is derived from the file list.
@@ -2217,7 +2215,7 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
     }
 
     # Apply ProductDescription embeddings from source API CSV (updates existing rows only).
-    # Build the CSV with: scripts/utilities/export-product-description-embeddings-from-source-api.sh
+    # Build the CSV with: scripts/data-management/export-ai-seed-data.py description-embeddings
     $embeddingsFromSourcePath = Join-Path $csvFolder 'ProductDescription-ai-embeddings.csv'
     if (Test-Path $embeddingsFromSourcePath) {
         $elapsed = (Get-Date) - $scriptStartTime
@@ -2415,7 +2413,8 @@ INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID 
     # Algorithm mirrors PasswordService.cs exactly:
     #   SaltSize=6, HashSize=96, Iterations=100000, SHA256
     # Fixed salt bytes "AWDemo" (0x41,0x57,0x44,0x65,0x6D,0x6F) -> base64 "QVdEZW1v"
-    # Runs after the bulk demo-password step so these values win.
+    # The original AdventureWorks password hashes are incompatible with this
+    # verifier, so seeded users can only sign in once a compatible hash is set here.
     # -------------------------------------------------------------------------
     Write-Log "`nSeeding demo portal logins (Ken Sánchez = admin, Peter Krebs = manufacturing)..."
     $demoSaltB64 = 'QVdEZW1v'  # base64([byte[]](0x41,0x57,0x44,0x65,0x6D,0x6F))
@@ -2683,6 +2682,10 @@ WHERE e.EmailAddress = 'demo.admin@adventureworks.com';
     }
 
     Initialize-GuestCartSchema -Connection $conn
+    Initialize-DiscountCodeSchema -Connection $conn
+    Initialize-PasswordResetTokenSchema -Connection $conn
+    Initialize-ProductReviewVoteSchema -Connection $conn
+    Initialize-EmailAddressUniqueness -Connection $conn
     if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
         Grant-RuntimeDefaultMetadataAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
         Write-Log "Runtime object-scoped default/computed-column metadata access granted."

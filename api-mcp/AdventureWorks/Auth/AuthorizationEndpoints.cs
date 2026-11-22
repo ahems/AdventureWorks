@@ -37,7 +37,7 @@ public static class AuthorizationEndpoints
         // route handlers (writing the IResult) instead of binding them as a RequestDelegate
         // and discarding the returned result (ASP0016).
         app.MapPost("/token", (Func<HttpContext, Task<IResult>>)ExchangeAsync)
-            .RequireRateLimiting("eshop-credentials");
+            .RequireRateLimiting(McpAuthorizationExtensions.TokenRateLimitPolicy);
 
         app.MapGet("/logout", (Func<HttpContext, Task<IResult>>)LogoutAsync).AllowAnonymous();
     }
@@ -54,7 +54,7 @@ public static class AuthorizationEndpoints
             ["scopes_supported"] = OAuthScopes.All,
             ["bearer_methods_supported"] = new[] { "header" },
             ["resource_name"] = "AdventureWorks MCP",
-            ["resource_documentation"] = baseUrl + "/docs/mcp-oauth",
+            ["resource_documentation"] = options.ResourceDocumentationUrl,
         });
     }
 

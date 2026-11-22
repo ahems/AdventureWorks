@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import copy
 import importlib.util
 import io
@@ -771,6 +772,29 @@ class RuntimeRoleTests(unittest.TestCase):
                 with self.assertRaises(rbac.ReconciliationError):
                     rbac.retirement_plan(*values)
 
+    def test_legacy_bindings_are_reported_never_deleted(self):
+        assignments, definitions, _, group, acr, communication = self.fixtures()
+        calls = []
+
+        def command(args):
+            calls.append(args)
+            if args[:3] == ["azd", "env", "get-values"]:
+                return {"AZURE_SUBSCRIPTION_ID": "test", "AZURE_RESOURCE_GROUP": "demo",
+                        "USER_MANAGED_IDENTITY_NAME": "id", "AZURE_CONTAINER_REGISTRY_ENDPOINT": "registry.azurecr.io",
+                        "COMMUNICATION_SERVICE_NAME": "comms"}
+            return {("identity", "show"): {"principalId": "runtime"}, ("acr", "show"): {"id": acr},
+                    ("role", "assignment"): assignments, ("role", "definition"): definitions}[tuple(args[1:3])]
+
+        output = io.StringIO()
+        with patch.object(rbac, "command", command), patch("sys.argv", ["reconcile"]), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(rbac.main(), 0)
+        self.assertIn("4 legacy runtime role binding(s)", output.getvalue())
+        self.assertFalse(any("delete" in call for call in calls))
+        with patch("sys.argv", ["reconcile", "--apply"]), self.assertRaises(SystemExit), \
+                contextlib.redirect_stderr(io.StringIO()):
+            rbac.main()
+
     def test_iac_does_not_recreate_runtime_management_grants(self):
         identity = (ROOT / "infra/modules/identity.bicep").read_text()
         acr = (ROOT / "infra/modules/acr.bicep").read_text()
@@ -787,8 +811,9 @@ class RuntimeRoleTests(unittest.TestCase):
                          communication)
         self.assertIn("resource acrPullAssignment", (ROOT / "infra/modules/aca.bicep").read_text())
         hook = (ROOT / "scripts/hooks/postprovision.sh").read_text()
-        self.assertIn('utilities/reconcile-runtime-rbac.py" --apply', hook)
-        self.assertLess(hook.index('utilities/reconcile-runtime-rbac.py" --apply'), hook.index("Preparing the MCP"))
+        self.assertIn('utilities/reconcile-runtime-rbac.py"\n', hook)
+        self.assertNotIn("reconcile-runtime-rbac.py\" --apply", hook)
+        self.assertLess(hook.index('utilities/reconcile-runtime-rbac.py"'), hook.index("Preparing the MCP"))
         self.assertIn('ensure_project_role "$DEPLOYER_OBJECT_ID" "$DEPLOYER_PRINCIPAL_TYPE" '
                       '"19c28022-e58e-450d-a464-0b2a53034789"', hook)
         self.assertNotIn('ensure_project_role "$DEPLOYER_OBJECT_ID" User', hook)

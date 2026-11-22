@@ -1,6 +1,6 @@
 ---
 title: CI/CD workflows
-summary: The three GitHub Actions workflows (weekly build check, service-principal azd deployment and seed-job image publishing), what each one covers and what is deliberately not automated.
+summary: The two GitHub Actions workflows (weekly build check and service-principal azd deployment), what each one covers and what is deliberately not automated.
 audience: [developer, operator, security-reviewer]
 components: [github-actions, azd, seed-job, api-functions, api-mcp, app]
 related:
@@ -12,25 +12,25 @@ related:
 
 # CI/CD workflows
 
-The repository has three GitHub Actions workflows in [`.github/workflows/`](../../.github/workflows/), and every one is started manually or on a schedule. None runs on push or pull request, so contributors run local checks before opening a PR. One-time Azure and GitHub setup is covered in the [workflow README](../../.github/workflows/README.md).
+The repository has two GitHub Actions workflows in [`.github/workflows/`](../../.github/workflows/), and both are started manually or on a schedule. None runs on push or pull request, so contributors run local checks before opening a PR. One-time Azure and GitHub setup is covered in the [workflow README](../../.github/workflows/README.md).
 
 | Workflow | Trigger | Purpose |
 | --- | --- | --- |
 | [`build-checker.yaml`](../../.github/workflows/build-checker.yaml) | Manual, and weekly on Sunday at 06:00 UTC | Offline authentication assurance plus container, Functions and storefront builds |
 | [`azd-up-service-principal.yml`](../../.github/workflows/azd-up-service-principal.yml) | Manual (`workflow_dispatch`) | Full `azd up --no-prompt` as an Entra service principal over GitHub OIDC |
-| [`publish-seed-job.yml`](../../.github/workflows/publish-seed-job.yml) | Manual | Publishes the seed-job image to GitHub Container Registry |
 
 ## Build check
 
-`build-checker.yaml` runs three independent jobs:
+`build-checker.yaml` runs four independent jobs:
 
 | Job | What it runs |
 | --- | --- |
 | `auth-offline` | `bash tests/scripts/validate-auth.sh --offline`. It needs no Azure login, secrets or deployed calls. The job fails if any assertion fails or if any required deterministic gate does not pass. Exit code 2 is accepted only for live coverage that is explicitly blocked. JSON, JUnit and TRX evidence is uploaded as the `authentication-offline` artifact. |
-| `build-check` | `docker build` of `app`, `api`, `seed-job`, `api-mcp`, `app-admin`, `app-manufacturing` and `.devcontainer`, plus `dotnet publish` of `api-functions` |
+| `build-check` | `docker build` of `api`, `seed-job`, `api-mcp`, `app-admin`, `app-manufacturing`, `mcp-inspector`, `manufacturing-agent` and `.devcontainer`, plus `dotnet publish` of `api-functions` |
+| `offline-tests` | `npm run typecheck` for the three frontends, `app-admin` and `app-manufacturing` Vitest, storefront and `mcp-inspector` `node --test`, the offline frontend harnesses in `tests/scripts`, `pytest tests/scripts`, seed-job Python tests and `dotnet build` of `manufacturing-agent`. Each step runs even if an earlier one fails; the final step fails the job and names every failed step. |
 | `swa-build` | `swa build adventure-eshop` for the storefront |
 
-The workflow uses Node.js 20 and Python 3.12. It does not build `mcp-inspector` or `manufacturing-agent`, and it does not run linters or the unit test suites. Those are local checks; see [Testing strategy](../testing/testing-strategy.md).
+The workflow uses Node.js 20 and Python 3.12 and needs no Azure credentials. It does not run linters, the seed PowerShell tests or any deployed check; see [Testing strategy](../testing/testing-strategy.md#what-ci-covers).
 
 ## Deploy workflow
 
@@ -58,10 +58,6 @@ The workflow uses Node.js 20 and Python 3.12. It does not build `mcp-inspector` 
 7. Removes the temporary Azure CLI credentials in an always-run step.
 
 The workflow never uploads credential caches or prints the complete azd environment. To work with the resulting environment locally, rebuild it with `recover-azd-env.py`. See [Deployment lifecycle](deployment.md#environments-created-by-github-actions).
-
-## Seed-job image publishing
-
-`publish-seed-job.yml` builds [`seed-job/`](../../seed-job/) and pushes `ghcr.io/<owner>/adventureworks-seed-job` with `sha` and `latest` tags and build provenance. The image is for reuse outside this repository. Deployments do **not** pull it, because `postprovision.sh` builds its own `seed-job:latest` in the environment's Azure Container Registry.
 
 ## Related
 

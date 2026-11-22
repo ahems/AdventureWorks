@@ -155,6 +155,20 @@ start_seed_job seed-job test-rg
         self.assertIn('ALTER DATABASE [$sqlDatabaseName] SET CHANGE_TRACKING', seed)
         self.assertLess(seed.index("Initialize-RuntimeDatabaseAccess"), seed.index("Dropping ALL user objects"))
 
+    def test_email_addresses_are_unique_for_sign_in(self):
+        seed = (ROOT / "seed-job/seed-database.ps1").read_text()
+        sql = (ROOT / "seed-job/sql/email-address-uniqueness.sql").read_text()
+        # A UNIQUE constraint raises SQL 2627, which DAB maps to HTTP 409.
+        self.assertIn("ADD CONSTRAINT UQ_EmailAddress_EmailAddress UNIQUE (EmailAddress)", sql)
+        self.assertIn("THROW 51130", sql)
+        self.assertEqual(seed.count("Initialize-EmailAddressUniqueness -Connection $conn"), 2)
+        self.assertLess(seed.index("Seeding demo portal logins"),
+                        seed.rindex("Initialize-EmailAddressUniqueness -Connection $conn"))
+        rows = (ROOT / "seed-job/sql/EmailAddress.csv").read_text(encoding="utf-8-sig").split("&|\n")
+        emails = [r.split("+|")[2].strip().lower() for r in rows if r.strip()]
+        self.assertTrue(emails)
+        self.assertEqual(len(emails), len(set(emails)))
+
     def test_image_seed_uses_same_dedicated_sql_identity_not_blob_storage(self):
         seed = (ROOT / "seed-job/seed-database.ps1").read_text()
         self.assertIn("-ArgumentList $connectionString, $PSScriptRoot, $scriptStartTime, $azureClientId, $tenantId", seed)

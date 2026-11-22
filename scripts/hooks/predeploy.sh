@@ -54,4 +54,15 @@ fi
 # Generate staticwebapp.config.json from template with dynamic Functions URL
 sed "s|{{API_FUNCTIONS_URL}}|$API_FUNC_URL|g" app/staticwebapp.config.template.json > app/staticwebapp.config.json
 
+# Generate robots.txt with the storefront's absolute sitemap URL (the Sitemap
+# directive must be absolute). /sitemap.xml redirects to the Functions sitemap.
+STOREFRONT_URL=$(get_azd_value APP_URL || true)
+STOREFRONT_URL=${STOREFRONT_URL%/}
+if [[ -n "$STOREFRONT_URL" ]]; then
+  sed "s|{{APP_URL}}|$STOREFRONT_URL|g" app/robots.template.txt > app/public/robots.txt
+else
+  echo "Warning: APP_URL unavailable; robots.txt is generated without a Sitemap directive." >&2
+  grep -v '{{APP_URL}}' app/robots.template.txt > app/public/robots.txt
+fi
+
 echo "Storefront build configuration ready."

@@ -304,8 +304,16 @@ function loadWebPubSub(fetch) {
     module, exports: module.exports, fetch, AbortController, setTimeout, clearTimeout, Error,
     console: { warn: (...args) => warnings.push(args) },
     require: name => ({
-      react: { useEffect: callback => { effect = callback; }, useRef: value => ({ current: value }) },
+      react: {
+        useEffect: callback => { effect = callback; }, useRef: value => ({ current: value }),
+        useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
+      },
       "@azure/web-pubsub-client": { WebPubSubClient: Client },
+      "@/services/eshopOAuth": {
+        getEshopAccessToken: async () => "test-functions-token",
+        getEshopSessionGeneration: () => 0,
+        subscribeEshopSession: () => () => {},
+      },
       "@/lib/utils": { getFunctionsApiUrl: () => config.functionsUrl },
     })[name],
   });
@@ -347,6 +355,7 @@ test("negotiate failure and cleanup-before-response are visible or cancelled, no
   let resolveFetch;
   const cancelled = loadWebPubSub(() => new Promise(resolve => { resolveFetch = resolve; }));
   cancelled.mount();
+  await new Promise(resolve => setTimeout(resolve, 0));
   cancelled.cleanup();
   resolveFetch(response({ url: "wss://pubsub.test/" }));
   await new Promise(resolve => setTimeout(resolve, 0));

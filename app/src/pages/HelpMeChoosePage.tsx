@@ -42,6 +42,7 @@ import {
   GET_PRODUCT_PHOTOS_BATCH,
   GET_PHOTOS_BY_IDS,
 } from "@/lib/graphql-queries";
+import { isAiRateLimitError, retryAfterMinutes } from "@/lib/aiRateLimit";
 import { trackError, trackEvent, trackPageView } from "@/lib/appInsights";
 
 // ---------------------------------------------------------------------------
@@ -269,7 +270,11 @@ const HelpMeChoosePage: React.FC = () => {
       setStep("questions");
     } catch (err) {
       trackError("HelpMeChoosePage loadQuestions", err);
-      setErrorMsg(t("error.loadQuestions"));
+      setErrorMsg(
+        isAiRateLimitError(err)
+          ? t("error.rateLimited", { minutes: retryAfterMinutes(err) })
+          : t("error.loadQuestions"),
+      );
       setStep("error");
     }
   }, [
@@ -338,7 +343,11 @@ const HelpMeChoosePage: React.FC = () => {
         setStep("results");
       } catch (err) {
         trackError("HelpMeChoosePage getRecommendations", err);
-        setErrorMsg(t("error.loadRecommendations"));
+        setErrorMsg(
+          isAiRateLimitError(err)
+            ? t("error.rateLimited", { minutes: retryAfterMinutes(err) })
+            : t("error.loadRecommendations"),
+        );
         setStep("error");
       }
     }

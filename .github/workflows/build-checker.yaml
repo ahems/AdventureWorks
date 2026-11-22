@@ -104,11 +104,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: app
-        id: app
-        continue-on-error: true
-        run: docker build ./app
-
       - name: api
         id: api
         continue-on-error: true
@@ -139,6 +134,16 @@ jobs:
         continue-on-error: true
         run: docker build ./app-manufacturing
 
+      - name: mcp-inspector
+        id: mcp-inspector
+        continue-on-error: true
+        run: docker build ./mcp-inspector
+
+      - name: manufacturing-agent
+        id: manufacturing-agent
+        continue-on-error: true
+        run: docker build ./manufacturing-agent/mcp-tools/src/mcp-tools
+
       - name: .devcontainer
         id: devcontainer
         continue-on-error: true
@@ -147,24 +152,148 @@ jobs:
       - name: Check build results
         if: always()
         run: |
-          if [[ "${{ steps.app.outcome }}" == "failure" || \
-                "${{ steps.api.outcome }}" == "failure" || \
+          if [[ "${{ steps.api.outcome }}" == "failure" || \
                 "${{ steps.seed-job.outcome }}" == "failure" || \
                 "${{ steps.api-functions.outcome }}" == "failure" || \
                 "${{ steps.api-mcp.outcome }}" == "failure" || \
                 "${{ steps.app-admin.outcome }}" == "failure" || \
                 "${{ steps.app-manufacturing.outcome }}" == "failure" || \
+                "${{ steps.mcp-inspector.outcome }}" == "failure" || \
+                "${{ steps.manufacturing-agent.outcome }}" == "failure" || \
                 "${{ steps.devcontainer.outcome }}" == "failure" ]]; then
             echo "One or more service builds failed."
             exit 1
           fi
           echo "All service builds succeeded."
 
+  # Offline unit/regression suites and real TypeScript checks for the frontends,
+  # MCP Inspector gateway, test harnesses and seed job. No Azure credentials.
+  offline-tests:
+    name: Offline tests and typechecks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          npm --prefix app ci --legacy-peer-deps
+          npm --prefix app-admin ci
+          npm --prefix app-manufacturing ci
+          npm --prefix mcp-inspector ci
+          python3 -m pip install pytest pyyaml cryptography
+
+      - name: Storefront typecheck
+        id: app-typecheck
+        continue-on-error: true
+        run: npm --prefix app run typecheck
+
+      - name: Storefront node tests
+        id: app-tests
+        continue-on-error: true
+        working-directory: app
+        run: node --test scripts/*.test.mjs
+
+      - name: app-admin typecheck
+        id: app-admin-typecheck
+        continue-on-error: true
+        run: npm --prefix app-admin run typecheck
+
+      - name: app-admin tests
+        id: app-admin-tests
+        continue-on-error: true
+        run: npm --prefix app-admin test
+
+      - name: app-manufacturing typecheck
+        id: app-manufacturing-typecheck
+        continue-on-error: true
+        run: npm --prefix app-manufacturing run typecheck
+
+      - name: app-manufacturing tests
+        id: app-manufacturing-tests
+        continue-on-error: true
+        run: npm --prefix app-manufacturing test
+
+      - name: mcp-inspector tests
+        id: mcp-inspector-tests
+        continue-on-error: true
+        run: npm --prefix mcp-inspector test
+
+      - name: manufacturing-agent build
+        id: manufacturing-agent-build
+        continue-on-error: true
+        run: dotnet build manufacturing-agent/mcp-tools/src/mcp-tools/mcp-tools.csproj --configuration Release
+
+      - name: Frontend harness tests (tests/scripts)
+        id: frontend-harness-tests
+        continue-on-error: true
+        run: |
+          node --experimental-vm-modules --test \
+            tests/scripts/test-live-updates.mjs \
+            tests/scripts/test-receipt-download.mjs \
+            tests/scripts/test-internal-request-sessions.mjs \
+            tests/scripts/test-internal-session-races.mjs \
+            tests/scripts/test-frontend-telemetry-envelopes.mjs
+
+      - name: Script tests (tests/scripts pytest)
+        id: script-tests
+        continue-on-error: true
+        run: python3 -B -m pytest tests/scripts -q -p no:cacheprovider
+
+      - name: Seed-job tests
+        id: seed-job-tests
+        continue-on-error: true
+        run: python3 -B -m unittest discover -s seed-job/tests -p 'test_*.py'
+
+      - name: Check test results
+        if: always()
+        run: |
+          failed=0
+          for outcome in \
+            "app-typecheck=${{ steps.app-typecheck.outcome }}" \
+            "app-tests=${{ steps.app-tests.outcome }}" \
+            "app-admin-typecheck=${{ steps.app-admin-typecheck.outcome }}" \
+            "app-admin-tests=${{ steps.app-admin-tests.outcome }}" \
+            "app-manufacturing-typecheck=${{ steps.app-manufacturing-typecheck.outcome }}" \
+            "app-manufacturing-tests=${{ steps.app-manufacturing-tests.outcome }}" \
+            "mcp-inspector-tests=${{ steps.mcp-inspector-tests.outcome }}" \
+            "manufacturing-agent-build=${{ steps.manufacturing-agent-build.outcome }}" \
+            "frontend-harness-tests=${{ steps.frontend-harness-tests.outcome }}" \
+            "script-tests=${{ steps.script-tests.outcome }}" \
+            "seed-job-tests=${{ steps.seed-job-tests.outcome }}"; do
+            if [[ "${outcome#*=}" != "success" ]]; then
+              echo "::error::${outcome%%=*} ${outcome#*=}"
+              failed=1
+            fi
+          done
+          if [[ "$failed" != "0" ]]; then
+            echo "One or more offline test suites failed."
+            exit 1
+          fi
+          echo "All offline test suites and typechecks succeeded."
+
   # Reproduces the azd `package-app` step for the e-shop Static Web App, which
-  # runs `swa build` (Azure Static Web Apps CLI) rather than `docker build`.
-  # The container `app` build above compiles the same Vite bundle, but the azd
-  # deployment path goes through the SWA CLI + `app/scripts/build-with-env.sh`; this
-  # job exercises that exact path so a broken frontend build (e.g. a TypeScript
+  # runs `swa build` (Azure Static Web Apps CLI); the storefront has no container
+  # image. The azd deployment path goes through the SWA CLI +
+  # `app/scripts/build-with-env.sh`; this job exercises that exact path so a
+  # broken frontend build (e.g. a TypeScript
   # / Vite compile error) is caught here instead of only surfacing during
   # `azd up`.
   swa-build:

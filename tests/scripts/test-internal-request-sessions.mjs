@@ -47,18 +47,6 @@ async function loadRequest(app, kind, nativeFetch, tokenGate) {
     ? `../../${app}/src/services/functionsAuthInterceptor.ts`
     : app === "app-admin" ? "../../app-admin/src/lib/graphql-client.ts"
       : "../../app-manufacturing/src/lib/dabFetch.ts";
-  const source = await readFile(new URL(path, import.meta.url), "utf8");
-  const module = new vm.SourceTextModule(ts.transpileModule(source, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-  }).outputText, {
-    context,
-    initializeImportMeta(meta) {
-      meta.env = {
-        VITE_API_URL: "https://dab.example.test/graphql",
-        VITE_API_FUNCTIONS_URL: "https://functions.example.test",
-      };
-    },
-  });
   let graphqlFetch;
   class GraphQLClient {
     constructor(_url, options) { graphqlFetch = options.fetch; }
@@ -72,13 +60,41 @@ async function loadRequest(app, kind, nativeFetch, tokenGate) {
     "@/config/api": { MANUFACTURING_BASE: "https://functions.example.test" },
     "graphql-request": { GraphQLClient },
   };
-  await module.link(specifier => {
+  const loaded = new Map();
+  // Unstubbed "@/..." imports load the real app source so shared helpers stay under test.
+  async function sourceModule(url) {
+    if (loaded.has(url.href)) return loaded.get(url.href);
+    const source = await readFile(url, "utf8");
+    const module = new vm.SourceTextModule(ts.transpileModule(source, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+    }).outputText, {
+      context,
+      identifier: url.href,
+      initializeImportMeta(meta) {
+        meta.env = {
+          VITE_API_URL: "https://dab.example.test/graphql",
+          VITE_API_FUNCTIONS_URL: "https://functions.example.test",
+        };
+      },
+    });
+    loaded.set(url.href, module);
+    return module;
+  }
+  const linker = async specifier => {
     const exports = dependencies[specifier];
-    if (!exports) throw new Error(`Unexpected import: ${specifier}`);
-    return new vm.SyntheticModule(Object.keys(exports), function () {
-      for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
-    }, { context });
-  });
+    if (exports) {
+      return new vm.SyntheticModule(Object.keys(exports), function () {
+        for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
+      }, { context });
+    }
+    if (specifier.startsWith("@/")) {
+      const appRoot = new URL(`../../${kind === "agent" ? "app-admin" : app}/src/`, import.meta.url);
+      return sourceModule(new URL(`${specifier.slice(2)}.ts`, appRoot));
+    }
+    throw new Error(`Unexpected import: ${specifier}`);
+  };
+  const module = await sourceModule(new URL(path, import.meta.url));
+  await module.link(linker);
   await module.evaluate();
   if (kind === "agent") {
     return { state, request: () => module.namespace.sendAgentMessage("test", []) };

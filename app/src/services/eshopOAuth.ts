@@ -37,6 +37,19 @@ interface TokenResponse {
 }
 
 let refreshInFlight: Promise<void> | null = null;
+let sessionGeneration = 0;
+const sessionListeners = new Set<() => void>();
+
+/** Changes whenever the signed-in identity changes (sign-in or sign-out). */
+export const getEshopSessionGeneration = () => sessionGeneration;
+export function subscribeEshopSession(listener: () => void) {
+  sessionListeners.add(listener);
+  return () => { sessionListeners.delete(listener); };
+}
+function publishSessionChange() {
+  sessionGeneration++;
+  sessionListeners.forEach(listener => listener());
+}
 
 function getTokenEndpoint(): string {
   const mcpUrl = getApiMcpUrl();
@@ -136,6 +149,7 @@ export async function signInWithEshopCredentials(
     storeToken("dab", dabToken);
 
     await getEshopAccessToken("functions", true);
+    publishSessionChange();
   } catch (error) {
     clearEshopOAuthSession();
     throw error;
@@ -218,10 +232,11 @@ export async function restoreEshopOAuthSession(): Promise<boolean> {
 }
 
 export function clearEshopOAuthSession(): void {
+  const hadSession = [REFRESH_TOKEN_KEY, ...Object.values(TOKEN_KEYS)]
+    .some(key => sessionStorage.getItem(key) !== null);
   sessionStorage.removeItem(TOKEN_KEYS.dab);
   sessionStorage.removeItem(TOKEN_KEYS.functions);
   sessionStorage.removeItem(TOKEN_KEYS.mcp);
   sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-  sessionStorage.removeItem("dab_oauth_pkce");
-  sessionStorage.removeItem("functions_oauth_pkce");
+  if (hadSession) publishSessionChange();
 }

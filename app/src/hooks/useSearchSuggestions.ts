@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { getFunctionsApiUrl } from "@/lib/utils";
+import {
+  retryUnlessRateLimited,
+  throwIfAiRateLimited,
+} from "@/lib/aiRateLimit";
 
 export interface SearchSuggestionsResponse {
   query: string;
@@ -44,6 +48,7 @@ export const useSearchSuggestions = (
         `${functionsApiUrl}/api/search/suggestions?q=${encodeURIComponent(debouncedQuery.trim())}`,
       );
 
+      throwIfAiRateLimited(response);
       if (!response.ok) {
         throw new Error(`Search suggestions failed: ${response.statusText}`);
       }
@@ -52,6 +57,6 @@ export const useSearchSuggestions = (
     },
     enabled: debouncedQuery.trim().length >= 2,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    retry: 1, // Only retry once for faster fallback
+    retry: retryUnlessRateLimited(1), // Only retry once for faster fallback; never retry a 429
   });
 };

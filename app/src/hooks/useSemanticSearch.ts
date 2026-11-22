@@ -1,6 +1,10 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
+import {
+  retryUnlessRateLimited,
+  throwIfAiRateLimited,
+} from "@/lib/aiRateLimit";
 
 export interface SemanticSearchResult {
   ProductID: number;
@@ -53,6 +57,7 @@ export const useSemanticSearch = (query: string, enabled: boolean = false) => {
         }),
       });
 
+      throwIfAiRateLimited(response);
       if (!response.ok) {
         throw new Error(`Semantic search failed: ${response.statusText}`);
       }
@@ -61,6 +66,7 @@ export const useSemanticSearch = (query: string, enabled: boolean = false) => {
     },
     enabled: enabled && query.trim().length > 0,
     staleTime: 1 * 60 * 1000, // 1 minute
+    retry: retryUnlessRateLimited(3),
   });
 };
 
@@ -89,6 +95,7 @@ export const useSemanticSearchMutation = () => {
         }),
       });
 
+      throwIfAiRateLimited(response);
       if (!response.ok) {
         throw new Error(`Semantic search failed: ${response.statusText}`);
       }

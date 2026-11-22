@@ -1,6 +1,6 @@
 ---
-title: Dev container and local tooling
-summary: What the AdventureWorks dev container installs, the VS Code tasks and launch configurations it provides, and how to run it on Windows 11 with Docker Engine in WSL instead of Docker Desktop.
+title: Dev container and tooling
+summary: What the AdventureWorks dev container installs, the deploy-and-test-in-Azure workflow it supports, and how to run it on Windows 11 with Docker Engine in WSL instead of Docker Desktop.
 audience: [developer]
 components: [devcontainer, api-functions, app, api, api-mcp]
 related:
@@ -10,9 +10,9 @@ related:
   - docs/operations/troubleshooting.md
 ---
 
-# Dev container and local tooling
+# Dev container and tooling
 
-The repository's dev container provides every CLI and SDK used to build, test and deploy the demo. Local tools run against the Azure-hosted demo services. SQL is private after deployment, so call the deployed DAB and Functions APIs instead of connecting directly.
+The repository's dev container provides every CLI and SDK used to build, test and deploy the demo. The solution is deploy-only: no service runs locally. Edit code in the container, deploy with `azd deploy --no-prompt` (or the GitHub runner workflow), then test against the deployment with the scripts in [`tests/`](../../tests/). SQL is private after deployment, so call the deployed DAB and Functions APIs instead of connecting directly.
 
 ## What the container provides
 
@@ -29,36 +29,21 @@ When the container is created, `postCreateCommand` runs these steps in order:
 1. `git lfs pull` (failures are ignored so an offline clone still opens)
 2. `az bicep install`
 3. `npm ci` in the repository root, `app/`, `app-admin/` and `app-manufacturing/`
-4. `dotnet restore` for `api-functions`, `api-mcp/ServiceDefaults` and `api-mcp/AppHost`
+4. `dotnet restore` for `api-functions` and `api-mcp/ServiceDefaults`
 
-The root `package.json` contains only `mssql` and `typescript`, which are used by the historic export scripts described in [Seed data generation](seed-data-generation.md). [`AdventureWorks.sln`](../../AdventureWorks.sln) contains `api-functions`, the `api-mcp` projects and both .NET test projects.
+The root `package.json` contains only `typescript` and `@types/node`; the seed-data scripts described in [Seed data generation](seed-data-generation.md) need no root npm packages. [`AdventureWorks.sln`](../../AdventureWorks.sln) contains `api-functions`, the `api-mcp` projects and both .NET test projects.
 
-## VS Code tasks
+## Workflow
 
-Defined in [`.vscode/tasks.json`](../../.vscode/tasks.json):
+1. Build and run the offline tests locally: `dotnet build AdventureWorks.sln`, `dotnet test AdventureWorks.sln`, `npm run typecheck` and `npx vite build` in each frontend, `npm test` in `app-admin/` and `app-manufacturing/`, `node --test scripts/*.test.mjs` in `app/` and `bash tests/scripts/validate-auth.sh --offline`. The offline auth gate starts its own Functions host and Azurite; nothing else runs locally.
+2. Deploy the changed services with `azd deploy <service> --no-prompt`. Infrastructure or seed changes need the user to recreate the environment, as described in [Deployment lifecycle](deployment.md#recreating-the-environment).
+3. Test the deployment with [`tests/scripts`](../../tests/scripts/README.md) and the [authenticated helper](../testing/AZURE_AUTHENTICATED_SCRIPTS.md).
 
-| Task | What it does |
-| --- | --- |
-| `func: host start` | Starts the Functions host locally. It depends on `build (functions)`. |
-| `build (functions)`, `clean (functions)`, `watch (functions)`, `restore (functions)` | .NET lifecycle tasks for `api-functions` |
-| `build all` | Builds `api-functions/api-functions.csproj` only, despite its label |
-| `start frontend` | Runs `npm run dev` in `app/` only |
-| `build frontend`, `lint frontend` | Build or lint the storefront |
-| `start api (DAB)` | Runs `dab start` in `api/`. Supply the `@env()` placeholders from `api/dab-config.json`; do not disable authentication. |
-| `deploy app-admin`, `deploy api-functions` | Run `azd deploy` for one service |
-| `reseed-demo-logins` | Builds the seed image with `az acr build`, then updates and starts the seed job directly |
+There are no VS Code run or debug tasks. Demo logins are reseeded only by the seed job during a normal deployment or recreation.
 
-> [!WARNING]
-> `reseed-demo-logins` bypasses the azd hooks and changes a deployed resource in place, which conflicts with the [demo/POC policy](../../.github/copilot-instructions.md#azure-environment-policy-demopoc-only). Agents must not run it. The seed job keeps `SEED_SKIP_EXISTING=true`. To get a clean data set, the user recreates the environment, as described in [Deployment lifecycle](deployment.md#recreating-the-environment).
+## MCP configuration
 
-Admin and manufacturing are started from their own folders with `npm run dev`. All three Vite configs listen on port 8080, so run one at a time or pass `--port`. See [Troubleshooting](troubleshooting.md#authentication-and-authorization) for the OAuth redirect ports.
-
-## Debugging and MCP configuration
-
-- [`.vscode/launch.json`](../../.vscode/launch.json) has *Attach* and *Launch* configurations for the .NET Functions process, Chrome and Edge launch configurations for `http://localhost:5173`, and a *Full Stack* compound. The Functions project targets `net10.0`; *Attach* to the process started by the `func: host start` task.
-- [`.vscode/mcp.json`](../../.vscode/mcp.json) registers the Azure AI Foundry MCP server, run with `uvx` from its Git repository. VS Code prompts for its inputs, and password-type inputs are not stored in the file.
-
-For local Functions settings, copy [`api-functions/local.settings.example.json`](../../api-functions/local.settings.example.json) and never commit the populated file. Get `MCP_SERVICE_URL` with `azd env get-value MCP_SERVICE_URL --no-prompt` so it points at the Azure-hosted MCP service.
+[`.vscode/mcp.json`](../../.vscode/mcp.json) registers the Azure AI Foundry MCP server, run with `uvx` from its Git repository. VS Code prompts for its inputs, and password-type inputs are not stored in the file.
 
 ## Running dev containers on Windows 11 without Docker Desktop
 

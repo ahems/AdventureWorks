@@ -142,7 +142,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       setUserContext(String(userData.businessEntityId));
       trackEvent("User_Login", {
         userId: userData.businessEntityId,
-        email: userData.email,
       });
 
       toast({
@@ -198,7 +197,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       setUserContext(String(userData.businessEntityId));
       trackEvent("User_Signup", {
         userId: userData.businessEntityId,
-        email: userData.email,
       });
 
       return true;

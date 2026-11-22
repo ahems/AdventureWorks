@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "Utilise des embeddings IA pour comprendre les requêtes en langage naturel. Essayez : « vélos rouges », « équipement imperméable pour randonnées sous la pluie », ou « matériel léger pour cyclistes »",
     "matchCounts": "Trouvé {{descriptionMatches}} correspondances dans la description, {{reviewMatches}} correspondances dans les avis, et {{nameMatches}} correspondances dans les noms",
     "semanticUnavailable": "Service de recherche sémantique indisponible. Veuillez vérifier que le service d'IA est en fonctionnement et que les embeddings sont indexés.",
+    "aiRateLimited": "La recherche IA est actuellement saturée. Veuillez réessayer dans {{minutes}} min.",
     "noMatchingProducts": "Aucun produit correspondant trouvé",
     "enterSearchQuery": "Entrez une requête de recherche pour trouver des produits",
     "noResultsForQuery": "Notre recherche alimentée par l'IA n'a pas trouvé de produits correspondant à \"{{query}}\". Essayez des mots-clés ou des expressions différents.",
@@ -267,7 +268,11 @@
       "lastName": "Doe",
       "email": "john@example.fr",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Seuls les numéros de carte de test publics (par exemple 4242 4242 4242 4242) peuvent être enregistrés. Seuls le type de carte, les quatre derniers chiffres et la date d'expiration sont conservés.",
+    "errorSavePayment": "Impossible d'enregistrer le moyen de paiement. Veuillez réessayer.",
+    "addCard": "Ajouter une carte",
+    "invalidTestCard": "Cette carte ne peut pas être enregistrée. Utilisez un numéro de carte de test public valide et non expiré."
   },
   "checkout": {
     "backToCart": "Retour au panier",

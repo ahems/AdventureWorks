@@ -1,0 +1,52 @@
+{
+  "title": "Seçmeme yardım et",
+  "intro": {
+    "title": "Sana en uygun ekipmanı bulalım!",
+    "description": "5 kısa soruyu yanıtla, yapay zekamız kataloğu tarayarak sana en uygun ürünleri bulsun.",
+    "cta": "Başlayalım",
+    "hint": "Yapay zeka destekli · Yaklaşık 1 dakika sürer"
+  },
+  "loading": {
+    "questions": "Kişiselleştirilmiş sorular oluşturuluyor…",
+    "recommendations": "Katalog taranıyor ve önerilerin hazırlanıyor…"
+  },
+  "progress": {
+    "question": "Soru {{current}} / {{total}}"
+  },
+  "nav": {
+    "back": "Geri",
+    "next": "İleri",
+    "findProducts": "Ürünlerimi bul"
+  },
+  "results": {
+    "title": "Sana özel seçimler",
+    "viewProduct": "Ürünü görüntüle",
+    "noResults": "Şu anda tam eşleşme bulamadık. Kategorilerimize göz atın veya arama çubuğunu kullanın.",
+    "startAgain": "Baştan başla"
+  },
+  "profile": {
+    "title": "Biraz senden bahset",
+    "subtitle": "Sana gerçekten uyan ürünleri bulmamıza yardımcı olur.",
+    "gender": {
+      "label": "Cinsiyet (isteğe bağlı)",
+      "male": "Erkek",
+      "female": "Kadın",
+      "preferNotToSay": "Belirtmek istemiyorum"
+    },
+    "height": {
+      "label": "Boyun",
+      "placeholder": "Boyunu seç…"
+    },
+    "colors": {
+      "label": "Favori renkler",
+      "hint": "Tercihin yoksa boş bırak."
+    },
+    "continue": "Devam"
+  },
+  "error": {
+    "loadQuestions": "Sorular oluşturulurken bir sorun oluştu. Lütfen tekrar deneyin.",
+    "loadRecommendations": "Öneriler bulunurken bir sorun oluştu. Lütfen tekrar deneyin.",
+    "rateLimited": "Sizden çok sayıda yapay zekâ isteği aldık. Lütfen {{minutes}} dk sonra tekrar deneyin.",
+    "tryAgain": "Tekrar dene"
+  }
+}

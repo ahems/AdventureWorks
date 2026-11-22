@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using AdventureWorks.Auth;
+using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
@@ -23,6 +24,9 @@ public static class McpAuthorizationExtensions
 {
     public const string LoginScheme = "AwLogin";
     public const string McpPolicy = "mcp";
+    public const string TokenRateLimitPolicy = "token";
+    public const int CredentialsGrantPermitsPerMinute = 20;
+    public const int NonCredentialGrantPermitsPerMinute = 300;
 
     public static AuthorizationServerOptions AddMcpAuthorization(this WebApplicationBuilder builder, string connectionString)
     {
@@ -37,16 +41,38 @@ public static class McpAuthorizationExtensions
         builder.Services.AddRateLimiter(rateLimiter =>
         {
             rateLimiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            rateLimiter.AddPolicy("eshop-credentials", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        AutoReplenishment = true,
-                        PermitLimit = 20,
-                        QueueLimit = 0,
-                        Window = TimeSpan.FromMinutes(1),
-                    }));
+            // /token: only the password-bearing e-shop credentials grant gets the strict
+            // per-IP budget. Refresh, authorization-code and managed-identity grants carry no
+            // password, so they share a separate, much higher budget and are not throttled
+            // by storefront sign-in traffic from the same address. OpenIddict has already
+            // extracted the request during UseAuthentication, which runs before UseRateLimiter.
+            rateLimiter.AddPolicy(TokenRateLimitPolicy, context =>
+            {
+                var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                var grantType = context.GetOpenIddictServerRequest()?.GrantType;
+                var isCredentialsGrant = grantType is null
+                    || string.Equals(grantType, EshopCredentialsGrant.GrantType, StringComparison.Ordinal)
+                    || string.Equals(grantType, OpenIddictConstants.GrantTypes.Password, StringComparison.Ordinal);
+                return isCredentialsGrant
+                    ? RateLimitPartition.GetFixedWindowLimiter(
+                        "credentials:" + ip,
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            AutoReplenishment = true,
+                            PermitLimit = CredentialsGrantPermitsPerMinute,
+                            QueueLimit = 0,
+                            Window = TimeSpan.FromMinutes(1),
+                        })
+                    : RateLimitPartition.GetFixedWindowLimiter(
+                        "token:" + ip,
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            AutoReplenishment = true,
+                            PermitLimit = NonCredentialGrantPermitsPerMinute,
+                            QueueLimit = 0,
+                            Window = TimeSpan.FromMinutes(1),
+                        });
+            });
 
             // Interactive /login form posts: slow online password guessing per client IP.
             rateLimiter.AddPolicy("login", context =>
@@ -306,6 +332,13 @@ public static class McpAuthorizationExtensions
             KeyVaultManagedIdentityClientId = Get("MCP_KEYVAULT_MANAGED_IDENTITY_CLIENT_ID", "KEYVAULT_MANAGED_IDENTITY_CLIENT_ID"),
         };
 
+        var documentationUrl = Get("MCP_RESOURCE_DOCUMENTATION_URL");
+        if (Uri.TryCreate(documentationUrl, UriKind.Absolute, out var documentationUri)
+            && documentationUri.Scheme == Uri.UriSchemeHttps)
+        {
+            options.ResourceDocumentationUrl = documentationUri.AbsoluteUri;
+        }
+
         options.EntraTenantId = Get("MCP_ENTRA_TENANT_ID");
         options.FunctionsServicePrincipalId = Get("MCP_FUNCTIONS_PRINCIPAL_ID");
         options.HostedManufacturingServicePrincipalId = Get("MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID");
@@ -337,7 +370,7 @@ public static class McpAuthorizationExtensions
         }
 
         // First-party public (PKCE) clients. Redirect URIs come from deployed app URLs
-        // (never hard-coded Azure hostnames) plus localhost for development.
+        // (never hard-coded Azure hostnames) plus fixed loopback callbacks (DevRedirectsFor).
         // The e-shop consumer requests catalog + own-orders scopes plus own-profile
         // (customers.*) so a signed-in consumer can manage their own addresses through the
         // Functions API; access remains ownership-gated at the resource server.
@@ -434,6 +467,9 @@ public static class McpAuthorizationExtensions
         }
     }
 
+    // Loopback callbacks, not local dev servers. scripts/utilities/azure-auth.py signs in as
+    // the seeded admin/manufacturing users with 5174/5175 and only reads the authorization
+    // code from the redirect's Location header; nothing listens on these ports.
     private static IEnumerable<string> DevRedirectsFor(string clientId) => clientId switch
     {
         "adventureworks-eshop" => new[] { "http://localhost:5173/oauth/callback" },

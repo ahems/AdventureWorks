@@ -119,6 +119,7 @@
     "aiFeaturesSemanticDesc": "Uses AI embeddings to understand natural language queries. Try: \"red bikes\", \"waterproof gear for rainy hikes\", or \"lightweight equipment for cyclists\"",
     "matchCounts": "Found {{descriptionMatches}} description matches, {{reviewMatches}} review matches, and {{nameMatches}} name matches",
     "semanticUnavailable": "Semantic search service unavailable. Please check that the AI service is running and embeddings are indexed.",
+    "aiRateLimited": "AI search is busy right now. Please try again in {{minutes}} min.",
     "noMatchingProducts": "No matching products found",
     "enterSearchQuery": "Enter a search query to find products",
     "noResultsForQuery": "Our AI-powered search didn't find products matching \"{{query}}\". Try different keywords or phrases.",
@@ -272,7 +273,11 @@
       "lastName": "Doe",
       "email": "john@example.com",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Only public test card numbers (for example 4242 4242 4242 4242) can be saved. Only the card type, last four digits and expiry are stored.",
+    "errorSavePayment": "Failed to save payment method. Please try again.",
+    "addCard": "Add Card",
+    "invalidTestCard": "This card cannot be saved. Use a valid, unexpired public test card number."
   },
   "checkout": {
     "backToCart": "Back to Cart",
@@ -286,7 +291,7 @@
     "back": "Back",
     "processing": "Processing...",
     "pay": "Pay",
-    "securePayment": "🎭 Demo site — no real payment is processed. Use any fake card number. You'll receive a pretend invoice by email and your order will automatically progress to shipped!",
+    "securePayment": "🎭 Demo site — no real payment is processed. Use a public test card number such as 4242 4242 4242 4242; it never leaves your browser. You'll receive a pretend invoice by email and your order will automatically progress to shipped!",
     "loadingSavedAddresses": "Loading saved addresses...",
     "selectSavedAddress": "Select a saved address:",
     "useDifferentAddress": "Use a different address",

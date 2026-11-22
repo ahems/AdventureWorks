@@ -32,7 +32,7 @@ Unfamiliar terms are defined in the [glossary](glossary.md).
 - [Real-time eventing](architecture/realtime-eventing.md) — Web PubSub push, outbox listener and polling-free frontends.
 - [Data stores](architecture/data-stores.md) — Azure SQL schema, Storage queues/tables/blobs and Durable Functions state.
 - [Identity and authentication](architecture/identity-and-auth.md) — managed identities, OAuth tokens, scopes, roles and categories.
-- [AI architecture](architecture/ai-architecture.md) — Foundry models, prompt/workflow agents, hosted agent and MCP tools.
+- [AI architecture](architecture/ai-architecture.md) — Foundry models, prompt agents, hosted agent and MCP tools.
 - [Networking](architecture/networking.md) — virtual network, subnets, private endpoints and public ingress.
 - [DAB naming conventions](architecture/dab-naming-conventions.md) — how database tables map to GraphQL and REST names.
 

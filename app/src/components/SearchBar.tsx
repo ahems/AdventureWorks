@@ -127,7 +127,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
     <form onSubmit={handleSearch} className={className}>
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50 z-10" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50 z-10" />
           <input
             ref={searchInputRef}
             type="text"
@@ -136,13 +136,13 @@ const SearchBar: React.FC<SearchBarProps> = ({
             onKeyDown={handleKeyDown}
             onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
             placeholder={defaultPlaceholder}
-            className={`w-full pl-10 pr-10 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none ${inputClassName}`}
+            className={`w-full ps-10 pe-10 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none ${inputClassName}`}
             autoComplete="off"
             autoFocus={autoFocus}
             data-testid="search-query-input"
           />
           {suggestionsLoading && searchQuery.length >= 2 && (
-            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-accent animate-spin" />
+            <Loader2 className="absolute end-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-accent animate-spin" />
           )}
 
           {/* AI-Powered Suggestions Dropdown */}

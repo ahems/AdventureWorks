@@ -19,15 +19,18 @@ public class HelpMeChooseFunctions
     private readonly ILogger<HelpMeChooseFunctions> _logger;
     private readonly HelpMeChooseService _helpMeChooseService;
     private readonly TelemetryClient _telemetryClient;
+    private readonly AiRateLimitService _rateLimiter;
 
     public HelpMeChooseFunctions(
         ILogger<HelpMeChooseFunctions> logger,
         HelpMeChooseService helpMeChooseService,
-        TelemetryClient telemetryClient)
+        TelemetryClient telemetryClient,
+        AiRateLimitService rateLimiter)
     {
         _logger = logger;
         _helpMeChooseService = helpMeChooseService;
         _telemetryClient = telemetryClient;
+        _rateLimiter = rateLimiter;
     }
 
     /// <summary>
@@ -44,11 +47,24 @@ public class HelpMeChooseFunctions
 
         try
         {
-            var body = await new StreamReader(req.Body).ReadToEndAsync();
+            var (body, tooLarge) = await AiRequestGuard.ReadBodyAsync(req);
+            if (tooLarge)
+                return await AiRequestGuard.PayloadTooLargeAsync(req);
+
             var request = string.IsNullOrWhiteSpace(body)
                 ? new HelpMeQuestionsRequest()
                 : JsonSerializer.Deserialize<HelpMeQuestionsRequest>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                   ?? new HelpMeQuestionsRequest();
+
+            if (AiRequestGuard.Validate(request) is { } invalid)
+                return await AiRequestGuard.BadRequestAsync(req, invalid);
+
+            var limit = await _rateLimiter.CheckAsync(req, AiRateLimitBucket.HelpMe);
+            if (!limit.Allowed)
+            {
+                _telemetryClient.TrackEvent("HelpMeChoose.RateLimited", new Dictionary<string, string> { ["Scope"] = limit.Scope ?? "unknown" });
+                return await AiRequestGuard.TooManyRequestsAsync(req, limit);
+            }
 
             _telemetryClient.TrackEvent("HelpMeChoose.QuestionsRequested", new Dictionary<string, string>
             {
@@ -88,14 +104,27 @@ public class HelpMeChooseFunctions
 
         try
         {
-            var body = await new StreamReader(req.Body).ReadToEndAsync();
+            var (body, tooLarge) = await AiRequestGuard.ReadBodyAsync(req);
+            if (tooLarge)
+                return await AiRequestGuard.PayloadTooLargeAsync(req);
+
             var request = JsonSerializer.Deserialize<HelpMeRecommendRequest>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            if (request == null || request.Answers.Count == 0)
+            if (request == null || request.Answers is null || request.Answers.Count == 0)
             {
                 var bad = req.CreateResponse(HttpStatusCode.BadRequest);
                 await bad.WriteStringAsync("answers are required");
                 return bad;
+            }
+
+            if (AiRequestGuard.Validate(request) is { } invalid)
+                return await AiRequestGuard.BadRequestAsync(req, invalid);
+
+            var limit = await _rateLimiter.CheckAsync(req, AiRateLimitBucket.HelpMe);
+            if (!limit.Allowed)
+            {
+                _telemetryClient.TrackEvent("HelpMeChoose.RateLimited", new Dictionary<string, string> { ["Scope"] = limit.Scope ?? "unknown" });
+                return await AiRequestGuard.TooManyRequestsAsync(req, limit);
             }
 
             _telemetryClient.TrackEvent("HelpMeChoose.RecommendRequested", new Dictionary<string, string>

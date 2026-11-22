@@ -5,6 +5,8 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import CreateProductDialog from "@/components/CreateProductDialog";
 import GenerateProductsWizardDialog from "@/components/GenerateProductsWizardDialog";
+import { Can } from "@/components/Can";
+import { Scopes } from "@/lib/permissions";
 import { useAuth } from "@/context/AuthContext";
 import {
   useAdminCategories,
@@ -81,7 +83,9 @@ const ProductsPage: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <GenerateProductsWizardDialog />
+            <Can scope={Scopes.AdminWrite}>
+              <GenerateProductsWizardDialog />
+            </Can>
             <CreateProductDialog subcategories={allSubcategories} />
           </div>
         </div>

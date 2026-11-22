@@ -74,7 +74,7 @@ flowchart LR
 
 | Event | When | Properties |
 | --- | --- | --- |
-| `User_Login`, `User_Signup` | Sign-in or account creation | userId, email |
+| `User_Login`, `User_Signup` | Sign-in or account creation | userId (BusinessEntityID) |
 | `User_Logout` | Sign-out | userId |
 | `Product_View` | Product page viewed | productId, productName, category, subcategory, price |
 | `Product_AddToCart` | Item added to cart | productId, productName, quantity, price, size, color |
@@ -83,7 +83,7 @@ flowchart LR
 | `Page_NotFound` | 404 route rendered | path |
 | `HelpMeChoose*` | Help-me-choose wizard steps | step details |
 
-`User_Login` and `User_Signup` record the user's email address in the event properties, so treat that telemetry as personal data. When no connection string is configured, for example during local development, every tracking call does nothing.
+Custom event properties carry no email addresses or names; users are identified only by their BusinessEntityID, which is also set as the authenticated user context. `app/scripts/telemetry-privacy.test.mjs` fails if a `trackEvent` call in any of the three frontends sends an email or name property. When no connection string is configured, for example during local development, every tracking call does nothing.
 
 ### Browser telemetry in all three frontends
 

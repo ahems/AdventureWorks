@@ -27,7 +27,7 @@ def require_https_url(value, label):
     return value
 
 
-def build_tools(mcp_url, dab_url, allowed_mcp, include_dab, connection_id, allowed_dab):
+def build_tools(mcp_url, dab_url, allowed_mcp, include_dab, allowed_dab):
     if not isinstance(include_dab, bool):
         raise ValueError("DAB MCP toggle must be a boolean")
     mcp_names = parse_allowlist(allowed_mcp, "api-mcp")
@@ -46,29 +46,25 @@ def build_tools(mcp_url, dab_url, allowed_mcp, include_dab, connection_id, allow
     if include_dab:
         if not dab_names:
             raise ValueError("DAB MCP requires an explicit non-empty tool allow-list")
-        dab_tool = {
+        tools.append({
             "type": "mcp",
             "server_label": "dabmcp",
+            "server_url": require_https_url(dab_url, "DAB"),
             "require_approval": "never",
             "allowed_tools": dab_names,
-        }
-        if connection_id:
-            dab_tool["project_connection_id"] = connection_id
-        else:
-            dab_tool["server_url"] = require_https_url(dab_url, "DAB")
-        tools.append(dab_tool)
+        })
 
     return tools
 
 
 def main(argv):
-    if len(argv) != 7:
-        raise ValueError("Expected MCP URL, DAB URL, two allow-lists, DAB toggle and connection ID")
-    mcp_url, dab_url, allowed_mcp, include_dab, connection_id, allowed_dab = argv[1:]
+    if len(argv) != 6:
+        raise ValueError("Expected MCP URL, DAB URL, two allow-lists and DAB toggle")
+    mcp_url, dab_url, allowed_mcp, include_dab, allowed_dab = argv[1:]
     if include_dab not in {"true", "false"}:
         raise ValueError("DAB MCP toggle must be true or false")
     print(json.dumps(build_tools(
-        mcp_url, dab_url, allowed_mcp, include_dab == "true", connection_id, allowed_dab
+        mcp_url, dab_url, allowed_mcp, include_dab == "true", allowed_dab
     )))
 
 

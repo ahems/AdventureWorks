@@ -388,7 +388,6 @@ public class ManufacturingControlFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/workforce")]
         HttpRequestData req)
     {
-        await _workforce.InitializeAsync();
         var snapshot = await _workforce.GetSnapshotAsync();
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(snapshot);
@@ -400,7 +399,6 @@ public class ManufacturingControlFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/workforce/detail")]
         HttpRequestData req)
     {
-        await _workforce.InitializeAsync();
         var workers = await _workforce.GetDetailAsync();
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(workers);

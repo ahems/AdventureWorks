@@ -49,7 +49,6 @@ The visual overview is the [architecture diagram](../docs/AdventureWorks-Referen
 | `aca-seed-job.bicep` | Seed Container Apps job |
 | `flex-api-functions.bicep` | Functions Flex Consumption app, VNet integration and two always-ready instances |
 | `swa-app.bicep` | Static Web App for the storefront |
-| `swa-app-admin.bicep` | Not referenced by `main.bicep` (the admin portal runs on Container Apps) |
 
 Storage queues, tables and containers are declared only here; application code never
 creates them. See [storage resources](../docs/reference/storage-resources.md).
@@ -72,6 +71,15 @@ The templates create no custom role definitions. Runtime identities receive buil
 each scoped to the Communication, Web PubSub or Foundry resource it uses. Every built-in
 role ID that Bicep or the hooks assign is listed in
 [azd-role-assignment-allowlist.json](./azd-role-assignment-allowlist.json).
+
+The Functions runtime needs only two Web PubSub data actions: `group/send/action` for
+`SendToGroup` and `clientConnection/generateToken/action` for the negotiate route's
+Entra-signed client URL. The only built-in Web PubSub roles are **Web PubSub Service
+Owner** (`WebPubSub/*`) and **Web PubSub Service Reader** (read only, which can do
+neither). A narrower custom role would need `Microsoft.Authorization/roleDefinitions/write`,
+which the conditioned deployer deliberately lacks, and a per-tenant role ID that a static
+allowlist cannot pin. The template therefore assigns Service Owner scoped to the single
+Web PubSub resource, which has local (key) auth disabled.
 
 The deployer needs Contributor plus the subscription-specific
 [deployer role](./azd-deployer-role.json), which adds only

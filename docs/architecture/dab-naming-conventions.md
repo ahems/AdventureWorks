@@ -113,6 +113,7 @@ objects are deliberately not in the configuration:
 | `HumanResources.Employee` | `hierarchyid` columns | `Employee` entity backed by the `HumanResources.vEmployee` view |
 | `Production.Document`, `Production.ProductDocument` | `hierarchyid` column | Not exposed |
 | `Sales.GuestCartSession` | Guest cart state owned by Functions | Cart routes in api-functions |
+| `Person.PasswordResetToken` | Password-reset token hashes owned by Functions | Password reset routes in api-functions |
 | `dbo.RealtimeNotificationOutbox` | Internal Web PubSub outbox | See [real-time eventing](realtime-eventing.md) |
 | `dbo.AWBuildVersion`, `dbo.DatabaseLog`, `dbo.ErrorLog` | Column names with spaces or unsupported types | Not exposed |
 

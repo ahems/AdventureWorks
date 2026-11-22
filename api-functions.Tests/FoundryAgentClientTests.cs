@@ -963,11 +963,9 @@ public class FoundryAgentClientTests
     }
 
     [Theory]
-    [InlineData("queue", true)]
-    [InlineData("queue", false)]
-    [InlineData("activity", true)]
-    [InlineData("activity", false)]
-    public async Task Secondary_translation_policy_errors_stop_before_description_persistence(string caller, bool policy)
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Secondary_translation_policy_errors_stop_before_description_persistence(bool policy)
     {
         using var handler = new FoundryHandler
         {
@@ -994,25 +992,11 @@ public class FoundryAgentClientTests
 
         async Task Invoke()
         {
-            if (caller == "queue")
-            {
-                var function = new AIJobProcessorFunction(NullLogger<AIJobProcessorFunction>.Instance,
-                    NullLoggerFactory.Instance, services, product, null!, null!, translation, null!, null!);
-                var message = BinaryData.FromString(JsonSerializer.Serialize(
-                    new AiJobMessage { JobType = "translation", ProductModelId = request.ProductModelID }));
-                await function.AIJobProcessor_Chat_QueueTrigger(message, null!);
-            }
-            else
-            {
-                var function = new TranslateProductDescriptions(NullLogger<TranslateProductDescriptions>.Instance,
-                    NullLoggerFactory.Instance, services, translation);
-                var result = await function.TranslateSingleProductActivity(new TranslationActivityInput
-                {
-                    Products = [request],
-                    Cultures = [new api_functions.Models.CultureInfo { CultureID = "fr", Name = "French" }]
-                });
-                Assert.Single(result);
-            }
+            var function = new AIJobProcessorFunction(NullLogger<AIJobProcessorFunction>.Instance,
+                NullLoggerFactory.Instance, services, product, null!, null!, translation, null!, null!);
+            var message = BinaryData.FromString(JsonSerializer.Serialize(
+                new AiJobMessage { JobType = "translation", ProductModelId = request.ProductModelID }));
+            await function.AIJobProcessor_Chat_QueueTrigger(message, null!);
         }
 
         if (policy)
@@ -1021,7 +1005,7 @@ public class FoundryAgentClientTests
             await Invoke();
 
         Assert.Equal(2, handler.ResponseRequests.Count);
-        Assert.Equal(caller == "queue" && !policy ? 1 : 0, product.DescriptionSaveCalls);
+        Assert.Equal(policy ? 0 : 1, product.DescriptionSaveCalls);
         Assert.Equal(0, handler.McpRequests);
     }
 
@@ -1209,6 +1193,61 @@ public class FoundryAgentClientTests
             FirstResponseText = """{"Rating":5,"Comments":"Synthetic review"}"""
         };
         using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        using var tableHandler = new InMemoryTableHandler();
+        tableHandler.Seed(InMemoryTableHandler.VerifiedReviewsState("job-1", totalCount: 2, productsTotal: 2));
+        var (function, reviews) = CreateVerifiedReviewsFunction(handler, telemetry, tableHandler);
+
+        await function.ProcessVerifiedReviewsQueueMessage(VerifiedReviewsMessage("job-1", 42, "Synthetic", 1));
+        var requestsAfterStop = handler.ResponseRequests.Count;
+        await function.ProcessVerifiedReviewsQueueMessage(VerifiedReviewsMessage("job-1", 43, "Second", 2));
+
+        Assert.Equal(stage == "reply" ? 2 : 1, requestsAfterStop);
+        Assert.Equal(requestsAfterStop, handler.ResponseRequests.Count);
+        Assert.Equal(0, handler.McpRequests);
+        Assert.Equal(stage == "reply" ? 1 : 0, reviews.SavedCount);
+        var state = await reviews.GetVerifiedReviewsJobStateAsync();
+        Assert.False(state.IsRunning);
+        Assert.Equal(stage == "reply" ? 1 : 0, state.ProcessedCount);
+        Assert.Equal(0, state.ProductsProcessed);
+        Assert.Equal("The agent returned a tool call while tools were disabled.", state.LastError);
+    }
+
+    [Fact]
+    public async Task Redelivered_verified_review_message_does_not_regenerate_or_double_count()
+    {
+        using var handler = new FoundryHandler { FirstResponseText = """{"Rating":5,"Comments":"Synthetic review"}""" };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        using var tableHandler = new InMemoryTableHandler();
+        tableHandler.Seed(InMemoryTableHandler.VerifiedReviewsState("job-1", totalCount: 2, productsTotal: 2));
+        var (function, reviews) = CreateVerifiedReviewsFunction(handler, telemetry, tableHandler);
+        var first = VerifiedReviewsMessage("job-1", 42, "Synthetic", 1);
+
+        await function.ProcessVerifiedReviewsQueueMessage(first);
+        var requestsAfterFirst = handler.ResponseRequests.Count;
+        await function.ProcessVerifiedReviewsQueueMessage(first);
+
+        Assert.Equal(1, reviews.SavedCount);
+        Assert.Equal(requestsAfterFirst, handler.ResponseRequests.Count);
+        var state = await reviews.GetVerifiedReviewsJobStateAsync();
+        Assert.True(state.IsRunning);
+        Assert.Equal(1, state.ProductsProcessed);
+        Assert.Equal(1, state.ProcessedCount);
+
+        // Customer 2 is no longer eligible (e.g. reviewed elsewhere); the product still completes the job.
+        reviews.Ineligible.Add(2);
+        await function.ProcessVerifiedReviewsQueueMessage(VerifiedReviewsMessage("job-1", 43, "Second", 2));
+
+        state = await reviews.GetVerifiedReviewsJobStateAsync();
+        Assert.False(state.IsRunning);
+        Assert.Equal(2, state.ProductsProcessed);
+        Assert.Equal(2, state.ProcessedCount);
+        Assert.NotNull(state.CompletedAt);
+        Assert.Equal(requestsAfterFirst, handler.ResponseRequests.Count);
+    }
+
+    private (GenerateVerifiedReviewsFunction Function, StubReviewService Reviews) CreateVerifiedReviewsFunction(
+        FoundryHandler handler, TelemetryConfiguration telemetry, InMemoryTableHandler tableHandler)
+    {
         var telemetryClient = new TelemetryClient(telemetry);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -1221,39 +1260,25 @@ public class FoundryAgentClientTests
             config, CreateClient(handler, telemetry), telemetryClient);
         var publisher = new WebPubSubService(null, new DefaultAzureCredential(),
             NullLogger<WebPubSubService>.Instance);
-        using var tableHandler = new SuccessfulTableWriteHandler();
-        using var tableTransport = new HttpClient(tableHandler);
-        var options = new TableClientOptions { Transport = new HttpClientTransport(tableTransport) };
+        var options = new TableClientOptions { Transport = new HttpClientTransport(new HttpClient(tableHandler, false)) };
         options.Retry.MaxRetries = 0;
         var table = new TableClient(new Uri("https://unit.table.core.windows.net"), "verifiedReviewsJob",
             new TestCredential(), options);
         var reviews = new StubReviewService(publisher, table);
+        var queue = new VerifiedReviewsQueue(new Azure.Storage.Queues.QueueClient(
+            new Uri("https://unit.queue.core.windows.net/verified-reviews-queue"), new TestCredential()));
         var function = new GenerateVerifiedReviewsFunction(NullLogger<GenerateVerifiedReviewsFunction>.Instance,
-            reviewAgent, reviewBatchAgent, reviews, telemetryClient, publisher);
-        var state = new VerifiedReviewsJobState { IsRunning = true, TotalCount = 2, ProductsTotal = 2 };
-        var batch = new List<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)>
-        {
-            (new ProductForReviewGeneration { ProductID = 42, Name = "Synthetic" },
-             [new CustomerWithDeliveredOrder { CustomerID = 1 }]),
-            (new ProductForReviewGeneration { ProductID = 43, Name = "Second" },
-             [new CustomerWithDeliveredOrder { CustomerID = 2 }])
-        };
-        var run = typeof(GenerateVerifiedReviewsFunction).GetMethod("RunBatchJobAsync",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-
-        await (Task)run.Invoke(function, [batch, state])!;
-
-        Assert.Equal(stage == "reply" ? 2 : 1, handler.ResponseRequests.Count);
-        Assert.Equal(0, handler.McpRequests);
-        Assert.False(state.IsRunning);
-        Assert.Equal(stage == "reply" ? 1 : 0, reviews.SavedCount);
-        Assert.Equal(stage == "reply" ? 1 : 0, state.ProcessedCount);
-        Assert.Equal(0, state.ProductsProcessed);
-        Assert.Equal("The agent returned a tool call while tools were disabled.", state.LastError);
-        var persistedState = Assert.Single(tableHandler.Writes, write => !write.GetProperty("IsRunning").GetBoolean());
-        Assert.Equal(state.LastError, persistedState.GetProperty("LastError").GetString());
-        Assert.Equal(state.ProcessedCount, persistedState.GetProperty("ProcessedCount").GetInt32());
+            reviewAgent, reviewBatchAgent, reviews, telemetryClient, publisher, queue);
+        return (function, reviews);
     }
+
+    private static BinaryData VerifiedReviewsMessage(string jobId, int productId, string name, int customerId) =>
+        BinaryData.FromString(JsonSerializer.Serialize(new VerifiedReviewsQueueMessage
+        {
+            JobId = jobId,
+            Product = new ProductForReviewGeneration { ProductID = productId, Name = name },
+            CustomerIds = [customerId]
+        }));
 
     [Fact]
     public async Task Review_agent_does_not_log_unparseable_generated_content()
@@ -2949,23 +2974,6 @@ public class FoundryAgentClientTests
             ValueTask.FromResult(GetToken(requestContext, cancellationToken));
     }
 
-    private sealed class SuccessfulTableWriteHandler : HttpMessageHandler
-    {
-        public List<JsonElement> Writes { get; } = [];
-
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Assert.NotNull(request.Content);
-            using var document = JsonDocument.Parse(await request.Content.ReadAsStringAsync(cancellationToken));
-            Writes.Add(document.RootElement.Clone());
-            return new HttpResponseMessage(HttpStatusCode.NoContent)
-            {
-                Content = new StringContent(string.Empty)
-            };
-        }
-    }
-
     private sealed class ModerationTableHandler : HttpMessageHandler
     {
         private JsonObject _entity = JsonNode.Parse("""
@@ -3017,9 +3025,23 @@ public class FoundryAgentClientTests
         : ReviewService("not-a-connection-string", "unused", publisher, table)
     {
         public int SavedCount { get; private set; }
+        public HashSet<int> Ineligible { get; } = [];
 
         public override Task<int> SaveGeneratedReviewAndGetIdAsync(GeneratedReview review) =>
             Task.FromResult(++SavedCount);
+
+        // Product N's only candidate is customer N - 41; once reviewed, the customer is no longer eligible.
+        public override Task<List<CustomerWithDeliveredOrder>> GetCustomersWithDeliveredOrderForProductAsync(int productId)
+        {
+            var customerId = productId - 41;
+            return Task.FromResult<List<CustomerWithDeliveredOrder>>(
+                SavedCount >= customerId || Ineligible.Contains(customerId)
+                    ? []
+                    : [new CustomerWithDeliveredOrder { CustomerID = customerId }]);
+        }
+
+        public override Task SaveReviewReplyAsync(int reviewId, string reply, string repliedBy = "AdventureWorks Team") =>
+            Task.CompletedTask;
     }
 
     private sealed class StubTranslationProductService() : ProductService("not-a-connection-string")

@@ -74,7 +74,7 @@ The admin portal uses the OAuth 2.0 authorization code flow with PKCE against ap
 | Allowed user category | `employee` |
 | Scopes requested | `offline_access mcp.access realtime.connect products.read sales.read customers.read customers.write inventory.read orders.read orders.write manufacturing.read manufacturing.write admin.read admin.write mcp.admin`. The server narrows them to the user's role. |
 | Tokens held | DAB, Functions and MCP audience tokens; the first is from the code exchange and the others come from a refresh-token resource switch. Stored in `localStorage` (`dab_oauth_token`, `fn_oauth_token`, `mcp_oauth_token`) and refreshed 60 seconds before expiry. |
-| Request headers | The GraphQL client adds `Authorization` and `X-MS-API-ROLE` (the first `roles` claim). A fetch interceptor adds the Functions token to calls to the Functions base URL. |
+| Request headers | Every DAB call (the GraphQL client and REST calls) goes through `dabFetch`, which adds `Authorization` and `X-MS-API-ROLE` (the first `roles` claim) and retries once after a forced token refresh on HTTP 401 or `AUTH_NOT_AUTHENTICATED`. A fetch interceptor adds the Functions token to calls to the Functions base URL. |
 | Wrong category | Sign-in is refused with "This portal is restricted to AdventureWorks administrators." |
 | Redirect URIs | Registered on api-mcp by `scripts/hooks/postdeploy.sh` from `APP_ADMIN_URL` |
 
@@ -96,7 +96,16 @@ sequenceDiagram
     B->>F: "/api/... with Bearer Functions token"
 ```
 
-**Role derivation and effective permissions.** The role comes from the employee's department. Every page loads for any admin role, but each API call is authorized by scope, so a page can show a permission error for one role and work for another.
+**Role derivation and effective permissions.** The role comes from the employee's department. Every page loads for any admin role, and each API call is authorized by the server. The UI also reads the DAB token's `scope` claim (`useCan` / `<Can>` in `src/lib/permissions.ts`) and hides or disables actions whose Functions route needs a scope the role lacks:
+
+| Scope | Gated actions |
+|---|---|
+| `admin.write` | AI generation and translation (products, variations, categories, customers, orders, promotions, reviews, emails), category create/delete, review AI analysis, AI replies and analyze-and-approve-all, receipt generation, store orders, exchange-rate refresh, auto-promotion settings, shopping-simulator controls |
+| `orders.write` | Order status actions (begin processing, ship, cancel) and order-pipeline settings and promotion |
+| `admin.write` (DAB) | Review approve/reply/delete, product save/delete and photo delete, list-price edits, clearance promotions and retire on the profitability pages, promotion create/edit/delete and product assignment, cultures and localizations |
+| `customers.write` | Customer address add/edit/delete, setting a password directly, sending a password reset, and the contact, email and payment-method panels (DAB) |
+
+DAB grants admin-role writes by the same scopes ([DAB entities](../reference/dab-entities.md#roles)), so `inventory-admin` is read-only, only `executive-admin` can change orders, and only `marketing-admin` and `executive-admin` can edit the catalog, promotions and reviews. The gating is a convenience; DAB and Functions remain authoritative.
 
 | Department | Role | Notable scopes |
 |---|---|---|
@@ -132,10 +141,10 @@ The `App.tsx` route table has **30 routes plus a catch-all**: `/login` and `/oau
 | Route | What the admin sees and does | Backend calls | Live |
 |---|---|---|---|
 | `/customers` | Customer list with total spend, filters and sorting. Generate a customer with AI, or write and send AI-generated emails to one or many customers. | DAB GraphQL `customers`, `people`, `emailAddresses`, `salesOrderHeaders`; Functions `GET /api/person-addresses`, `POST /api/customers/generate-with-ai`, `POST /api/email/generate-ai-content`, `POST /api/persons/{id}/send-email` | `orders`, `shopping-simulator` |
-| `/customers/:customerId` | Customer profile: names, email addresses, phones, addresses, payment methods, orders, and a password reset or set. | DAB GraphQL/REST (`Person`, `PersonPhone`, `BusinessEntityAddress`, `PersonCreditCard`); Functions `/api/addresses`, `POST /api/password/reset/request`, `POST /api/password` | `orders` |
+| `/customers/:customerId` | Customer profile: names, email addresses, phones, addresses, payment methods, orders, and a password reset or set. | DAB GraphQL/REST (`Person`, `PersonPhone`, `BusinessEntityAddress`, `PersonCreditCard`); Functions `/api/addresses`, `POST /api/password/reset/admin-request`, `POST /api/password` | `orders` |
 | `/customer-stats` | Aggregate customer statistics: totals, country and region breakdowns, monthly revenue. | Functions `GET /api/customer-stats`, `/customer-country-breakdown`, `/customer-region-breakdown`, `/customer-monthly-revenue` | `orders`, `shopping-simulator` |
-| `/orders` | Order list with date filters and status tabs (Processing, Pending, Shipped, Cancelled, Delivered). Generate missing PDF receipts in bulk. | DAB GraphQL `salesOrderHeaders`; Functions `POST /api/GenerateOrderReceipts_HttpStart`, `POST /api/orders/generate-missing-receipts` | `orders`, `shopping-simulator` |
-| `/orders/:orderId` | Order detail with lines and addresses. Actions: begin processing, ship, cancel, download or email the receipt. | DAB GraphQL; Functions `POST /api/orders/begin-processing-order`, `POST /api/orders/{id}/ship`, `GET /api/orders/{id}/receipt-status`, `GET /api/orders/{id}/receipt`, `POST /api/orders/generate-and-send-receipt` | `orders` |
+| `/orders` | Order list with date filters and status filters (Processing, Pending, Shipped, Cancelled, Delivered, Rejected). Pending covers Approved (2) and Backordered (3); Rejected (4) has its own filter. Generate missing PDF receipts in bulk. | DAB GraphQL `salesOrderHeaders`; Functions `POST /api/GenerateOrderReceipts_HttpStart`, `POST /api/orders/generate-missing-receipts` | `orders`, `shopping-simulator` |
+| `/orders/:orderId` | Order detail with lines and addresses. Actions: begin processing, ship, cancel (In process, Approved or Backordered only; the server returns 409 otherwise), download or email the receipt. | DAB GraphQL; Functions `POST /api/orders/begin-processing-order`, `POST /api/orders/{id}/ship`, `POST /api/orders/{id}/cancel`, `GET /api/orders/{id}/receipt-status`, `GET /api/orders/{id}/receipt`, `POST /api/orders/generate-and-send-receipt` | `orders` |
 | `/order-pipeline` | Order pipeline settings: minutes from processing to approved and hours from approved to shipped, live counts per status, and buttons to promote pending or approved orders now. | Functions `GET/PUT /api/orders/pipeline/config`, `GET /api/orders/pipeline/status`, `POST /api/orders/pipeline/promote-pending`, `POST /api/orders/pipeline/promote-approved` | `orders` |
 | `/generate-order` | AI order generator: create one realistic order (with refinement) or queue a bulk batch. | Functions `POST /api/GenerateOrderWithAI`, `POST /api/GenerateOrdersBulk` | — |
 | `/stores` | B2B stores: store list, territories, store order history, and **Place store order** for a reseller. | Functions `GET /api/stores`, `/api/stores/{id}`, `/api/stores/{id}/orders`, `/api/store-territories`, `/api/orders/{id}/lines`, `/api/store-products`, `/api/product-catalog`, `POST /api/store-orders` | `orders` |
@@ -169,7 +178,7 @@ The `App.tsx` route table has **30 routes plus a catch-all**: `/login` and `/oau
 | Backend | Used for |
 |---|---|
 | **DAB GraphQL** (`API_URL`) | Most reads (catalog, customers, orders, reviews, offers, cultures, currencies, transactions) and CRUD mutations, sent with the admin role header. |
-| **DAB REST** (`API_URL` with `/graphql` replaced by `/api`) | Review approval and replies, phones, business-entity addresses, payment-method deletes. |
+| **DAB REST** (`API_URL` with `/graphql` replaced by `/api`) | Review approval and replies, phones, business-entity addresses, payment-method deletes, country/state lookups, sent through `dabFetch` with the same token and role header. |
 | **Azure Functions** (`API_FUNCTIONS_URL`) | Reporting, AI generation, orders and receipts, stores, review moderation jobs, warehouse, simulator, pipeline, exchange rates, addresses (`Person.Address` is not in DAB) and Web PubSub negotiation. |
 | **api-mcp** (`API_MCP_URL`) | OAuth only. MCP tools are used by the dashboard AI chat through Functions, and interactively through the [MCP Inspector](mcp-inspector.md). |
 
@@ -180,7 +189,7 @@ The `App.tsx` route table has **30 routes plus a catch-all**: `/login` and `/oau
 | Group | Server grant (scope) | Refreshes |
 |---|---|---|
 | `orders` | `orders.read` or `manufacturing.read` | Orders, order lines, receipt status, stores, carts, reporting, customer stats, dashboard |
-| `warehouse` | `inventory.read` | Inventory, transaction history, inventory report, dashboard, warehouse page |
+| `warehouse` | `inventory.read` or `manufacturing.read` | Inventory, transaction history, inventory report, dashboard, warehouse page |
 | `shopping-simulator` | `admin.read` or `manufacturing.read` | Orders, customers, customer stats, dashboard, simulator page |
 | `reviews` | `admin.read` | Reviews, moderation job status, verified-reviews wizard |
 | `promotions` | `admin.read` | Special offers, reporting, auto-promotion counters |
@@ -216,21 +225,20 @@ See the [environment variables reference](../reference/environment-variables.md)
 
 The app uses the Application Insights web SDK with the cloud role name **`app-admin`**. It tracks routes automatically and correlates requests to the GraphQL, Functions and MCP hosts. See [monitoring](../operations/monitoring.md).
 
-## Local development
+## Building and deploying
 
 ```bash
 cd app-admin
-npm install
-npm run dev        # Vite dev server on http://localhost:8080
+npm ci
+npx tsc --noEmit -p tsconfig.app.json   # type-check
+npm run build           # production bundle in dist/
 ```
 
-- Set `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` and `VITE_API_MCP_URL` in `app-admin/.env` to the deployed values (`azd env get-value <KEY> --no-prompt`).
-- api-mcp's built-in development redirect URI for this client is `http://localhost:5174/oauth/callback`. Either run Vite on port 5174 (`npm run dev -- --port 5174`) or register your local callback on api-mcp.
-- Deploy changes with `azd deploy app-admin --no-prompt`. See [deployment](../operations/deployment.md).
+The portal runs only in Azure. Deploy changes with `azd deploy app-admin --no-prompt` and test at `APP_ADMIN_URL`. See [deployment](../operations/deployment.md). api-mcp's `http://localhost:5174/oauth/callback` registration is a loopback callback for [`azure-auth.py`](../testing/AZURE_AUTHENTICATED_SCRIPTS.md), not a dev server.
 
 ## Tests
 
-The admin portal has no unit test suite. Run `npm run lint` in `app-admin/`. The cross-frontend regression `node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs` covers its live-update batching and its no-polling rule. To check the APIs behind the pages, use the scripted calls in [authenticated scripts](../testing/AZURE_AUTHENTICATED_SCRIPTS.md), for example:
+Run `npm test` (Vitest with jsdom) and `npm run lint` in `app-admin/`. The Vitest suite checks that `dabFetch` attaches the bearer token and role header and retries after a refresh, that the DAB REST hooks and GraphQL client use it, and that scope gating hides or disables controls. The cross-frontend regression `node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs` covers its live-update batching and its no-polling rule. To check the APIs behind the pages, use the scripted calls in [authenticated scripts](../testing/AZURE_AUTHENTICATED_SCRIPTS.md), for example:
 
 ```bash
 python3 scripts/utilities/azure-auth.py request \

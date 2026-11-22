@@ -86,6 +86,19 @@ public sealed class WebPubSubAuthorizationTests
     }
 
     [Theory]
+    [InlineData(FunctionScopes.InventoryRead)]
+    [InlineData(FunctionScopes.ManufacturingRead)]
+    public void Warehouse_group_follows_inventory_views_and_warehouse_route_scopes(string scope)
+    {
+        Assert.Contains("warehouse", WebPubSubService.GetAuthorizedGroups(
+            User(UserCategories.Manufacturing, FunctionScopes.RealtimeConnect, scope)));
+        Assert.Contains("warehouse", WebPubSubService.GetAuthorizedGroups(
+            User(UserCategories.Employee, FunctionScopes.RealtimeConnect, scope)));
+        Assert.DoesNotContain("warehouse", WebPubSubService.GetAuthorizedGroups(
+            User(UserCategories.Consumer, FunctionScopes.RealtimeConnect, scope)));
+    }
+
+    [Theory]
     [InlineData("orders", "orders-changed")]
     [InlineData("finance", "finance-changed")]
     public void Shared_group_payloads_are_reduced_to_nonidentifying_invalidations(string group, string expectedEvent)

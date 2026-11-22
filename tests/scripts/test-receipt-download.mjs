@@ -6,7 +6,7 @@ import vm from "node:vm";
 
 const ts = createRequire(new URL("../../app-admin/package.json", import.meta.url))("typescript");
 
-async function loadDownload(status = 200, contentType = "application/pdf") {
+async function loadDownload(status = 200, contentType = "application/pdf", { generationCurrent = true } = {}) {
   const calls = [];
   const links = [];
   const revoked = [];
@@ -41,9 +41,17 @@ async function loadDownload(status = 200, contentType = "application/pdf") {
   const config = new vm.SyntheticModule(["getFunctionsApiUrl"], function () {
     this.setExport("getFunctionsApiUrl", () => "https://functions.example.test");
   }, { context });
-  const auth = new vm.SyntheticModule(["hasSession", "getFunctionsAccessToken"], function () {
+  const auth = new vm.SyntheticModule([
+    "hasSession",
+    "getFunctionsAccessToken",
+    "getTabAuthorizationGeneration",
+    "isTabAuthorizationGenerationCurrent",
+  ], function () {
     this.setExport("hasSession", () => true);
     this.setExport("getFunctionsAccessToken", async () => "test-functions-token");
+    this.setExport("getTabAuthorizationGeneration", () => "test-generation");
+    this.setExport("isTabAuthorizationGenerationCurrent", generation =>
+      generationCurrent && generation === "test-generation");
   }, { context });
   async function load(path) {
     const source = await readFile(new URL(`../../app-admin/src/services/${path}.ts`, import.meta.url), "utf8");
@@ -86,6 +94,13 @@ for (const status of [401, 403, 404, 500]) {
     assert.equal(env.blobs.length, 0);
   });
 }
+
+test("receipt download is not sent after the tab authorization generation changes", async () => {
+  const env = await loadDownload(200, "application/pdf", { generationCurrent: false });
+  await assert.rejects(env.download(75126), /session has expired/);
+  assert.equal(env.calls.length, 0);
+  assert.equal(env.links.length, 0);
+});
 
 test("successful non-PDF response is rejected rather than downloaded", async () => {
   const env = await loadDownload(200, "text/html");

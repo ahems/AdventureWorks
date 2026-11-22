@@ -25,6 +25,8 @@ import { useAddresses, Address } from "@/hooks/useAddresses";
 import {
   usePaymentMethods,
   SavedPaymentMethod,
+  TEST_CARD_NUMBERS,
+  isLuhnValid,
 } from "@/hooks/usePaymentMethods";
 import {
   useEmailAddresses,
@@ -66,19 +68,40 @@ const shippingSchema = z.object({
 
 type ShippingData = z.infer<typeof shippingSchema>;
 
-// Mock discount codes
-const DISCOUNT_CODES: Record<
-  string,
-  { type: "percent" | "freeshipping"; value?: number; description: string }
-> = {
-  SAVE10: { type: "percent", value: 10, description: "10% off your order" },
-  SAVE20: { type: "percent", value: 20, description: "20% off your order" },
-  FREESHIP: { type: "freeshipping", description: "Free shipping" },
-  ADVENTURE25: {
-    type: "percent",
-    value: 25,
-    description: "25% off your order",
-  },
+// Discount codes are validated and priced server-side (POST /api/orders/checkout/quote).
+interface AppliedDiscount {
+  code: string;
+  type: "percent" | "freeshipping";
+  percent: number;
+  description: string;
+}
+
+interface CheckoutLine {
+  productId: number;
+  quantity: number;
+}
+
+/** Product IDs and quantities only — the server prices every line. */
+const toCheckoutLines = (
+  cartItems: { ProductID: number; quantity: number }[],
+): CheckoutLine[] => {
+  const quantities = new Map<number, number>();
+  for (const item of cartItems) {
+    quantities.set(item.ProductID, (quantities.get(item.ProductID) ?? 0) + item.quantity);
+  }
+  return [...quantities].map(([productId, quantity]) => ({ productId, quantity }));
+};
+
+const readCheckoutError = async (response: Response) => {
+  try {
+    const body: { error?: unknown; reason?: unknown } = await response.json();
+    return {
+      error: typeof body.error === "string" ? body.error : null,
+      reason: typeof body.reason === "string" ? body.reason : null,
+    };
+  } catch {
+    return { error: null, reason: null };
+  }
 };
 
 // Currency code to symbol mapping - complete list from database
@@ -123,6 +146,8 @@ const GET_CURRENCY_RATE = gql`
         FromCurrencyCode: { eq: "USD" }
         ToCurrencyCode: { eq: $toCurrencyCode }
       }
+      orderBy: { CurrencyRateDate: DESC }
+      first: 1
     ) {
       items {
         AverageRate
@@ -173,26 +198,11 @@ interface ShipMethod {
   ShipRate: number;
 }
 
+// Demo storefront: only well-known public test card numbers are accepted. The number stays in
+// the browser; checkout never sends it, and saving a card sends only brand, last four and expiry.
 const isValidCardNumber = (number: string): boolean => {
   const digits = number.replace(/\s/g, "");
-  if (!/^\d{13,19}$/.test(digits)) return false;
-
-  let sum = 0;
-  let isEven = false;
-
-  for (let i = digits.length - 1; i >= 0; i--) {
-    let digit = parseInt(digits[i], 10);
-
-    if (isEven) {
-      digit *= 2;
-      if (digit > 9) digit -= 9;
-    }
-
-    sum += digit;
-    isEven = !isEven;
-  }
-
-  return sum % 10 === 0;
+  return isLuhnValid(digits) && TEST_CARD_NUMBERS.has(digits);
 };
 
 const CheckoutPage: React.FC = () => {
@@ -240,7 +250,9 @@ const CheckoutPage: React.FC = () => {
   const [saveNewPayment, setSaveNewPayment] = useState(false);
   const [paymentLabel, setPaymentLabel] = useState("");
   const [discountCode, setDiscountCode] = useState("");
-  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+  const appliedCode = appliedDiscount?.code ?? null;
+  const [isApplyingCode, setIsApplyingCode] = useState(false);
   const [codeError, setCodeError] = useState("");
   const [taxRate, setTaxRate] = useState(0.08); // Default 8%
   const [currencyCode, setCurrencyCode] = useState("USD");
@@ -505,11 +517,10 @@ const CheckoutPage: React.FC = () => {
   const originalPriceConverted = originalPrice * exchangeRate;
   const totalDiscountConverted = totalDiscount * exchangeRate;
 
-  // Calculate discount from code
-  const appliedDiscount = appliedCode && DISCOUNT_CODES[appliedCode];
+  // Preview only: the server recalculates every amount when the order is placed.
   const codeDiscountAmount =
     appliedDiscount?.type === "percent"
-      ? totalPriceConverted * (appliedDiscount.value! / 100)
+      ? totalPriceConverted * (appliedDiscount.percent / 100)
       : 0;
   const priceAfterCodeDiscount = totalPriceConverted - codeDiscountAmount;
   const freeShippingFromCode = appliedDiscount?.type === "freeshipping";
@@ -526,23 +537,63 @@ const CheckoutPage: React.FC = () => {
   const tax = priceAfterCodeDiscount * taxRate;
   const grandTotal = priceAfterCodeDiscount + shipping + tax;
 
-  const handleApplyCode = () => {
+  const handleApplyCode = async () => {
     const code = discountCode.toUpperCase().trim();
     if (!code) {
       setCodeError("Please enter a code");
       return;
     }
-    if (DISCOUNT_CODES[code]) {
-      setAppliedCode(code);
+    setIsApplyingCode(true);
+    try {
+      const response = await functionsFetch(
+        `${getFunctionsApiUrl()}/api/orders/checkout/quote`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lines: toCheckoutLines(items),
+            discountCode: code,
+            displayCurrency: currencyCode,
+          }),
+        },
+      );
+      if (!response.ok) {
+        const { reason } = await readCheckoutError(response);
+        setCodeError(
+          reason === "invalid-discount-code"
+            ? t("checkout.invalidCode")
+            : t("checkout.orderFailedDesc"),
+        );
+        return;
+      }
+      const quote: { discount?: Partial<AppliedDiscount> | null } = await response.json();
+      const discount = quote.discount;
+      if (
+        !discount ||
+        typeof discount.code !== "string" ||
+        (discount.type !== "percent" && discount.type !== "freeshipping")
+      ) {
+        setCodeError(t("checkout.invalidCode"));
+        return;
+      }
+      setAppliedDiscount({
+        code: discount.code,
+        type: discount.type,
+        percent: typeof discount.percent === "number" ? discount.percent : 0,
+        description: typeof discount.description === "string" ? discount.description : "",
+      });
       setDiscountCode("");
       setCodeError("");
-    } else {
-      setCodeError(t("checkout.invalidCode"));
+    } catch (error) {
+      trackError("Discount code validation error", error, { page: "CheckoutPage" });
+      setCodeError(t("checkout.orderFailedDesc"));
+    } finally {
+      setIsApplyingCode(false);
     }
   };
 
   const handleRemoveCode = () => {
-    setAppliedCode(null);
+    setAppliedDiscount(null);
     setCodeError("");
   };
 
@@ -679,7 +730,7 @@ const CheckoutPage: React.FC = () => {
         user &&
         paymentMethod === "card"
       ) {
-        addPaymentMethod({
+        const saved = await addPaymentMethod({
           type: "card",
           label: paymentLabel || "Credit Card",
           cardNumber: cardData.number,
@@ -687,10 +738,27 @@ const CheckoutPage: React.FC = () => {
           cardholderName: cardData.name,
           isDefault: paymentMethods.length === 0,
         });
-        toast({
-          title: t("checkout.paymentMethodSaved"),
-          description: t("checkout.paymentMethodSavedDesc"),
-        });
+        if (saved.ok) {
+          toast({
+            title: t("checkout.paymentMethodSaved"),
+            description: t("checkout.paymentMethodSavedDesc"),
+          });
+        } else if (saved.reason === "request-failed") {
+          // Saving the card is optional; the order itself does not depend on it.
+          toast({
+            title: t("account.error"),
+            description: t("account.errorSavePayment"),
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: t("account.error"),
+            description: t("account.invalidTestCard"),
+            variant: "destructive",
+          });
+          setIsProcessing(false);
+          return;
+        }
       }
 
       if (!user?.businessEntityId) {
@@ -745,57 +813,46 @@ const CheckoutPage: React.FC = () => {
       // Convert address ID from string to number for the owner-bound order API.
       const addressId = parseInt(addressIdString, 10);
 
-      // Step 3: Create the header after the server checks both address links and signed owner.
-      const orderHeaderResponse = await functionsFetch(`${getFunctionsApiUrl()}/api/orders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          billToAddressId: addressId,
-          shipToAddressId: addressId,
-          shipMethodId: selectedShipMethodId || 5,
-          subTotal: parseFloat(totalPrice.toFixed(2)),
-          taxAmt: parseFloat(tax.toFixed(2)),
-          freight: parseFloat(shipping.toFixed(2)),
-        }),
-      });
-      if (!orderHeaderResponse.ok) {
-        throw new Error(`Failed to create order (${orderHeaderResponse.status})`);
+      // Step 3: One server call prices the cart, checks the signed owner and address links,
+      // and writes the header and every line in a single SQL transaction.
+      const checkoutResponse = await functionsFetch(
+        `${getFunctionsApiUrl()}/api/orders/checkout`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lines: toCheckoutLines(items),
+            billToAddressId: addressId,
+            shipToAddressId: addressId,
+            shipMethodId: selectedShipMethodId || 5,
+            discountCode: appliedCode,
+            displayCurrency: currencyCode,
+          }),
+        },
+      );
+      if (!checkoutResponse.ok) {
+        const { error, reason } = await readCheckoutError(checkoutResponse);
+        if (reason === "invalid-discount-code") {
+          setAppliedDiscount(null);
+          setCodeError(t("checkout.invalidCode"));
+        }
+        throw new Error(error ?? `Failed to create order (${checkoutResponse.status})`);
       }
-      const orderHeader: { salesOrderId?: unknown } = await orderHeaderResponse.json();
-      if (typeof orderHeader.salesOrderId !== "number" ||
-          !Number.isSafeInteger(orderHeader.salesOrderId) || orderHeader.salesOrderId <= 0) {
+      const order: {
+        salesOrderId?: unknown;
+        display?: { totalDue?: unknown; taxAmt?: unknown; freight?: unknown };
+      } = await checkoutResponse.json();
+      if (typeof order.salesOrderId !== "number" ||
+          !Number.isSafeInteger(order.salesOrderId) || order.salesOrderId <= 0) {
         throw new Error("Order creation returned an invalid order ID.");
       }
-      const salesOrderId = orderHeader.salesOrderId;
-
-      // Step 4: Create SalesOrderDetail for each cart item
-      for (const item of items) {
-        const salePrice = getSalePrice(item);
-        const itemPrice = salePrice || item.ListPrice;
-        const discount = salePrice
-          ? (item.ListPrice - salePrice) / item.ListPrice
-          : 0;
-
-        const detailResponse = await functionsFetch(
-          `${getFunctionsApiUrl()}/api/orders/${salesOrderId}/details`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productId: item.ProductID,
-              orderQty: item.quantity,
-              unitPrice: parseFloat(itemPrice.toFixed(2)),
-              unitPriceDiscount: parseFloat(discount.toFixed(4)),
-            }),
-          },
-        );
-        if (!detailResponse.ok) {
-          throw new Error(
-            `Failed to add order item (${detailResponse.status})`,
-          );
-        }
-
-      }
+      const salesOrderId = order.salesOrderId;
+      // Server totals are authoritative; fall back to the preview only if they are missing.
+      const serverAmount = (value: unknown, fallback: number) =>
+        typeof value === "number" && Number.isFinite(value) ? value : fallback;
+      const confirmedTotal = serverAmount(order.display?.totalDue, grandTotal);
+      const confirmedTax = serverAmount(order.display?.taxAmt, tax);
+      const confirmedShipping = serverAmount(order.display?.freight, shipping);
 
       // Generate order number
       const orderId = `SO-${salesOrderId}`;
@@ -814,9 +871,9 @@ const CheckoutPage: React.FC = () => {
       trackEvent("Purchase_Complete", {
         orderId: salesOrderId,
         customerId: customerId,
-        revenue: grandTotal,
-        tax: tax,
-        shipping: shipping,
+        revenue: confirmedTotal,
+        tax: confirmedTax,
+        shipping: confirmedShipping,
         itemCount: items.length,
         paymentMethod: paymentMethod,
         currencyCode: currencyCode,
@@ -1434,7 +1491,11 @@ const CheckoutPage: React.FC = () => {
                                   </p>
                                 );
                               }
-                              return null;
+                              return (
+                                <p className="font-doodle text-xs text-doodle-text/70 mt-1">
+                                  {t("account.testCardsOnly")}
+                                </p>
+                              );
                             })()}
                           </div>
                           <div>
@@ -1706,7 +1767,7 @@ const CheckoutPage: React.FC = () => {
                             {appliedCode}
                           </span>
                           <span className="font-doodle text-xs text-doodle-text/70">
-                            ({DISCOUNT_CODES[appliedCode]?.description})
+                            ({appliedDiscount?.description})
                           </span>
                         </div>
                         {step === 1 && (
@@ -1733,6 +1794,7 @@ const CheckoutPage: React.FC = () => {
                         />
                         <button
                           onClick={handleApplyCode}
+                          disabled={isApplyingCode}
                           className="doodle-button px-4"
                         >
                           {t("checkout.apply")}
@@ -1825,7 +1887,7 @@ const CheckoutPage: React.FC = () => {
                       <div className="flex justify-between text-doodle-green">
                         <span className="font-bold">
                           {t("checkout.code")}: {appliedCode} (-
-                          {appliedDiscount.value}%)
+                          {appliedDiscount.percent}%)
                         </span>
                         <span className="font-bold">
                           -{CURRENCY_SYMBOLS[currencyCode] || currencyCode}

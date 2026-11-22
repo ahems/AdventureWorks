@@ -187,6 +187,17 @@ builder.Services.AddSingleton(sp =>
         new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 })
         .GetQueueClient("order-receipt-generation");
 });
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var account = config["AzureWebJobsStorage:accountName"];
+    var uri = config["AzureWebJobsStorage:queueServiceUri"]
+        ?? (account is not null ? $"https://{account}.queue.core.windows.net"
+            : throw new InvalidOperationException("AzureWebJobsStorage queue endpoint is not set"));
+    return new VerifiedReviewsQueue(new QueueServiceClient(new Uri(uri), sp.GetRequiredService<DefaultAzureCredential>(),
+        new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 })
+        .GetQueueClient(VerifiedReviewsQueue.QueueName));
+});
 
 // Register PasswordService for password hashing and verification
 builder.Services.AddScoped<PasswordService>(sp =>
@@ -197,6 +208,31 @@ builder.Services.AddScoped<PasswordService>(sp =>
     return new PasswordService(connectionString);
 });
 builder.Services.AddScoped<IPasswordService>(sp => sp.GetRequiredService<PasswordService>());
+
+// Storefront password reset: hashed tokens in Person.PasswordResetToken and links built from the
+// trusted storefront APP_URL setting (never from request Origin/Referer headers).
+builder.Services.AddScoped<IPasswordResetStore>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new SqlPasswordResetStore(connectionString);
+});
+builder.Services.AddScoped<IPasswordResetNotifier, EmailPasswordResetNotifier>();
+builder.Services.AddScoped(sp => new PasswordResetService(
+    sp.GetRequiredService<IPasswordResetStore>(),
+    sp.GetRequiredService<IPasswordResetNotifier>(),
+    sp.GetRequiredService<IConfiguration>()["APP_URL"],
+    sp.GetRequiredService<ILogger<PasswordResetService>>()));
+
+// Storefront helpful-review votes: one row per person in Production.ProductReviewVote.
+builder.Services.AddScoped<IReviewVoteStore>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new SqlReviewVoteStore(connectionString);
+});
 
 // Register ExchangeRateService for refreshing Sales.CurrencyRate from Frankfurter API
 builder.Services.AddScoped<ExchangeRateService>(sp =>
@@ -538,12 +574,20 @@ builder.Services.AddScoped<IOrderDetailService>(sp =>
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     return new OrderDetailService(connectionString);
 });
-builder.Services.AddScoped<IOrderHeaderService>(sp =>
+builder.Services.AddScoped<ICheckoutStore>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var connectionString = configuration["SQL_CONNECTION_STRING"]
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
-    return new OrderHeaderService(connectionString);
+    return new SqlCheckoutStore(connectionString);
+});
+builder.Services.AddScoped<ICheckoutService, CheckoutService>();
+builder.Services.AddScoped<IOrderCancellationService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new OrderCancellationService(connectionString);
 });
 
 builder.Services.AddScoped<IPaymentMethodService>(sp =>
@@ -554,7 +598,7 @@ builder.Services.AddScoped<IPaymentMethodService>(sp =>
     return new PaymentMethodService(connectionString);
 });
 
-// Register manufacturing agent infrastructure (replaces ManufacturingAgentService).
+// Register manufacturing agent infrastructure (hosted Foundry agent).
 // Orders are now queued to manufacturing-agent-queue; the queue trigger invokes the hosted agent.
 builder.Services.AddScoped<ManufacturingAgentConfigService>(sp =>
     new ManufacturingAgentConfigService(sp.GetRequiredService<ILogger<ManufacturingAgentConfigService>>(), sp.GetRequiredService<WebPubSubService>()));
@@ -595,7 +639,8 @@ builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
         orderGenService,
         receiptService,
         pdfGenerator,
-        foundryClient);
+        foundryClient,
+        sp.GetRequiredService<ICheckoutService>());
 });
 
 // Register CustomerGenerationAgentService: AI+Foundry orchestration for customer generation
@@ -643,7 +688,23 @@ builder.Services.AddScoped<AIService>(sp =>
     var endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
         ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
-    return new AIService(endpoint, sp.GetRequiredService<ILogger<AIService>>(), telemetryClient);
+    return new AIService(endpoint, sp.GetRequiredService<ILogger<AIService>>(), telemetryClient,
+        configuration["AI_IMAGE_DEPLOYMENT_NAME"]);
+});
+
+// Cost protection for the anonymous storefront AI routes (helpme/*, search/semantic, search/suggestions).
+builder.Services.AddSingleton<AiRateLimitService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var accountName = configuration["AzureWebJobsStorage:accountName"] ?? string.Empty;
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{accountName}.table.core.windows.net";
+    var table = AiRateLimitService.CreateTableClient(tableServiceUri, new DefaultAzureCredential());
+    return new AiRateLimitService(
+        new TableAiRateLimitCounterStore(table),
+        AiRateLimitOptions.FromConfiguration(configuration),
+        sp.GetRequiredService<TimeProvider>(),
+        sp.GetRequiredService<ILogger<AiRateLimitService>>());
 });
 
 // Register EmailService for sending emails via Azure Communication Services

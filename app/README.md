@@ -28,15 +28,17 @@ Query, built locally and deployed to **Azure Static Web Apps** (azd service `app
 | `scripts/` | Build-time config generation and `node --test` regression tests |
 | `staticwebapp.config.template.json` | SPA fallback, sitemap redirect and security headers |
 
-## Run, build and test
+## Build and test
+
+The storefront runs only in Azure; build and test locally, then deploy.
 
 ```bash
 cd app
-npm install
-npm run dev          # Vite dev server on http://localhost:8080
+npm ci
 npm run build        # generates config.js and builds dist/
 npm run lint
-node --test scripts/health-checks.test.mjs scripts/sale-product-model-card.test.mjs
+npm run typecheck    # tsc --noEmit for tsconfig.app.json and tsconfig.node.json
+node --test scripts/*.test.mjs
 ```
 
 The storefront has no `npm test` script; run the `node --test` files directly. The
@@ -47,8 +49,7 @@ cross-frontend live-updates regression is
 
 Runtime values come from `window.APP_CONFIG` in `/config.js` (generated during
 `azd deploy`), falling back to `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` and
-`VITE_API_MCP_URL`. For local development against Azure, copy `.env.example` to
-`.env` and fill these from `azd env get-value <KEY> --no-prompt`. See
+`VITE_API_MCP_URL`, which `predeploy.sh` writes to `.env.production`. See
 [runtime configuration](../docs/apps/storefront.md#runtime-configuration) and the
 [environment variables reference](../docs/reference/environment-variables.md).
 

@@ -137,6 +137,9 @@ export interface CustomerWithDeliveredOrder {
 
 export interface VerifiedReviewsJobState {
   isRunning: boolean;
+  /** Computed by the server: running with no progress for 10+ minutes. A new job may replace it. */
+  isStale?: boolean;
+  jobId?: string;
   productId: number;
   productName: string;
   processedCount: number;
@@ -145,6 +148,7 @@ export interface VerifiedReviewsJobState {
   productsTotal: number;
   startedAt: string | null;
   lastProgressAt: string | null;
+  completedAt?: string | null;
   lastError: string | null;
 }
 
@@ -173,7 +177,8 @@ export const getVerifiedReviewsSummary =
   };
 
 /**
- * Starts a batch verified-reviews generation job.
+ * Starts a batch verified-reviews generation job. The server queues one message per
+ * product; progress arrives through Web PubSub `reviews` events.
  * productCount: 0 = all qualifying products.
  * reviewsPerProduct: 1..maxEligibleCustomersPerProduct (default 1).
  * specificProductId: when set, only generates for that product (product-page path).
@@ -183,7 +188,7 @@ export const startBatchVerifiedReviews = async (
   productCount: number,
   reviewsPerProduct: number,
   specificProductId?: number,
-): Promise<{ message: string; productsTotal: number; totalCount: number }> => {
+): Promise<{ message: string; jobId: string; productsTotal: number; totalCount: number }> => {
   const url = `${getFunctionsApiUrl()}/api/generate-verified-reviews/start`;
   const res = await fetch(url, {
     method: "POST",
@@ -472,12 +477,12 @@ export interface ArchiveTransactionsResult {
 /**
  * Manually triggers the TransactionHistory archive job.
  * Moves records older than 1 year from TransactionHistory → TransactionHistoryArchive.
- * GET /api/archive/trigger
+ * POST /api/archive/trigger
  */
 export const archiveTransactions =
   async (): Promise<ArchiveTransactionsResult> => {
     const url = `${getFunctionsApiUrl()}/api/archive/trigger`;
-    const res = await fetch(url, { method: "GET" });
+    const res = await fetch(url, { method: "POST" });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);

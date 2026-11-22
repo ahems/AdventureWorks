@@ -32,7 +32,7 @@ flowchart LR
   end
 
   subgraph st["Azure Storage account"]
-    q[["15 queues + poison"]]
+    q[["16 queues + poison"]]
     t[("13 app tables + awMcpTasks")]
     b[("Blobs<br/>receipts · locales · releases")]
     f[("File share<br/>seed-job-logs")]
@@ -85,9 +85,9 @@ erDiagram
 
 | Schema | Holds | Examples |
 | ------ | ----- | -------- |
-| `Person` | People, contact details, addresses, passwords | `Person`, `EmailAddress`, `PersonPhone`, `Address`, `Password` |
-| `Sales` | Customers, stores, orders, carts, offers, currencies | `Customer`, `SalesOrderHeader`, `SalesOrderDetail`, `ShoppingCartItem`, `SpecialOffer`, `GuestCartSession` |
-| `Production` | Catalog, inventory, bills of materials, work orders, reviews | `Product`, `ProductInventory`, `BillOfMaterials`, `WorkOrder`, `ProductReview`, `ProductReviewReply` |
+| `Person` | People, contact details, addresses, passwords, password-reset tokens | `Person`, `EmailAddress`, `PersonPhone`, `Address`, `Password`, `PasswordResetToken` |
+| `Sales` | Customers, stores, orders, carts, offers, discount codes, currencies | `Customer`, `SalesOrderHeader`, `SalesOrderDetail`, `ShoppingCartItem`, `SpecialOffer`, `GuestCartSession`, `DiscountCode` |
+| `Production` | Catalog, inventory, bills of materials, work orders, reviews | `Product`, `ProductInventory`, `BillOfMaterials`, `WorkOrder`, `ProductReview`, `ProductReviewReply`, `ProductReviewVote` |
 | `Purchasing` | Vendors and purchase orders | `Vendor`, `ProductVendor`, `PurchaseOrderHeader` |
 | `HumanResources` | Employees and departments (used for staff roles) | `Employee`, `EmployeeDepartmentHistory`, `vEmployee` |
 | `dbo` | Eventing outbox and utility procedures | `RealtimeNotificationOutbox`, `uspFindDateHighWatermark`, `uspShiftDatesForward` |
@@ -105,6 +105,7 @@ Most tables are exposed through DAB as 69 entities (66 tables + 3 views); see th
 | `Production.ProductReview.CommentsEmbedding` `VECTOR(1536)` | Semantic search over reviews |
 | `Production.ProductName.ProductNameEmbedding` `VECTOR(1536)` | Translated product names (one row per product and culture) with embeddings |
 | `Production.ProductReviewReply` | AI-generated or staff replies to reviews |
+| `Production.ProductReviewVote` | One helpful vote per signed-in shopper and review; written only by the Functions vote route in the same transaction as `ProductReview.HelpfulVotes` |
 | `Production.vProductSearch`, `Production.vHelpMeChoose`, `Production.vProductAndDescription` | Views used by search and Help Me Choose |
 
 Embeddings are seeded from CSV files and searched with `VECTOR_DISTANCE('cosine', …)`.
@@ -142,18 +143,19 @@ producers and consumers.
 
 ```mermaid
 flowchart TB
-  subgraph queues["Queues (15, each with a -poison queue)"]
+  subgraph queues["Queues (16, each with a -poison queue)"]
     qo["Orders: order-receipt-generation, order-email-generation,<br/>sales-order-status, auto-promotion-queue"]
     qai["AI jobs: ai-job-chat-queue, ai-job-image-queue,<br/>ai-job-embeddings-queue, product-thumbnail-generation"]
     qm["Operations: production-wo-queue, supply-chain-orders-queue,<br/>warehouse-ops-queue, manufacturing-agent-queue"]
-    qs["Other: simulation-order-queue, review-moderation-queue,<br/>utility-status-queue"]
+    qs["Other: simulation-order-queue, review-moderation-queue,<br/>verified-reviews-queue, utility-status-queue"]
   end
-  subgraph tables["Tables (13 + awMcpTasks)"]
+  subgraph tables["Tables (14 + awMcpTasks)"]
     tsim["shoppingSimulator, awOrderPipelineConfig, awAutoPromotionConfig"]
     tmfg["awManufacturing, awSupplyChain, awWarehouse"]
     tagent["awManufacturingAgentConfig, awManufacturingAgentRuns,<br/>awManufacturingProposals"]
     tbank["awBankAccounts, awBankTransactions"]
     trev["verifiedReviewsJob, reviewModerationJob"]
+    tai["aiRateLimits"]
     tmcp["awMcpTasks (api-mcp)"]
   end
   subgraph blobs["Blob containers"]

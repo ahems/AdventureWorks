@@ -34,17 +34,17 @@ public sealed class SqlUserDirectory : IUserDirectory
         }
 
         await using var conn = await OpenAsync(ct);
-        var cred = await conn.QueryFirstOrDefaultAsync<(int BusinessEntityID, string? PasswordHash, string? PasswordSalt)>(
+        var matches = (await conn.QueryAsync<SignInCredential>(
             new CommandDefinition(
-                @"SELECT TOP 1 p.BusinessEntityID, pw.PasswordHash, pw.PasswordSalt
+                @"SELECT TOP 2 p.BusinessEntityID, pw.PasswordHash, pw.PasswordSalt
                   FROM Person.EmailAddress e
                   INNER JOIN Person.Person p ON p.BusinessEntityID = e.BusinessEntityID
                   LEFT JOIN Person.[Password] pw ON pw.BusinessEntityID = p.BusinessEntityID
                   WHERE e.EmailAddress = @Username
                   ORDER BY p.BusinessEntityID",
-                new { Username = username.Trim() }, cancellationToken: ct));
+                new { Username = username.Trim() }, cancellationToken: ct))).ToList();
 
-        if (cred.BusinessEntityID == 0 || string.IsNullOrEmpty(cred.PasswordHash) || string.IsNullOrEmpty(cred.PasswordSalt))
+        if (SelectSignInCredential(matches) is not { } cred)
         {
             return null;
         }
@@ -106,8 +106,15 @@ public sealed class SqlUserDirectory : IUserDirectory
         string category;
         IReadOnlyList<string> roles;
 
-        bool isEmployee = string.Equals(person.PersonType, "EM", StringComparison.OrdinalIgnoreCase);
-        if (isEmployee)
+        var personCategory = ClassifyPersonType(person.PersonType);
+        if (personCategory is null)
+        {
+            // Store/vendor/general contacts and sales persons are not e-shop consumers and have
+            // no portal role, so they cannot sign in.
+            return null;
+        }
+
+        if (personCategory == UserCategories.Employee)
         {
             int? departmentId = await conn.QueryFirstOrDefaultAsync<int?>(
                 new CommandDefinition(
@@ -123,7 +130,6 @@ public sealed class SqlUserDirectory : IUserDirectory
         }
         else
         {
-            // Individuals (and any non-employee with a customer row) are consumers.
             roles = new[] { ApplicationRoles.Consumer };
             category = UserCategories.Consumer;
         }
@@ -148,6 +154,38 @@ public sealed class SqlUserDirectory : IUserDirectory
             BusinessEntityId = person.BusinessEntityID,
         };
     }
+
+    internal sealed record SignInCredential(int BusinessEntityID, string? PasswordHash, string? PasswordSalt);
+
+    /// <summary>
+    /// Returns the credential only when the email address identifies exactly one person with a
+    /// password. An address shared by several people (including the same person twice) is
+    /// ambiguous and is refused rather than resolved to the first match.
+    /// </summary>
+    internal static SignInCredential? SelectSignInCredential(IReadOnlyList<SignInCredential> matches)
+    {
+        if (matches.Count != 1)
+        {
+            return null;
+        }
+
+        var cred = matches[0];
+        return cred.BusinessEntityID > 0
+            && !string.IsNullOrEmpty(cred.PasswordHash)
+            && !string.IsNullOrEmpty(cred.PasswordSalt) ? cred : null;
+    }
+
+    /// <summary>
+    /// Maps <c>Person.PersonType</c> to a sign-in population: <c>EM</c> (employee) is internal and
+    /// <c>IN</c> (individual customer, created by storefront sign-up) is a consumer. Every other
+    /// type (SC, VC, GC, SP) returns null and is denied.
+    /// </summary>
+    internal static string? ClassifyPersonType(string? personType) => personType?.Trim().ToUpperInvariant() switch
+    {
+        "EM" => UserCategories.Employee,
+        "IN" => UserCategories.Consumer,
+        _ => null,
+    };
 
     private static IReadOnlyList<string> ResolveScopes(IReadOnlyList<string> roles)
     {

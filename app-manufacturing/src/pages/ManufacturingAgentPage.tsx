@@ -33,6 +33,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import {
   fetchAgentConfig,
   saveAgentMode,
@@ -171,7 +173,7 @@ function parseFinding(raw: string | null | undefined): string | null {
 // ── Queue status card ─────────────────────────────────────────────────────────
 
 const QueueStatusCard: React.FC = () => {
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["agent-queue-status"],
     queryFn: fetchAgentQueueStatus,
   });
@@ -193,6 +195,13 @@ const QueueStatusCard: React.FC = () => {
           <Inbox className="h-4 w-4 text-doodle-blue" /> Agent Queue
         </CardTitle>
       </CardHeader>
+      {isLoading ? (
+        <CardContent className="space-y-3" data-testid="agent-queue-skeleton">
+          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-2 w-full" />
+          <Skeleton className="h-3 w-40" />
+        </CardContent>
+      ) : (
       <CardContent className="space-y-3">
         <div className="flex items-end gap-3">
           <span className="text-3xl font-bold font-doodle">{pending}</span>
@@ -230,6 +239,7 @@ const QueueStatusCard: React.FC = () => {
           </p>
         )}
       </CardContent>
+      )}
     </Card>
   );
 };
@@ -241,7 +251,7 @@ type ShutoffPreset = (typeof SHUTOFF_PRESETS)[number];
 
 const ModeSelector: React.FC = () => {
   const qc = useQueryClient();
-  const { data: config } = useQuery({
+  const { data: config, isLoading } = useQuery({
     queryKey: ["manufacturing-agent-config"],
     queryFn: fetchAgentConfig,
   });
@@ -307,6 +317,24 @@ const ModeSelector: React.FC = () => {
 
   const modes: ManufacturingAgentMode[] = [0, 1, 2, 3];
   const countdown = formatCountdown(config?.autoShutoffAt);
+
+  if (isLoading)
+    return (
+      <Card className="doodle-card" data-testid="agent-mode-skeleton">
+        <CardHeader className="pb-3 space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-3/4" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {modes.map((mode) => (
+              <Skeleton key={mode} className="h-16 w-full" />
+            ))}
+          </div>
+          <Skeleton className="h-3 w-1/2" />
+        </CardContent>
+      </Card>
+    );
 
   return (
     <Card className="doodle-card">
@@ -705,10 +733,7 @@ const ProposalsPanel: React.FC = () => {
     rejectAllMutation.isPending ||
     approveAllMutation.isPending;
 
-  if (isLoading)
-    return (
-      <p className="text-sm text-muted-foreground p-4">Loading proposals…</p>
-    );
+  if (isLoading) return <TableSkeleton rows={3} cols={3} />;
 
   return (
     <div>
@@ -814,7 +839,7 @@ const ProposalsPanel: React.FC = () => {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const ManufacturingAgentPage: React.FC = () => {
-  const { data: config } = useQuery({
+  const { data: config, isLoading: configLoading } = useQuery({
     queryKey: ["manufacturing-agent-config"],
     queryFn: fetchAgentConfig,
   });
@@ -822,7 +847,7 @@ const ManufacturingAgentPage: React.FC = () => {
   const isProposePending = config?.mode === 2;
 
   // Runs: real-time via Web PubSub, disabled when Off
-  const { data: runs = [] } = useQuery({
+  const { data: runs = [], isLoading: runsLoading } = useQuery({
     queryKey: ["agent-runs"],
     queryFn: () => fetchAgentRuns(30),
     enabled: !isOff,
@@ -890,7 +915,11 @@ const ManufacturingAgentPage: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent className="p-0 px-4">
-          {isOff ? (
+          {configLoading || runsLoading ? (
+            <div className="py-4" data-testid="agent-activity-skeleton">
+              <TableSkeleton rows={5} cols={3} />
+            </div>
+          ) : isOff ? (
             <div className="py-10 flex flex-col items-center gap-3 text-center">
               <Bot className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm font-medium text-muted-foreground">

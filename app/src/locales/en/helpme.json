@@ -46,6 +46,7 @@
   "error": {
     "loadQuestions": "We had trouble generating your questions. Please try again.",
     "loadRecommendations": "We had trouble finding recommendations. Please try again.",
+    "rateLimited": "We've had a lot of AI requests from you. Please try again in {{minutes}} min.",
     "tryAgain": "Try Again"
   }
 }

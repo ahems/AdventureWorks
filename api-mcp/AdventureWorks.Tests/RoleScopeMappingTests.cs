@@ -138,4 +138,36 @@ public class RoleScopeMappingTests
     {
         Assert.Equal(ApplicationRoles.OperationsAdmin, ApplicationRoles.RoleForDepartment(departmentId));
     }
+
+    [Theory]
+    [InlineData("IN", UserCategories.Consumer)]
+    [InlineData("in ", UserCategories.Consumer)]
+    [InlineData("EM", UserCategories.Employee)]
+    [InlineData("SC", null)]
+    [InlineData("SP", null)]
+    [InlineData("VC", null)]
+    [InlineData("GC", null)]
+    [InlineData(null, null)]
+    public void Only_individual_customers_are_consumers(string? personType, string? expected)
+    {
+        Assert.Equal(expected, SqlUserDirectory.ClassifyPersonType(personType));
+    }
+
+    [Fact]
+    public void Sign_in_refuses_an_email_shared_by_several_people()
+    {
+        var first = new SqlUserDirectory.SignInCredential(10, "hash", "salt");
+        var second = new SqlUserDirectory.SignInCredential(20, "hash2", "salt2");
+
+        Assert.Null(SqlUserDirectory.SelectSignInCredential(new[] { first, second }));
+        Assert.Null(SqlUserDirectory.SelectSignInCredential(Array.Empty<SqlUserDirectory.SignInCredential>()));
+        Assert.Same(first, SqlUserDirectory.SelectSignInCredential(new[] { first }));
+    }
+
+    [Fact]
+    public void Sign_in_refuses_a_single_match_without_a_password()
+    {
+        Assert.Null(SqlUserDirectory.SelectSignInCredential(new[] { new SqlUserDirectory.SignInCredential(10, null, null) }));
+        Assert.Null(SqlUserDirectory.SelectSignInCredential(new[] { new SqlUserDirectory.SignInCredential(10, "hash", "") }));
+    }
 }

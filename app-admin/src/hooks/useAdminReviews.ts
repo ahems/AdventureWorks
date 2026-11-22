@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
 import { gql } from "graphql-request";
+import { dabFetch } from "@/services/dabFetch";
 
 // ProductReview from AdventureWorks DB:
 // ProductReviewID, ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, HelpfulVotes, UserID, IsModerated
@@ -237,7 +238,7 @@ export const useAdminReviewsByProduct = (productId: number | null) =>
 
 /** PATCH the review's IsModerated flag to true in the database. */
 export const approveReview = async (id: string): Promise<void> => {
-  const res = await fetch(
+  const res = await dabFetch(
     `${getRestApiUrl()}/ProductReview/ProductReviewID/${id}`,
     {
       method: "PATCH",
@@ -256,7 +257,7 @@ export const submitReply = async (
   replyText: string,
   repliedBy = "AdventureWorks Team",
 ): Promise<RawReviewReply> => {
-  const res = await fetch(`${getRestApiUrl()}/ProductReviewReply`, {
+  const res = await dabFetch(`${getRestApiUrl()}/ProductReviewReply`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -278,7 +279,7 @@ export const updateReply = async (
   replyId: number,
   replyText: string,
 ): Promise<RawReviewReply> => {
-  const res = await fetch(
+  const res = await dabFetch(
     `${getRestApiUrl()}/ProductReviewReply/ProductReviewReplyID/${replyId}`,
     {
       method: "PATCH",
@@ -301,7 +302,7 @@ export const deleteReview = async (id: string): Promise<void> => {
   const restBase = getRestApiUrl();
 
   // 1. Fetch existing replies by ProductReviewID
-  const repliesRes = await fetch(
+  const repliesRes = await dabFetch(
     `${restBase}/ProductReviewReply?$filter=ProductReviewID eq ${id}`,
   );
   if (repliesRes.ok) {
@@ -311,7 +312,7 @@ export const deleteReview = async (id: string): Promise<void> => {
     // 2. Delete each reply by PK
     await Promise.all(
       replies.map((r) =>
-        fetch(
+        dabFetch(
           `${restBase}/ProductReviewReply/ProductReviewReplyID/${r.ProductReviewReplyID}`,
           { method: "DELETE" },
         ),
@@ -320,7 +321,7 @@ export const deleteReview = async (id: string): Promise<void> => {
   }
 
   // 3. Delete the review itself
-  const reviewRes = await fetch(
+  const reviewRes = await dabFetch(
     `${restBase}/ProductReview/ProductReviewID/${id}`,
     { method: "DELETE" },
   );

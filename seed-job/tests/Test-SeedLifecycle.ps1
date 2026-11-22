@@ -21,6 +21,10 @@ class SeedLifecycleCommand {
 
 function Write-Log { param([string] $Message) }
 function Initialize-GuestCartSchema { param($Connection) }
+function Initialize-DiscountCodeSchema { param($Connection) }
+function Initialize-PasswordResetTokenSchema { param($Connection) }
+function Initialize-ProductReviewVoteSchema { param($Connection) }
+function Initialize-EmailAddressUniqueness { param($Connection) }
 function Import-ManufacturingOverlays {
     param($Connection, [string] $SqlFolder)
     $script:imports++

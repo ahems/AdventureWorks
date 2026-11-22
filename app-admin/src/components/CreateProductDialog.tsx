@@ -35,6 +35,8 @@ import {
 import { generateProductContent } from "@/services/utilityService";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { translateProductContent } from "@/services/utilityService";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 /** Generate a short GUID-derived SKU safe for the 25-char DB column. */
 const generateSku = (): string => {
@@ -152,6 +154,8 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
   }, [filteredSubcategories]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createProduct = useCreateProduct();
+  // AI content, images and translations are Functions routes that require admin.write.
+  const canUseAi = useCan(Scopes.AdminWrite);
   const createBatch = useCreateProductBatch();
 
   const handleGenerateWithAI = async () => {
@@ -343,15 +347,17 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
       });
       toast({
         title: "Product Created",
-        description: `${form.Name} was created. AI images are being generated in the background.`,
+        description: `${form.Name} was created.${canUseAi ? " AI images are being generated in the background." : ""}`,
       });
       // Silently trigger AI image generation in the background
-      fetch(
-        `${getFunctionsApiUrl()}/api/products/${newProduct.ProductID}/generate-images`,
-        { method: "POST" },
-      ).catch(() => {});
+      if (canUseAi) {
+        fetch(
+          `${getFunctionsApiUrl()}/api/products/${newProduct.ProductID}/generate-images`,
+          { method: "POST" },
+        ).catch(() => {});
+      }
       // Silently trigger translations (and then embeddings) for all cultures
-      if (newProduct.ProductModelID) {
+      if (canUseAi && newProduct.ProductModelID) {
         translateProductContent([newProduct.ProductModelID]).catch(() => {});
       }
       setIsOpen(false);
@@ -379,10 +385,10 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
       });
       toast({
         title: "Variations Created",
-        description: `Created ${variationRows.length} product variation(s) for "${form.Name}". AI images and translations are being generated in the background.`,
+        description: `Created ${variationRows.length} product variation(s) for "${form.Name}".${canUseAi ? " AI images and translations are being generated in the background." : ""}`,
       });
       // Silently trigger translations (and then embeddings) for the shared model
-      if (batchResult.sharedModelId) {
+      if (canUseAi && batchResult.sharedModelId) {
         translateProductContent([batchResult.sharedModelId]).catch(() => {});
       }
       // Trigger AI image generation for the first product in each unique Color+Style pair.
@@ -390,7 +396,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
       const seenVisualKeys = new Set<string>();
       for (const p of batchResult.results) {
         const visualKey = `${p.Color ?? "none"}:${p.Style ?? "none"}`;
-        if (!seenVisualKeys.has(visualKey)) {
+        if (canUseAi && !seenVisualKeys.has(visualKey)) {
           seenVisualKeys.add(visualKey);
           fetch(
             `${getFunctionsApiUrl()}/api/products/${p.ProductID}/generate-images`,
@@ -793,6 +799,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
       </div>
 
       {/* Generate using AI */}
+      {canUseAi && (
       <div className="flex items-start gap-3 p-3 rounded border border-dashed border-doodle-blue bg-blue-50/50 dark:bg-blue-900/10">
         <Sparkles className="w-5 h-5 text-doodle-blue mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
@@ -821,6 +828,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
           {isGenerating ? "Generating…" : "Generate"}
         </button>
       </div>
+      )}
 
       {/* Description */}
       <div>

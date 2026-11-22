@@ -1,6 +1,6 @@
 ---
 title: "AI architecture: Microsoft Foundry, agents, MCP tools and models"
-summary: How AdventureWorks uses one Microsoft Foundry account, quota-selected model deployments, 21 Foundry agents plus a hosted manufacturing agent, delegated MCP tokens, Foundry guardrails and SQL vector search.
+summary: How AdventureWorks uses one Microsoft Foundry account, quota-selected model deployments, 15 Foundry prompt agents plus a hosted manufacturing agent, delegated MCP tokens, Foundry guardrails and SQL vector search.
 audience: [developer, security-reviewer, demo-presenter, ai-agent]
 components: [api-functions, api-mcp, manufacturing-agent, app, app-admin, app-manufacturing, seed-job, infra]
 related: [../features/ai/foundry-agents.md, ../features/manufacturing/manufacturing-agent.md, ../services/manufacturing-agent.md, ../services/api-mcp.md, identity-and-auth.md, request-flows.md]
@@ -35,7 +35,7 @@ flowchart LR
   end
 
   subgraph foundry["Microsoft Foundry account + project"]
-    defs["21 agent definitions"]
+    defs["15 prompt agent definitions"]
     resp["Responses API<br/>/openai/v1/responses"]
     dep["Deployments: chat · embedding<br/>· optional gpt-image-2"]
     rai["RAI policy AdventureWorks-Eshop"]
@@ -91,8 +91,7 @@ Choices are stored in the azd environment, and discovery is skipped once they ar
 ## Agents
 
 The `postprovision` hook runs [`scripts/utilities/create-foundry-agents.sh`](../../scripts/utilities/create-foundry-agents.sh),
-which creates **21 Foundry agents**: 15 prompt agents, 3 workflow agents and 3 intent
-classifier agents. `postdeploy` re-runs it only when the agent scripts change, and the
+which creates **15 Foundry prompt agents**. `postdeploy` re-runs it only when the agent scripts change, and the
 Functions postdeploy hook writes the agent IDs into `AI_AGENT_*` app settings. The full
 catalog (purpose, tools, caller) is in [Foundry agents](../features/ai/foundry-agents.md).
 
@@ -102,11 +101,10 @@ catalog (purpose, tools, caller) is in [Foundry agents](../features/ai/foundry-a
 | Help Me Choose | `eshop-help-me-choose-agent` | 4 public catalog tools, `products.read` service token |
 | Data generation | Order (12 tools) and customer (2 tools) generation | Service token |
 | Content | Product content, translation, reviews, email, promotions, catalog suggestions, cart recovery, manufacturing instructions | None (data passed in the prompt) |
-| Workflows | Chat product advisor, order advisor, promotion advisor (with 3 intent agents) | Provisioned in Foundry; the app calls the underlying prompt agents directly |
 
 Every MCP tool definition uses the server label `adventureworks_mcp` with an explicit
-allow-list. The project also has an `adventureworks-dab-mcp` connection to DAB's `/mcp`
-endpoint, which no agent uses.
+allow-list. The Foundry project has no DAB `/mcp` connection; DAB's native MCP endpoint is
+available to MCP clients such as the MCP Inspector.
 
 ## How Functions calls an agent
 

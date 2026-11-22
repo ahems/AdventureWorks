@@ -78,6 +78,9 @@ None.
 ## Security
 
 - `/api/helpme/*` routes are public and anonymous.
+- Anonymous AI calls are cost-limited by `AiRateLimitService`: a per-client fixed window (default 20 questions or recommendation calls per 5 minutes) and a global daily budget (default 1000 per UTC day), counted in the `aiRateLimits` table with ETag concurrency. Clients are keyed by an HMAC of the first `X-Forwarded-For` hop (IPv6 grouped by /64); raw IPs are not stored. Refused calls get `429` with `Retry-After`, and the wizard shows a localized "try again in N min" message.
+- Request caps: bodies over 8 KB get `413`; context over 500 characters, more than 20 answers, a question or answer over 300 characters, or profile fields over 50 characters get `400`. Invalid requests are rejected before any model call and do not consume quota. `catalog-meta` makes no model call and is not limited.
+- If the counter table cannot be reached, requests are allowed and a warning is logged, so a storage fault does not disable the wizard in this demo.
 - The agent's MCP access is restricted to public catalog tools with `products.read`; it cannot reach customer, order or internal tools. See [MCP tool scopes](../mcp-oauth/TOOL_SCOPE_MATRIX.md).
 
 ## Configuration
@@ -87,6 +90,7 @@ None.
 | `AI_AGENT_HELP_ME_CHOOSE_ID` | Foundry agent definition |
 | `MCP_SERVICE_URL` | api-mcp endpoint for catalog tools |
 | `AI_FOUNDRY_PROJECT_ENDPOINT` | Foundry project |
+| `AI_RATE_LIMIT_*` | Per-client window and daily budget; see [environment variables](../../reference/environment-variables.md) |
 
 ## Limits
 

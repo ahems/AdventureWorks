@@ -1,4 +1,6 @@
 import React from "react";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import { Link } from "react-router-dom";
 import {
@@ -136,6 +138,8 @@ function formatFailureCode(failureCode: string | null | undefined): string {
 }
 
 export default function ShoppingSimulatorPage() {
+  // Start/stop/clear-queue require admin.write.
+  const canWrite = useCan(Scopes.AdminWrite);
   const [status, setStatus] =
     React.useState<ShoppingSimulatorStatus>(DEFAULT_STATUS);
   const [loading, setLoading] = React.useState(true);
@@ -374,7 +378,7 @@ export default function ShoppingSimulatorPage() {
                 step={1}
                 value={[durationHours]}
                 onValueChange={([v]) => setDurationHours(v)}
-                disabled={status.isRunning || actionPending}
+                disabled={status.isRunning || actionPending || !canWrite}
                 className="w-full"
               />
               <div className="flex justify-between">
@@ -409,7 +413,7 @@ export default function ShoppingSimulatorPage() {
                 step={1}
                 value={[rateOpm]}
                 onValueChange={([v]) => setRateOpm(v)}
-                disabled={status.isRunning || actionPending}
+                disabled={status.isRunning || actionPending || !canWrite}
                 className="w-full"
               />
               <div className="flex justify-between">
@@ -440,7 +444,7 @@ export default function ShoppingSimulatorPage() {
                     if (!v && !includeStore) return; // at least one must be on
                     setIncludeConsumer(v);
                   }}
-                  disabled={status.isRunning || actionPending}
+                  disabled={status.isRunning || actionPending || !canWrite}
                 />
               </div>
               <div className="flex items-center justify-between">
@@ -456,7 +460,7 @@ export default function ShoppingSimulatorPage() {
                     if (!v && !includeConsumer) return;
                     setIncludeStore(v);
                   }}
-                  disabled={status.isRunning || actionPending}
+                  disabled={status.isRunning || actionPending || !canWrite}
                 />
               </div>
               {includeConsumer && includeStore && (
@@ -475,7 +479,7 @@ export default function ShoppingSimulatorPage() {
                     step={5}
                     value={[storeOrderPct]}
                     onValueChange={([v]) => setStoreOrderPct(v)}
-                    disabled={status.isRunning || actionPending}
+                    disabled={status.isRunning || actionPending || !canWrite}
                     className="w-full"
                   />
                 </div>
@@ -505,7 +509,7 @@ export default function ShoppingSimulatorPage() {
                     step={5}
                     value={[existingPct]}
                     onValueChange={([v]) => setExistingPct(v)}
-                    disabled={status.isRunning || actionPending}
+                    disabled={status.isRunning || actionPending || !canWrite}
                     className="w-full"
                   />
                   <div className="flex justify-between">
@@ -538,7 +542,7 @@ export default function ShoppingSimulatorPage() {
                     step={5}
                     value={[noOrderPct]}
                     onValueChange={([v]) => setNoOrderPct(v)}
-                    disabled={status.isRunning || actionPending}
+                    disabled={status.isRunning || actionPending || !canWrite}
                     className="w-full"
                   />
                 </div>
@@ -563,7 +567,7 @@ export default function ShoppingSimulatorPage() {
                     step={5}
                     value={[abandonedCartPct]}
                     onValueChange={([v]) => setAbandonedCartPct(v)}
-                    disabled={status.isRunning || actionPending}
+                    disabled={status.isRunning || actionPending || !canWrite}
                     className="w-full"
                   />
                 </div>
@@ -575,7 +579,7 @@ export default function ShoppingSimulatorPage() {
               {status.isRunning ? (
                 <Button
                   onClick={handleStop}
-                  disabled={actionPending}
+                  disabled={actionPending || !canWrite}
                   className="doodle-button doodle-button-danger w-full flex items-center gap-2 justify-center py-3"
                 >
                   {actionPending ? (
@@ -590,7 +594,7 @@ export default function ShoppingSimulatorPage() {
               ) : (
                 <Button
                   onClick={handleStart}
-                  disabled={actionPending || !canStart}
+                  disabled={actionPending || !canWrite || !canStart}
                   className="doodle-button doodle-button-primary w-full flex items-center gap-2 justify-center py-3"
                 >
                   {actionPending ? (
@@ -644,7 +648,7 @@ export default function ShoppingSimulatorPage() {
                 <div className="pt-1">
                   <Button
                     onClick={handleClearQueue}
-                    disabled={actionPending}
+                    disabled={actionPending || !canWrite}
                     variant="outline"
                     className="doodle-button doodle-button-danger w-full flex items-center gap-2 justify-center py-2"
                   >

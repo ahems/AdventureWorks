@@ -1,0 +1,52 @@
+{
+  "title": "Ayúdame a elegir",
+  "intro": {
+    "title": "¡Encontremos tu equipo perfecto!",
+    "description": "Responde 5 preguntas rápidas y nuestra IA explorará el catálogo para encontrar productos ideales para ti.",
+    "cta": "Empecemos",
+    "hint": "Con tecnología de IA · Tarda alrededor de 1 minuto"
+  },
+  "loading": {
+    "questions": "Generando preguntas personalizadas…",
+    "recommendations": "Buscando en el catálogo y preparando tus recomendaciones…"
+  },
+  "progress": {
+    "question": "Pregunta {{current}} de {{total}}"
+  },
+  "nav": {
+    "back": "Atrás",
+    "next": "Siguiente",
+    "findProducts": "Encontrar mis productos"
+  },
+  "results": {
+    "title": "Tus selecciones personalizadas",
+    "viewProduct": "Ver producto",
+    "noResults": "No hemos encontrado coincidencias exactas en este momento. Prueba a explorar nuestras categorías o usa la barra de búsqueda.",
+    "startAgain": "Empezar de nuevo"
+  },
+  "profile": {
+    "title": "Un poco sobre ti",
+    "subtitle": "Nos ayuda a encontrar productos que realmente te queden bien.",
+    "gender": {
+      "label": "Género (opcional)",
+      "male": "Hombre",
+      "female": "Mujer",
+      "preferNotToSay": "Prefiero no decirlo"
+    },
+    "height": {
+      "label": "Tu altura",
+      "placeholder": "Selecciona tu altura…"
+    },
+    "colors": {
+      "label": "Colores favoritos",
+      "hint": "Déjalo en blanco si no tienes preferencia."
+    },
+    "continue": "Continuar"
+  },
+  "error": {
+    "loadQuestions": "Tuvimos problemas al generar tus preguntas. Inténtalo de nuevo.",
+    "loadRecommendations": "Tuvimos problemas al buscar recomendaciones. Inténtalo de nuevo.",
+    "rateLimited": "Hemos recibido muchas solicitudes de IA de tu parte. Inténtalo de nuevo en {{minutes}} min.",
+    "tryAgain": "Intentar de nuevo"
+  }
+}

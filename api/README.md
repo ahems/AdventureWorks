@@ -1,6 +1,6 @@
 ---
 title: DAB API service (api/) — Data API builder GraphQL, REST and MCP
-summary: Component README for the Data API builder container that exposes the AdventureWorks database as GraphQL, REST and MCP endpoints secured by api-mcp OAuth tokens; files, configuration, local run and deployment.
+summary: Component README for the Data API builder container that exposes the AdventureWorks database as GraphQL, REST and MCP endpoints secured by api-mcp OAuth tokens; files, configuration, calls and deployment.
 audience: [developer, operator, ai-agent]
 components: [api]
 related: [docs/services/dab-api.md, docs/reference/dab-entities.md, docs/architecture/dab-naming-conventions.md, docs/architecture/identity-and-auth.md]
@@ -41,14 +41,14 @@ DAB reads `@env()` placeholders from the Container App environment:
 |---|---|
 | `DATABASE_CONNECTION_STRING` | Azure SQL connection string with `Authentication=Active Directory Default` |
 | `DAB_JWT_ISSUER`, `DAB_JWT_AUDIENCE` | api-mcp issuer and the `<issuer>/dab` audience |
-| `DAB_MCP_ALLOWED_HOST` | Trusted host for `/mcp`; derived by `entrypoint.sh` in Azure (use `localhost` for a direct local `dab start`) |
+| `DAB_MCP_ALLOWED_HOST` | Trusted host for `/mcp`; derived by `entrypoint.sh` |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Telemetry |
 
 Runtime database access (read, write, `EXECUTE` and object-level `VIEW DEFINITION`) is
 granted to the managed identity by the seed job. See the
 [environment variables reference](../docs/reference/environment-variables.md#dab-api-api).
 
-## Call, run and deploy
+## Call and deploy
 
 ```bash
 # Authenticated GraphQL call against the deployed API
@@ -61,9 +61,8 @@ azd deploy api --no-prompt
 ```
 
 List pages hold 100 items by default; follow GraphQL `first`/`after` cursors or REST
-`$first`/`$after` and `nextLink`. To run locally, use the VS Code task
-**start api (DAB)** with the variables above; never disable authentication. The
-deployed database is private, so prefer testing against the deployed API.
+`$first`/`$after` and `nextLink`. DAB runs only in Azure (the database is private):
+deploy changes, then test the deployed API. Never disable authentication.
 
 ## Related docs
 

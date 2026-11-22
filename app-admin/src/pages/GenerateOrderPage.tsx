@@ -1,5 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   Sparkles,
   ChevronRight,
@@ -95,6 +97,8 @@ const PERSONA_OPTIONS = [
 ];
 
 const GenerateOrderPage: React.FC = () => {
+  // AI order generation (single, bulk and refine) requires admin.write.
+  const canWrite = useCan(Scopes.AdminWrite);
   const [step, setStep] = useState<
     "configure" | "running" | "done" | "refining"
   >("configure");
@@ -507,7 +511,7 @@ const GenerateOrderPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleGenerate}
-                    disabled={!canStart}
+                    disabled={!canWrite || !canStart}
                     className="doodle-button flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Sparkles className="w-4 h-4" />
@@ -565,6 +569,7 @@ const GenerateOrderPage: React.FC = () => {
                   {bulkStep === "idle" && (
                     <button
                       onClick={handleBulkGenerate}
+                      disabled={!canWrite}
                       className="doodle-button flex items-center gap-1.5 text-sm"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
@@ -788,7 +793,7 @@ const GenerateOrderPage: React.FC = () => {
                 </button>
                 <button
                   onClick={handleRefine}
-                  disabled={!refineMessage.trim()}
+                  disabled={!canWrite || !refineMessage.trim()}
                   className="doodle-button doodle-button-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Sparkles className="w-4 h-4" />

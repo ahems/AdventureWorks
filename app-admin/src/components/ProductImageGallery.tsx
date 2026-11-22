@@ -13,6 +13,8 @@ import {
   useProductLargePhoto,
   useDeleteProductPhoto,
 } from "@/hooks/useAdminProducts";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 interface ProductImageGalleryProps {
   productId: number;
@@ -38,6 +40,7 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
+  const canWrite = useCan(Scopes.AdminWrite);
 
   const { data: photoRecords = [], isLoading } = useProductPhotos(productId);
   const deletePhoto = useDeleteProductPhoto();
@@ -197,7 +200,7 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
         )}
 
         {/* Delete overlay — shown on hover when a photo is selected */}
-        {selectedRecord && (
+        {selectedRecord && canWrite && (
           <button
             onClick={(e) => {
               e.stopPropagation();

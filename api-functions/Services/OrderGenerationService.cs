@@ -91,7 +91,8 @@ public class OrderGenerationService
 
     /// <summary>
     /// Create a new customer (Person + EmailAddress + Address + Customer).
-    /// Returns the new CustomerID.
+    /// Returns the new CustomerID. Throws <see cref="DuplicateEmailAddressException"/> when the
+    /// email address already belongs to another person.
     /// </summary>
     public async Task<int> CreateCustomerAsync(NewCustomerRequest req)
     {
@@ -126,11 +127,18 @@ public class OrderGenerationService
             // 3. EmailAddress (EmailAddressID is IDENTITY — omit it and let SQL Server auto-generate)
             if (!string.IsNullOrEmpty(normalizedEmail))
             {
-                await connection.ExecuteAsync(@"
-                    INSERT INTO Person.EmailAddress (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
-                    VALUES (@BizEntityId, @Email, NEWID(), GETDATE())",
-                    new { BizEntityId = bizEntityId, Email = normalizedEmail },
-                    transaction: tx);
+                try
+                {
+                    await connection.ExecuteAsync(@"
+                        INSERT INTO Person.EmailAddress (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
+                        VALUES (@BizEntityId, @Email, NEWID(), GETDATE())",
+                        new { BizEntityId = bizEntityId, Email = normalizedEmail },
+                        transaction: tx);
+                }
+                catch (SqlException ex) when (DuplicateEmailAddressException.IsDuplicateKeyError(ex))
+                {
+                    throw new DuplicateEmailAddressException(ex);
+                }
             }
 
             // 4. Address (look up StateProvinceID from state code + country)
@@ -326,6 +334,45 @@ public class OrderGenerationService
     }
 
     /// <summary>
+    /// Resolves what a simulated consumer order needs to go through storefront checkout: the
+    /// customer's person, an owned address, the cheapest ship method and the ship-to country's
+    /// non-USD currency (so international orders record an exchange rate). Returns null when the
+    /// customer is not a person-backed consumer.
+    /// </summary>
+    public async Task<SimulatedCheckoutContext?> GetCheckoutContextAsync(int customerId)
+    {
+        int? personId;
+        using (var connection = await GetConnectionAsync())
+        {
+            personId = await connection.ExecuteScalarAsync<int?>(
+                "SELECT PersonID FROM Sales.Customer WHERE CustomerID = @CustomerId",
+                new { CustomerId = customerId });
+        }
+        if (personId is not > 0)
+            return null;
+
+        var addressId = await GetOrCreateAddressForCustomerAsync(customerId);
+
+        using var conn = await GetConnectionAsync();
+        var shipMethodId = await conn.ExecuteScalarAsync<int>(
+            "SELECT TOP 1 ShipMethodID FROM Purchasing.ShipMethod ORDER BY ShipBase, ShipMethodID");
+        var currencyCode = await conn.ExecuteScalarAsync<string?>(@"
+            SELECT TOP 1 RTRIM(crc.CurrencyCode)
+            FROM Person.Address addr
+            INNER JOIN Person.StateProvince sp ON sp.StateProvinceID = addr.StateProvinceID
+            INNER JOIN Sales.CountryRegionCurrency crc ON crc.CountryRegionCode = sp.CountryRegionCode
+            WHERE addr.AddressID = @AddressId
+              AND RTRIM(crc.CurrencyCode) <> 'USD'
+              AND EXISTS (SELECT 1 FROM Sales.CurrencyRate cr
+                          WHERE RTRIM(cr.FromCurrencyCode) = 'USD'
+                            AND RTRIM(cr.ToCurrencyCode) = RTRIM(crc.CurrencyCode))
+            ORDER BY crc.CurrencyCode",
+            new { AddressId = addressId });
+
+        return new SimulatedCheckoutContext(personId.Value, addressId, shipMethodId, currencyCode);
+    }
+
+    /// <summary>
     /// Check stock for a product. Returns quantity in Finished Goods locations.
     /// </summary>
     public async Task<int> GetProductStockAsync(int productId)
@@ -342,216 +389,14 @@ public class OrderGenerationService
     }
 
     /// <summary>
-    /// Get the list price for a product.
+    /// Catalogue prices (list price + best active offer of the given SpecialOffer category) for the
+    /// requested products. Products that are missing or not for sale are omitted.
     /// </summary>
-    public async Task<decimal> GetProductPriceAsync(int productId)
+    public async Task<IReadOnlyList<CheckoutProductPrice>> GetSellableProductPricesAsync(
+        IReadOnlyCollection<int> productIds, string offerCategory)
     {
         using var connection = await GetConnectionAsync();
-        return await connection.ExecuteScalarAsync<decimal>(
-            "SELECT ISNULL(ListPrice, 0) FROM Production.Product WHERE ProductID = @ProductId",
-            new { ProductId = productId });
-    }
-
-    /// <summary>
-    /// Look up the best active SpecialOfferID for a product. Returns 1 (No Discount) if none.
-    /// </summary>
-    public async Task<int> GetBestSpecialOfferAsync(int productId)
-    {
-        using var connection = await GetConnectionAsync();
-        var offerId = await connection.ExecuteScalarAsync<int?>(@"
-            SELECT TOP 1 sop.SpecialOfferID
-            FROM Sales.SpecialOfferProduct sop
-            INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
-            WHERE sop.ProductID = @ProductId
-              AND so.StartDate <= GETDATE()
-              AND so.EndDate >= GETDATE()
-              AND so.DiscountPct > 0
-            ORDER BY so.DiscountPct DESC",
-            new { ProductId = productId });
-        return offerId ?? 1; // 1 = No Discount
-    }
-
-    /// <summary>
-    /// Look up the best active Reseller-category SpecialOffer for a product.
-    /// Returns the offer ID and discount percentage. Falls back to (1, 0) if none.
-    /// </summary>
-    public async Task<(int SpecialOfferId, decimal DiscountPct)> GetBestResellerOfferAsync(int productId)
-    {
-        using var connection = await GetConnectionAsync();
-        var row = await connection.QueryFirstOrDefaultAsync(""" 
-            SELECT TOP 1 sop.SpecialOfferID AS Id, so.DiscountPct AS Pct
-            FROM Sales.SpecialOfferProduct sop
-            INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
-            WHERE sop.ProductID = @ProductId
-              AND so.StartDate <= GETDATE()
-              AND so.EndDate >= GETDATE()
-              AND so.DiscountPct > 0
-              AND so.Category = 'Reseller'
-            ORDER BY so.DiscountPct DESC
-            """,
-            new { ProductId = productId });
-        if (row == null) return (1, 0m);
-        return ((int)row.Id, (decimal)row.Pct);
-    }
-
-    /// <summary>
-    /// Create a complete sales order with details and decrement inventory.
-    /// Returns the new SalesOrderID.
-    /// </summary>
-    public async Task<int> CreateOrderAsync(CreateOrderRequest req)
-    {
-        using var connection = await GetConnectionAsync();
-        using var tx = connection.BeginTransaction();
-
-        try
-        {
-            var addressId = await GetOrCreateAddressForCustomerAsync(req.CustomerId);
-
-            // Determine ship method (use cheapest available, ID 1)
-            var shipMethodId = await connection.ExecuteScalarAsync<int>(
-                "SELECT TOP 1 ShipMethodID FROM Purchasing.ShipMethod ORDER BY ShipBase",
-                transaction: tx);
-
-            var orderDate = DateTime.UtcNow;
-            var dueDate = orderDate.AddDays(7);
-
-            // Resolve CurrencyRateID from the ship-to address so international orders
-            // record the applicable exchange rate (Address → StateProvince → Country → CurrencyRate).
-            var currencyRateId = await connection.ExecuteScalarAsync<int?>(@"
-                SELECT TOP 1 cr.CurrencyRateID
-                FROM Person.Address addr
-                INNER JOIN Person.StateProvince sp    ON sp.StateProvinceID    = addr.StateProvinceID
-                INNER JOIN Sales.CountryRegionCurrency crc
-                                                      ON crc.CountryRegionCode = sp.CountryRegionCode
-                INNER JOIN (
-                    SELECT RTRIM(ToCurrencyCode) AS ToCurrencyCode, MAX(CurrencyRateDate) AS LatestDate
-                    FROM   Sales.CurrencyRate
-                    WHERE  RTRIM(FromCurrencyCode) = 'USD'
-                    GROUP  BY ToCurrencyCode
-                ) latest ON latest.ToCurrencyCode = RTRIM(crc.CurrencyCode)
-                INNER JOIN Sales.CurrencyRate cr
-                           ON RTRIM(cr.ToCurrencyCode)   = latest.ToCurrencyCode
-                          AND cr.CurrencyRateDate          = latest.LatestDate
-                          AND RTRIM(cr.FromCurrencyCode)  = 'USD'
-                WHERE addr.AddressID = @AddressId
-                  AND RTRIM(crc.CurrencyCode) <> 'USD'",
-                new { AddressId = addressId },
-                transaction: tx);
-
-            // Insert SalesOrderHeader (Status 1 = Pending / In Process)
-            // TotalDue is a computed column (SubTotal + TaxAmt + Freight) — do not include it
-            var salesOrderId = await connection.ExecuteScalarAsync<int>(@"
-                INSERT INTO Sales.SalesOrderHeader
-                    (RevisionNumber, OrderDate, DueDate, Status, OnlineOrderFlag,
-                     CustomerID, ShipToAddressID, BillToAddressID,
-                     ShipMethodID, CurrencyRateID, SubTotal, TaxAmt, Freight,
-                     rowguid, ModifiedDate)
-                OUTPUT INSERTED.SalesOrderID
-                VALUES
-                    (1, @OrderDate, @DueDate, 1, 1,
-                     @CustomerId, @AddressId, @AddressId,
-                     @ShipMethodId, @CurrencyRateId, 0, 0, 0,
-                     NEWID(), GETDATE())",
-                new
-                {
-                    OrderDate = orderDate,
-                    DueDate = dueDate,
-                    req.CustomerId,
-                    AddressId = addressId,
-                    ShipMethodId = shipMethodId,
-                    CurrencyRateId = currencyRateId.HasValue ? (object)currencyRateId.Value : DBNull.Value
-                },
-                transaction: tx);
-
-            decimal subTotal = 0;
-            short detailLineNum = 1;
-
-            foreach (var item in req.Items)
-            {
-                var unitPrice = item.UnitPrice > 0 ? item.UnitPrice
-                    : await connection.ExecuteScalarAsync<decimal>(
-                        "SELECT ListPrice FROM Production.Product WHERE ProductID = @pid",
-                        new { pid = item.ProductId },
-                        transaction: tx);
-
-                var specialOfferId = item.SpecialOfferID > 0 ? item.SpecialOfferID
-                    : await connection.ExecuteScalarAsync<int?>(@"
-                        SELECT TOP 1 sop.SpecialOfferID
-                        FROM Sales.SpecialOfferProduct sop
-                        INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
-                        WHERE sop.ProductID = @pid
-                          AND so.StartDate <= GETDATE() AND so.EndDate >= GETDATE()
-                          AND so.DiscountPct > 0
-                        ORDER BY so.DiscountPct DESC",
-                        new { pid = item.ProductId },
-                        transaction: tx) ?? 1;
-
-                var discountPct = await connection.ExecuteScalarAsync<decimal>(
-                    "SELECT DiscountPct FROM Sales.SpecialOffer WHERE SpecialOfferID = @id",
-                    new { id = specialOfferId },
-                    transaction: tx);
-
-                var lineTotal = unitPrice * item.Quantity * (1 - discountPct);
-                subTotal += lineTotal;
-
-                await connection.ExecuteAsync(@"
-                    INSERT INTO Sales.SalesOrderDetail
-                        (SalesOrderID, CarrierTrackingNumber, OrderQty, ProductID,
-                         SpecialOfferID, UnitPrice, UnitPriceDiscount, ModifiedDate)
-                    VALUES
-                        (@SalesOrderId, NULL, @Qty, @ProductId,
-                         @SpecialOfferId, @UnitPrice, @DiscountPct, GETDATE())",
-                    new
-                    {
-                        SalesOrderId = salesOrderId,
-                        Qty = item.Quantity,
-                        item.ProductId,
-                        SpecialOfferId = specialOfferId,
-                        UnitPrice = unitPrice,
-                        DiscountPct = discountPct
-                    },
-                    transaction: tx);
-
-                // Decrement inventory in the first Finished Goods location that has stock
-                await connection.ExecuteAsync(@"
-                    UPDATE TOP (1) pi
-                    SET pi.Quantity = pi.Quantity - @Qty,
-                        pi.ModifiedDate = GETDATE()
-                    FROM Production.ProductInventory pi
-                    INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
-                    WHERE pi.ProductID = @ProductId
-                      AND l.Name LIKE 'Finished Goods%'
-                      AND pi.Quantity >= @Qty",
-                    new { Qty = item.Quantity, item.ProductId },
-                    transaction: tx);
-
-                detailLineNum++;
-            }
-
-            // Calculate tax (8.75%) and freight (flat $5)
-            var taxAmt = subTotal * 0.0875m;
-            var freight = 5.00m;
-            var totalDue = subTotal + taxAmt + freight;
-
-            // TotalDue is computed — only set the constituent columns
-            await connection.ExecuteAsync(@"
-                UPDATE Sales.SalesOrderHeader
-                SET SubTotal = @SubTotal, TaxAmt = @TaxAmt, Freight = @Freight
-                WHERE SalesOrderID = @SalesOrderId",
-                new { SubTotal = subTotal, TaxAmt = taxAmt, Freight = freight, SalesOrderId = salesOrderId },
-                transaction: tx);
-
-            tx.Commit();
-            _logger.LogInformation("Created SalesOrderID={SalesOrderId} for CustomerID={CustomerId} with {ItemCount} items, total=${Total:N2}",
-                salesOrderId, req.CustomerId, req.Items.Count, totalDue);
-
-            return salesOrderId;
-        }
-        catch
-        {
-            tx.Rollback();
-            throw;
-        }
+        return await CatalogPriceQuery.GetAsync(connection, null, productIds, offerCategory);
     }
 
     /// <summary>
@@ -620,7 +465,28 @@ public class OrderGenerationService
     }
 
     /// <summary>
-    /// Create a B2B store order with line items. Returns the new SalesOrderID.
+    /// Prices B2B store order lines from catalogue data only. Throws <see cref="InvalidOperationException"/>
+    /// when a line has an invalid quantity or a product that is not for sale.
+    /// </summary>
+    public static IReadOnlyList<PricedCheckoutLine> PriceStoreOrderLines(
+        IReadOnlyList<StoreOrderLineItem> items, IReadOnlyList<CheckoutProductPrice> catalogue)
+    {
+        if (items.Count == 0)
+            throw new InvalidOperationException("At least one order line is required.");
+        var prices = catalogue.ToDictionary(p => p.ProductId);
+        return items.Select(item =>
+        {
+            if (item.Quantity < 1)
+                throw new InvalidOperationException($"Quantity for ProductID {item.ProductId} must be at least 1.");
+            if (!prices.TryGetValue(item.ProductId, out var price))
+                throw new InvalidOperationException($"ProductID {item.ProductId} is not available for sale.");
+            return CheckoutPricingCalculator.PriceLine(price, item.Quantity);
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Create a B2B store order with line items. Returns the new SalesOrderID. Line prices are
+    /// resolved server-side; callers supply only products and quantities.
     /// </summary>
     public async Task<int> CreateStoreOrderAsync(CreateStoreOrderRequest req)
     {
@@ -632,6 +498,9 @@ public class OrderGenerationService
             // Resolve CustomerID for the store
             var storeInfo = await GetStoreInfoAsync(req.StoreBusinessEntityId)
                 ?? throw new InvalidOperationException($"No Customer record found for Store {req.StoreBusinessEntityId}");
+
+            var pricedItems = PriceStoreOrderLines(req.Items, await CatalogPriceQuery.GetAsync(
+                connection, tx, req.Items.Select(i => i.ProductId).Distinct().ToArray(), CatalogPriceQuery.ResellerOffers));
 
             var addressId = req.AddressID ?? await GetOrCreateAddressForStoreAsync(req.StoreBusinessEntityId);
 
@@ -695,31 +564,14 @@ public class OrderGenerationService
                 },
                 transaction: tx);
 
-            // Insert order line items
+            // Insert order line items. Prices come only from the catalogue (list price + best active
+            // Reseller offer) through the same pricing rules as storefront checkout.
             var subTotal = 0m;
-            foreach (var item in req.Items)
+            foreach (var item in pricedItems)
             {
-                var unitPrice = item.UnitPrice > 0 ? item.UnitPrice
-                    : await connection.ExecuteScalarAsync<decimal>(
-                        "SELECT ISNULL(ListPrice, 0) FROM Production.Product WHERE ProductID = @ProductId",
-                        new { item.ProductId }, transaction: tx);
-
-                var discountedPrice = unitPrice * (1 - item.DiscountPct);
-                var lineTotal = Math.Round(discountedPrice * item.Quantity, 2);
-                subTotal += lineTotal;
-
-                // Prefer Reseller-category offers for B2B orders; fall back to any active offer
-                var specialOfferId = await connection.ExecuteScalarAsync<int?>(@"
-                    SELECT TOP 1 sop.SpecialOfferID
-                    FROM Sales.SpecialOfferProduct sop
-                    INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
-                    WHERE sop.ProductID = @ProductId
-                      AND so.StartDate <= GETDATE()
-                      AND so.EndDate >= GETDATE()
-                      AND so.DiscountPct > 0
-                    ORDER BY CASE WHEN so.Category = 'Reseller' THEN 0 ELSE 1 END,
-                             so.DiscountPct DESC",
-                    new { item.ProductId }, transaction: tx) ?? 1;
+                var unitPrice = item.UnitPrice;
+                subTotal += item.LineTotal;
+                var specialOfferId = item.SpecialOfferId;
 
                 var salesOrderDetailId = await connection.ExecuteScalarAsync<int>(@"
                     DECLARE @InsertedIds TABLE (SalesOrderDetailID int);
@@ -738,7 +590,7 @@ public class OrderGenerationService
                         item.ProductId,
                         SpecialOfferId = specialOfferId,
                         UnitPrice = unitPrice,
-                        Discount = item.DiscountPct
+                        Discount = item.UnitPriceDiscount
                     },
                     transaction: tx);
 
@@ -934,19 +786,8 @@ public class NewCustomerRequest
     public string? Password { get; set; }
 }
 
-public class CreateOrderRequest
-{
-    public int CustomerId { get; set; }
-    public List<OrderLineItem> Items { get; set; } = new();
-}
-
-public class OrderLineItem
-{
-    public int ProductId { get; set; }
-    public short Quantity { get; set; } = 1;
-    public decimal UnitPrice { get; set; } = 0; // 0 = use list price
-    public int SpecialOfferID { get; set; } = 0; // 0 = auto-detect best offer
-}
+/// <summary>Inputs for placing a simulated consumer order through storefront checkout.</summary>
+public sealed record SimulatedCheckoutContext(int PersonId, int AddressId, int ShipMethodId, string? CurrencyCode);
 
 public class TopSpenderInfo
 {
@@ -993,8 +834,6 @@ public class StoreOrderLineItem
 {
     public int ProductId { get; set; }
     public short Quantity { get; set; } = 1;
-    public decimal UnitPrice { get; set; } = 0; // 0 = use list price
-    public decimal DiscountPct { get; set; } = 0; // 0 = no discount
 }
 
 public class InStockProduct

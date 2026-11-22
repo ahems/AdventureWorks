@@ -26,6 +26,7 @@ import { Product, getSalePrice } from "@/types/product";
 import { useAllReviews } from "@/hooks/useReviews";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSemanticSearch } from "@/hooks/useSemanticSearch";
+import { isAiRateLimitError, retryAfterMinutes } from "@/lib/aiRateLimit";
 import {
   Select,
   SelectContent,
@@ -388,7 +389,12 @@ const SearchPage: React.FC = () => {
               {semanticSearchError && (
                 <div className="bg-red-50 border-2 border-red-200 p-3">
                   <p className="font-doodle text-xs text-red-600">
-                    ⚠️ {t("search.semanticUnavailable")}
+                    ⚠️{" "}
+                    {isAiRateLimitError(semanticSearchError)
+                      ? t("search.aiRateLimited", {
+                          minutes: retryAfterMinutes(semanticSearchError),
+                        })
+                      : t("search.semanticUnavailable")}
                   </p>
                 </div>
               )}

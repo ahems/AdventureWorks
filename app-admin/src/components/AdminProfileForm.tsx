@@ -5,6 +5,8 @@ import {
   useAdminUpdateCustomerProfile,
 } from "@/hooks/useAdminCustomerProfile";
 import { splitPhoneNumber } from "@/lib/phoneFormatter";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 interface AdminProfileFormProps {
   businessEntityId: number;
@@ -36,6 +38,8 @@ export const AdminProfileForm: React.FC<AdminProfileFormProps> = ({
     useAdminCustomerProfile(businessEntityId);
   const { mutateAsync: updateProfile, isPending: isSaving } =
     useAdminUpdateCustomerProfile();
+  // Customer contact data is writable only by customers.write roles.
+  const canWrite = useCan(Scopes.CustomersWrite);
 
   const [formData, setFormData] = useState({
     Title: "",
@@ -270,7 +274,7 @@ export const AdminProfileForm: React.FC<AdminProfileFormProps> = ({
       <div className="flex gap-2 pt-2">
         <button
           type="submit"
-          disabled={isSaving}
+          disabled={isSaving || !canWrite}
           className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
           {isSaving ? (

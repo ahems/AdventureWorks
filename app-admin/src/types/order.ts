@@ -3,7 +3,8 @@ export type OrderStatus =
   | "Processing"
   | "Shipped"
   | "Delivered"
-  | "Cancelled";
+  | "Cancelled"
+  | "Rejected";
 
 export interface OrderItem {
   SalesOrderDetailID: number;
@@ -38,6 +39,7 @@ export const ORDER_STATUS_WORKFLOW: Record<OrderStatus, OrderStatus[]> = {
   Shipped: ["Delivered"],
   Delivered: [],
   Cancelled: [],
+  Rejected: [],
 };
 
 export const ORDER_STATUS_CONFIG: Record<
@@ -73,5 +75,11 @@ export const ORDER_STATUS_CONFIG: Record<
     color: "text-red-700",
     bgColor: "bg-red-100",
     icon: "❌",
+  },
+  Rejected: {
+    label: "Rejected",
+    color: "text-gray-700",
+    bgColor: "bg-gray-200",
+    icon: "🚫",
   },
 };

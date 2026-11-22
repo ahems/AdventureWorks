@@ -68,7 +68,7 @@ const ProductPage: React.FC = () => {
   const { addToCart } = useCart();
   const { addToRecentlyViewed } = useRecentlyViewed();
   const { selectedLanguage } = useLanguage();
-  const { formatPrice } = useCurrency();
+  const { formatPrice, convertPrice, selectedCurrency } = useCurrency();
   const { formatWeight, formatSize } = useUnitMeasure();
   const { getLocalizedName } = useProductNames();
   const [quantity, setQuantity] = React.useState(1);
@@ -140,12 +140,13 @@ const ProductPage: React.FC = () => {
       name: getLocalizedName(product.ProductID) ?? product.Name,
       description: product.Description || product.Name,
       image: product.ThumbNailPhoto || "",
-      price: price,
+      price: convertPrice(price),
+      priceCurrency: selectedCurrency,
       sku: product.ProductNumber,
       availability:
-        product.Stock && product.Stock > 0 ? "InStock" : "OutOfStock",
+        (product.inStock ?? (product.quantityAvailable ?? 0) > 0) ? "InStock" : "OutOfStock",
     });
-  }, [product, salePrice]);
+  }, [product, salePrice, selectedCurrency, convertPrice]);
 
   // Add to recently viewed when product loads
   useEffect(() => {
@@ -156,8 +157,8 @@ const ProductPage: React.FC = () => {
       trackEvent("Product_View", {
         productId: product.ProductID,
         productName: localizedName,
-        category: product.ProductSubcategory?.ProductCategory?.Name,
-        subcategory: product.ProductSubcategory?.Name,
+        category: category?.Name,
+        subcategory: subcategory?.Name,
         price: product.ListPrice,
       });
     }

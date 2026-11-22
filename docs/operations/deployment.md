@@ -82,7 +82,7 @@ To skip discovery, set every model value yourself before running `azd up`.
 
 [`scripts/hooks/postprovision.sh`](../../scripts/hooks/postprovision.sh) runs these steps in order:
 
-1. Reconciles runtime role assignments with `scripts/utilities/reconcile-runtime-rbac.py --apply`.
+1. Reports legacy runtime role assignments that current Bicep no longer grants, with `scripts/utilities/reconcile-runtime-rbac.py`. The check is report-only: the conditioned deployer can't delete roles outside the [allowlist](../AZD_DEPLOYER_PERMISSIONS.md), so an environment that still has them should be recreated.
 2. Stores the `VITE_*` frontend URLs.
 3. In the background, runs `git lfs pull`, builds `seed-job:latest` with `az acr build`, and updates the job with `SEED_SKIP_EXISTING=true`.
 4. Checks Aspire Dashboard permissions. Problems produce a warning only.
@@ -107,8 +107,8 @@ It then removes `app/dist` and renders `app/staticwebapp.config.json` from its t
 
 | Service | Host | How it deploys | Service hook |
 | --- | --- | --- | --- |
-| `api` (DAB) | Container Apps | Remote build in ACR | `api-postdeploy.sh` re-applies DAB settings |
-| `api-functions` | Functions Flex Consumption | Direct publish, no container image | `api-functions-postdeploy.sh` sets agent IDs, `MCP_SERVICE_URL` and `MANUFACTURING_AGENT_ENDPOINT` |
+| `api` (DAB) | Container Apps | Remote build in ACR | — |
+| `api-functions` | Functions Flex Consumption | Direct publish, no container image | — (settings are applied once by the root `postdeploy.sh`) |
 | `api-mcp` | Container Apps | Remote build in ACR | — |
 | `app` (storefront) | Static Web Apps | Local `npm install && bash scripts/build-with-env.sh`, then upload | `app-postdeploy.sh` |
 | `app-admin`, `app-manufacturing` | Container Apps | Remote build in ACR | — |
@@ -123,7 +123,7 @@ It then removes `app/dist` and renders `app/staticwebapp.config.json` from its t
 2. Applies the hosted-agent MCP trust settings.
 3. Configures the api-mcp OAuth redirect URIs (`OAUTH_*_REDIRECT_URIS`) for the deployed app URLs.
 4. Recreates the prompt agents if their configuration hash changed.
-5. Runs `api-functions-postdeploy.sh` again so the Functions agent settings match.
+5. Runs `api-functions-postdeploy.sh`, which writes the agent IDs, `MCP_SERVICE_URL` and `MANUFACTURING_AGENT_ENDPOINT` to the Function App settings. This is the only place those settings are applied, so it runs once per `azd deploy` (including service-scoped deploys) after every service has deployed. It doesn't recreate any agent.
 
 ### 7. `postup.sh`
 

@@ -160,7 +160,7 @@ public class ReviewService
     /// <summary>
     /// Saves an AI-generated staff reply for a specific review.
     /// </summary>
-    public async Task SaveReviewReplyAsync(int reviewId, string reply, string repliedBy = "AdventureWorks Team")
+    public virtual async Task SaveReviewReplyAsync(int reviewId, string reply, string repliedBy = "AdventureWorks Team")
     {
         using var connection = await GetConnectionAsync();
 
@@ -328,7 +328,7 @@ public class ReviewService
     /// containing the specified product AND who have NOT already reviewed that product,
     /// ordered by most-recent delivery date.
     /// </summary>
-    public async Task<List<CustomerWithDeliveredOrder>> GetCustomersWithDeliveredOrderForProductAsync(int productId)
+    public virtual async Task<List<CustomerWithDeliveredOrder>> GetCustomersWithDeliveredOrderForProductAsync(int productId)
     {
         using var connection = await GetConnectionAsync();
 
@@ -418,7 +418,7 @@ public class ReviewService
     /// Returns a randomly-selected batch of qualifying (product, customers) pairs.
     /// For each product, up to <paramref name="reviewsPerProduct"/> unreviewed customers are selected randomly.
     /// </summary>
-    public async Task<List<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)>>
+    public virtual async Task<List<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)>>
         GetBatchVerifiedReviewsDataAsync(int productCount, int reviewsPerProduct)
     {
         // 1. Fetch all qualifying product IDs
@@ -478,7 +478,7 @@ public class ReviewService
     /// <paramref name="reviewsPerProduct"/> randomly-chosen unreviewed eligible customers.
     /// Returns null if the product has no eligible customers.
     /// </summary>
-    public async Task<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)?>
+    public virtual async Task<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)?>
         GetVerifiedReviewsDataForProductAsync(int productId, int reviewsPerProduct)
     {
         var products = await GetProductsForReviewGenerationAsync(new List<int> { productId });
@@ -553,20 +553,7 @@ public class ReviewService
             var client = GetTableClient();
             var entity = await client.GetEntityAsync<Azure.Data.Tables.TableEntity>(
                 _verifiedReviewsPartitionKey, _verifiedReviewsRowKey);
-
-            return new VerifiedReviewsJobState
-            {
-                IsRunning = entity.Value.GetBoolean("IsRunning") ?? false,
-                ProductId = entity.Value.GetInt32("ProductId") ?? 0,
-                ProductName = entity.Value.GetString("ProductName") ?? string.Empty,
-                ProcessedCount = entity.Value.GetInt32("ProcessedCount") ?? 0,
-                TotalCount = entity.Value.GetInt32("TotalCount") ?? 0,
-                ProductsProcessed = entity.Value.GetInt32("ProductsProcessed") ?? 0,
-                ProductsTotal = entity.Value.GetInt32("ProductsTotal") ?? 0,
-                StartedAt = entity.Value.GetDateTimeOffset("StartedAt"),
-                LastProgressAt = entity.Value.GetDateTimeOffset("LastProgressAt"),
-                LastError = entity.Value.GetString("LastError")
-            };
+            return ToVerifiedReviewsJobState(entity.Value);
         }
         catch (Azure.RequestFailedException ex) when (ex.Status == 404)
         {
@@ -574,29 +561,146 @@ public class ReviewService
         }
     }
 
-    public async Task SaveVerifiedReviewsJobStateAsync(VerifiedReviewsJobState state)
+    private static VerifiedReviewsJobState ToVerifiedReviewsJobState(Azure.Data.Tables.TableEntity entity) => new()
     {
-        var client = GetTableClient();
-        var entity = new Azure.Data.Tables.TableEntity(_verifiedReviewsPartitionKey, _verifiedReviewsRowKey)
+        IsRunning = entity.GetBoolean("IsRunning") ?? false,
+        JobId = entity.GetString("JobId") ?? string.Empty,
+        ProductId = entity.GetInt32("ProductId") ?? 0,
+        ProductName = entity.GetString("ProductName") ?? string.Empty,
+        ProcessedCount = entity.GetInt32("ProcessedCount") ?? 0,
+        TotalCount = entity.GetInt32("TotalCount") ?? 0,
+        ProductsProcessed = entity.GetInt32("ProductsProcessed") ?? 0,
+        ProductsTotal = entity.GetInt32("ProductsTotal") ?? 0,
+        CompletedReviewCount = entity.GetInt32("CompletedReviewCount") ?? 0,
+        StartedAt = entity.GetDateTimeOffset("StartedAt"),
+        LastProgressAt = entity.GetDateTimeOffset("LastProgressAt"),
+        CompletedAt = entity.GetDateTimeOffset("CompletedAt"),
+        LastError = entity.GetString("LastError")
+    };
+
+    private static Azure.Data.Tables.TableEntity ToVerifiedReviewsEntity(VerifiedReviewsJobState state) =>
+        new(_verifiedReviewsPartitionKey, _verifiedReviewsRowKey)
         {
             ["IsRunning"] = state.IsRunning,
+            ["JobId"] = state.JobId,
             ["ProductId"] = state.ProductId,
             ["ProductName"] = state.ProductName,
             ["ProcessedCount"] = state.ProcessedCount,
             ["TotalCount"] = state.TotalCount,
             ["ProductsProcessed"] = state.ProductsProcessed,
             ["ProductsTotal"] = state.ProductsTotal,
+            ["CompletedReviewCount"] = state.CompletedReviewCount,
             ["StartedAt"] = state.StartedAt,
             ["LastProgressAt"] = state.LastProgressAt,
+            ["CompletedAt"] = state.CompletedAt,
             ["LastError"] = state.LastError
         };
-        await client.UpsertEntityAsync(entity, Azure.Data.Tables.TableUpdateMode.Replace);
-        await _publisher.SendToGroupAsync("reviews", new
+
+    public async Task SaveVerifiedReviewsJobStateAsync(VerifiedReviewsJobState state)
+    {
+        var client = GetTableClient();
+        await client.UpsertEntityAsync(ToVerifiedReviewsEntity(state), Azure.Data.Tables.TableUpdateMode.Replace);
+        await PublishVerifiedReviewsStateAsync(state);
+    }
+
+    private Task PublishVerifiedReviewsStateAsync(VerifiedReviewsJobState state) =>
+        _publisher.SendToGroupAsync("reviews", new
         {
             @event = "generation-state-changed",
             productId = state.ProductId,
+            jobId = state.JobId,
             changeType = state.IsRunning ? (state.ProcessedCount == 0 ? "started" : "progress") : "terminal"
         });
+
+    /// <summary>
+    /// Records one attempted review for the given job. Returns null when the job is no longer
+    /// running (stopped, expired or replaced), so the caller stops processing.
+    /// </summary>
+    public Task<VerifiedReviewsJobState?> ReportVerifiedReviewProgressAsync(
+        string jobId, string productName, string? lastError) =>
+        UpdateVerifiedReviewsJobAsync(jobId, state =>
+        {
+            state.ProcessedCount = Math.Min(state.TotalCount, state.ProcessedCount + 1);
+            state.ProductName = productName;
+            if (!string.IsNullOrWhiteSpace(lastError)) state.LastError = lastError;
+        });
+
+    /// <summary>
+    /// Marks one product message as complete exactly once per job (a marker row absorbs
+    /// redelivered messages) and finishes the job when every product is complete. Returns null
+    /// when the product was already counted or the job is no longer running.
+    /// </summary>
+    public async Task<VerifiedReviewsJobState?> CompleteVerifiedReviewsProductAsync(
+        string jobId, int productId, int reviewCount)
+    {
+        try
+        {
+            await GetTableClient().AddEntityAsync(new Azure.Data.Tables.TableEntity(
+                $"{_verifiedReviewsPartitionKey}-{jobId}", productId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 409)
+        {
+            return null;
+        }
+
+        return await UpdateVerifiedReviewsJobAsync(jobId, state =>
+        {
+            state.ProductsProcessed = Math.Min(state.ProductsTotal, state.ProductsProcessed + 1);
+            state.CompletedReviewCount = Math.Min(state.TotalCount, state.CompletedReviewCount + reviewCount);
+            state.ProcessedCount = Math.Max(state.ProcessedCount, state.CompletedReviewCount);
+            if (state.ProductsProcessed >= state.ProductsTotal)
+            {
+                state.IsRunning = false;
+                state.CompletedAt = DateTimeOffset.UtcNow;
+            }
+        });
+    }
+
+    public Task<VerifiedReviewsJobState?> StopVerifiedReviewsJobAsync(string jobId, string lastError) =>
+        UpdateVerifiedReviewsJobAsync(jobId, state =>
+        {
+            state.IsRunning = false;
+            state.CompletedAt = DateTimeOffset.UtcNow;
+            state.LastError = lastError;
+        });
+
+    private async Task<VerifiedReviewsJobState?> UpdateVerifiedReviewsJobAsync(
+        string jobId, Action<VerifiedReviewsJobState> mutate)
+    {
+        var client = GetTableClient();
+        const int maxAttempts = 6;
+        for (var attempt = 1; ; attempt++)
+        {
+            Azure.Data.Tables.TableEntity current;
+            try
+            {
+                current = (await client.GetEntityAsync<Azure.Data.Tables.TableEntity>(
+                    _verifiedReviewsPartitionKey, _verifiedReviewsRowKey)).Value;
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+            {
+                return null;
+            }
+
+            var state = ToVerifiedReviewsJobState(current);
+            if (!state.IsRunning || !string.Equals(state.JobId, jobId, StringComparison.Ordinal))
+                return null;
+
+            mutate(state);
+            state.LastProgressAt = DateTimeOffset.UtcNow;
+            try
+            {
+                await client.UpdateEntityAsync(ToVerifiedReviewsEntity(state), current.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status == 412 && attempt < maxAttempts)
+            {
+                await Task.Delay(25 * attempt);
+                continue;
+            }
+
+            await PublishVerifiedReviewsStateAsync(state);
+            return state;
+        }
     }
 
     // ── Review auto-moderation queue state + data access ────────────────────
@@ -868,7 +972,8 @@ public class ReviewService
             if (eventName == "generation-state-changed")
                 await _publisher.SendToGroupAsync("reviews", new
                 {
-                    @event = eventName, productId = entity.GetInt32("ProductId") ?? 0, changeType = "terminal"
+                    @event = eventName, productId = entity.GetInt32("ProductId") ?? 0,
+                    jobId = entity.GetString("JobId") ?? string.Empty, changeType = "terminal"
                 });
             else
                 await _publisher.SendToGroupAsync("reviews", new

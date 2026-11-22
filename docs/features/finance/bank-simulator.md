@@ -73,7 +73,7 @@ When an order ships, the bank is credited with the order's **net proceeds** in t
 
 ### Initial balance
 
-The bank is seeded on first use: the USD account starts from a historical profit query. A [simulator reset](../simulators/simulator-controls.md) wipes the bank and re-seeds it.
+`SimulationMaintenance_Timer` seeds the bank on host start if it is empty (bank writes also seed it first): the USD account starts from a historical profit query. A [simulator reset](../simulators/simulator-controls.md) wipes the bank and re-seeds it.
 
 ### Concurrency
 
@@ -113,7 +113,7 @@ Balance updates use Table Storage ETags and retry on conflict. Amounts are store
 | Table `awBankTransactions` | PartitionKey currency code, RowKey reverse ticks + GUID (newest first) | Type `initial`, `sale`, `purchase`, `payroll`, `deposit`, `withdrawal` or `other` |
 | SQL `Sales.CurrencyRate` | — | Exchange rates |
 
-The tables are provisioned by `infra/modules/storage.bicep`; the bank seeds its data on first use.
+The tables are provisioned by `infra/modules/storage.bicep`; `SimulationMaintenance_Timer` seeds the bank data.
 
 ## Events
 

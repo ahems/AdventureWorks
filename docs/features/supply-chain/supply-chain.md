@@ -93,7 +93,7 @@ The speed multiplier is 1–50 (default 15) and is set with `PUT supply/config` 
 
 ### First use
 
-The first `supply/*` call (or `POST supply/initialize`) prepares the simulation: it resolves seeded purchase orders still in status 2, seeds vendor stock and injects about 236 pending seed orders staggered one second apart.
+`SimulationMaintenance_Timer` on host start, the first `supply/*` write or `POST supply/initialize` prepares the simulation (reads never initialize it): it resolves seeded purchase orders still in status 2, seeds vendor stock and injects about 236 pending seed orders staggered one second apart.
 
 Products sold only at retail join the vendor catalog through top-level BOM rows in `seed-job/sql/BillOfMaterials-ai.csv`.
 

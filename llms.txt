@@ -24,7 +24,7 @@ Start with README.md and QUICKSTART.md. Use docs/glossary.md for terminology. Ag
 - [Real-time eventing](docs/architecture/realtime-eventing.md): Web PubSub push, SQL outbox listener and polling-free frontends.
 - [Data stores](docs/architecture/data-stores.md): Azure SQL schema, Storage queues/tables/blobs and Durable Functions state.
 - [Identity and authentication](docs/architecture/identity-and-auth.md): Managed identities, OAuth resource tokens, scopes, roles and categories.
-- [AI architecture](docs/architecture/ai-architecture.md): Foundry models, prompt/workflow/intent agents, hosted agent and MCP tools.
+- [AI architecture](docs/architecture/ai-architecture.md): Foundry models, prompt agents, hosted agent and MCP tools.
 - [Networking](docs/architecture/networking.md): Virtual network, subnets, private endpoints and public ingress.
 - [DAB naming conventions](docs/architecture/dab-naming-conventions.md): How database tables map to DAB GraphQL and REST names.
 - [Reference architecture diagram](docs/AdventureWorks-Reference-Architecture.svg): SVG diagram of the Azure services and how they connect.
@@ -100,7 +100,7 @@ Start with README.md and QUICKSTART.md. Use docs/glossary.md for terminology. Ag
 - [Deployment](docs/operations/deployment.md): azd lifecycle, hooks and redeploying service changes.
 - [Deployer permissions](docs/AZD_DEPLOYER_PERMISSIONS.md): Why Contributor is not enough and the conditioned role-assignment grant.
 - [CI/CD](docs/operations/ci-cd.md): GitHub Actions workflows for build checks and service-principal deployment.
-- [Dev container](docs/operations/dev-container.md): Codespaces / dev container tooling.
+- [Dev container](docs/operations/dev-container.md): Dev container tooling and the deploy-and-test-in-Azure workflow.
 - [WSL deployment](docs/operations/wsl-deployment.md): Deploying from Windows Subsystem for Linux.
 - [Monitoring](docs/operations/monitoring.md): Application Insights telemetry across frontends, Functions, api-mcp, Inspector and seed job: custom events (including Sql.SessionPrincipal identity evidence), sampling, trace correlation and KQL queries.
 - [Health diagnostics](docs/features/monitoring/HEALTH_DIAGNOSTICS.md): Readiness endpoints and the storefront /health page.
@@ -128,7 +128,7 @@ Start with README.md and QUICKSTART.md. Use docs/glossary.md for terminology. Ag
 
 ## Component READMEs
 
-- [app](app/README.md): Storefront source, local development and build.
+- [app](app/README.md): Storefront source, build and deployment.
 - [app-admin](app-admin/README.md): Admin portal source, runtime configuration and container.
 - [app-manufacturing](app-manufacturing/README.md): Manufacturing portal source, runtime configuration and container.
 - [mcp-inspector](mcp-inspector/README.md): MCP Inspector container and authenticating gateway.

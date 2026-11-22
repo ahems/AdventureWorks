@@ -11,6 +11,22 @@ param diagnosticsName string = 'acr-diagnostics-${toLower(resourceToken)}'
 param keyVaultName string = 'av-kv-${toLower(resourceToken)}'
 param foundryLocation string = resourceGroup().location
 param location string = resourceGroup().location
+// Static Web Apps is only available in these regions; use the main location when it is one
+// of them, otherwise eastus2.
+@allowed([
+  'westus2'
+  'centralus'
+  'eastus2'
+  'westeurope'
+  'eastasia'
+])
+param staticWebAppLocation string = contains([
+  'westus2'
+  'centralus'
+  'eastus2'
+  'westeurope'
+  'eastasia'
+], location) ? location : 'eastus2'
 param adminUserEnabled bool = false
 param aadAdminObjectId string
 @description('Wether to restore the OpenAI service or not. If set to true, the OpenAI service will be restored from a soft-deleted backup. Use this only if you have previously deleted the OpenAI service created with this script, as you will need to restore it.')
@@ -279,6 +295,7 @@ module apiFunctions 'modules/flex-api-functions.bicep' = {
     sqlConnectionString: database.outputs.connectionString
     aiFoundryEndpoint: aifoundry.outputs.endpoint
     chatGptDeploymentName: chatGptDeploymentName
+    imageDeploymentName: aifoundry.outputs.imageDeploymentName
     storageAccountName: storage.outputs.storageAccountName
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     emailSenderDomain: communication.outputs.senderDomain
@@ -322,7 +339,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
   name: 'Deploy-Static-Web-App-Frontend'
   params: {
     swaName: 'av-app-${resourceToken}'
-    location: 'eastus2'
+    location: staticWebAppLocation
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: apiFunctions.outputs.apiFunctionsUrl

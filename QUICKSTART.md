@@ -111,7 +111,7 @@ sequenceDiagram
 | Hook | What it does |
 | --- | --- |
 | `preup.sh` | Persists your subscription and identity, creates the resource group and Foundry account, and selects AI models with available quota. |
-| `postprovision.sh` | Reconciles runtime role assignments, creates the OAuth signing certificate in Key Vault, builds the seed-job image and starts the seed job asynchronously, grants Foundry permissions and creates the Foundry agents. |
+| `postprovision.sh` | Reports legacy runtime role assignments, creates the OAuth signing certificate in Key Vault, builds the seed-job image and starts the seed job asynchronously, grants Foundry permissions and creates the Foundry agents. |
 | `predeploy.sh` | Writes `app/.env.production` (API, Functions, MCP and Application Insights URLs) and renders the Static Web App configuration. |
 | Service hooks | Configure DAB, Functions and the storefront after each deploys. |
 | `postdeploy.sh` | Publishes the hosted Manufacturing agent endpoint, trusts its identity in api-mcp, configures OAuth redirect URIs and refreshes Functions agent settings. |

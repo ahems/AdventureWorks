@@ -39,6 +39,7 @@ import {
   type ProductRecommendation,
   type CatalogMeta,
 } from "@/lib/helpMeService";
+import { isAiRateLimitError, retryAfterMinutes } from "@/lib/aiRateLimit";
 import { trackError } from "@/lib/appInsights";
 
 // ---------------------------------------------------------------------------
@@ -200,7 +201,11 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
       setStep("questions");
     } catch (err) {
       trackError("HelpMeChooseWizard loadQuestions", err);
-      setError(t("error.loadQuestions"));
+      setError(
+        isAiRateLimitError(err)
+          ? t("error.rateLimited", { minutes: retryAfterMinutes(err) })
+          : t("error.loadQuestions"),
+      );
       setStep("error");
     }
   }, [selectedLanguage, t]);
@@ -248,7 +253,11 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
         setStep("results");
       } catch (err) {
         trackError("HelpMeChooseWizard getRecommendations", err);
-        setError(t("error.loadRecommendations"));
+        setError(
+          isAiRateLimitError(err)
+            ? t("error.rateLimited", { minutes: retryAfterMinutes(err) })
+            : t("error.loadRecommendations"),
+        );
         setStep("error");
       }
     }

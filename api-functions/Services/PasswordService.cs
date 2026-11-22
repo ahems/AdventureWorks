@@ -42,7 +42,7 @@ public class PasswordService : IPasswordService
     /// <summary>
     /// Generates a cryptographically secure random salt
     /// </summary>
-    private string GenerateSalt()
+    private static string GenerateSalt()
     {
         byte[] saltBytes = new byte[SaltSize];
         using (var rng = RandomNumberGenerator.Create())
@@ -55,7 +55,7 @@ public class PasswordService : IPasswordService
     /// <summary>
     /// Hashes a password using PBKDF2 with the provided salt
     /// </summary>
-    private string HashPassword(string password, string salt)
+    private static string HashPassword(string password, string salt)
     {
         byte[] saltBytes = Convert.FromBase64String(salt);
 
@@ -68,6 +68,15 @@ public class PasswordService : IPasswordService
             byte[] hash = pbkdf2.GetBytes(HashSize);
             return Convert.ToBase64String(hash);
         }
+    }
+
+    /// <summary>
+    /// Creates a new salt and PBKDF2 hash in the Person.Password column format.
+    /// </summary>
+    public static (string Hash, string Salt) CreatePasswordHash(string password)
+    {
+        var salt = GenerateSalt();
+        return (HashPassword(password, salt), salt);
     }
 
     /// <summary>
@@ -162,7 +171,8 @@ public class PasswordService : IPasswordService
 
     /// <summary>
     /// Creates an individual customer (BusinessEntity, Person 'IN', EmailAddress, Password) in a
-    /// single serializable transaction. Returns null when the email address is already registered.
+    /// single serializable transaction. Returns null when the email address is already registered
+    /// (pre-check or the <c>UQ_EmailAddress_EmailAddress</c> constraint).
     /// </summary>
     public async Task<CreatedCustomerAccount?> CreateCustomerAccountAsync(
         string email, string password, string firstName, string lastName)
@@ -193,11 +203,20 @@ public class PasswordService : IPasswordService
             VALUES (@Id, 'IN', 0, @FirstName, @LastName, 0, NEWID(), GETDATE())",
             new { Id = businessEntityId, FirstName = firstName, LastName = lastName }, transaction);
 
-        var emailAddressId = await connection.ExecuteScalarAsync<int>(@"
-            INSERT INTO [Person].[EmailAddress] (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
-            OUTPUT INSERTED.EmailAddressID
-            VALUES (@Id, @Email, NEWID(), GETDATE())",
-            new { Id = businessEntityId, Email = email }, transaction);
+        int emailAddressId;
+        try
+        {
+            emailAddressId = await connection.ExecuteScalarAsync<int>(@"
+                INSERT INTO [Person].[EmailAddress] (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
+                OUTPUT INSERTED.EmailAddressID
+                VALUES (@Id, @Email, NEWID(), GETDATE())",
+                new { Id = businessEntityId, Email = email }, transaction);
+        }
+        catch (SqlException ex) when (api_functions.Services.DuplicateEmailAddressException.IsDuplicateKeyError(ex))
+        {
+            transaction.Rollback();
+            return null;
+        }
 
         await connection.ExecuteAsync(@"
             INSERT INTO [Person].[Password] (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)

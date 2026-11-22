@@ -20,6 +20,10 @@ from ephemeral_storage import MutationRunLedger
 import runtime_config
 
 
+
+DAB_UPDATE_DENIALS = {"The current user is not authorized to access this resource.",
+                      "Unauthorized due to one or more fields in this mutation."}
+
 class Mutations:
     def __init__(self, report, deployment, run_id, ledger=None):
         self.report, self.deployment, self.run_id = report, deployment, run_id
@@ -171,7 +175,8 @@ class Mutations:
         payload = {"query": query, "variables": {"id": review_id, "votes": votes + 1}}
         for label, token, role in [("anonymous", None, None),
                                    ("forged", "invalid-auth-validation-token", "consumer"),
-                                   ("functions-audience", caller.token("functions"), "consumer")]:
+                                   ("functions-audience", caller.token("functions"), "consumer"),
+                                   ("consumer", caller.token("dab"), "consumer")]:
             check = "review-vote-denied-" + caller.label + "-" + label
             self.require(check + "-baseline", self.rows("ProductReview", caller, suffix) == snapshot,
                          "Independent read must match the run-owned review before the vote attempt.")
@@ -191,10 +196,15 @@ class Mutations:
                               isinstance(error.get("extensions"), dict) and
                               error["extensions"].get("code") == "AUTH_NOT_AUTHENTICATED" for error in errors) and
                           (data is None or isinstance(data, dict) and data.get("updateProductReview") is None))
+            elif label == "consumer":
+                denied = (status == 200 and isinstance(errors, list) and bool(errors) and
+                          all(isinstance(error, dict) and error.get("message") in DAB_UPDATE_DENIALS
+                              for error in errors) and
+                          (data is None or isinstance(data, dict) and data.get("updateProductReview") is None))
             else:
                 denied = status == 401
             self.report.check("mutation:" + check, "live-denials", denied,
-                              f"GraphQL vote must reject {label}; HTTP {status}.")
+                              f"DAB GraphQL vote-count write must reject {label}; HTTP {status}.")
             unchanged = self.rows("ProductReview", caller, suffix) == snapshot
             self.report.check("mutation:" + check + "-unchanged", "mutations", unchanged,
                               "Independent read must show no review changes after the attempted vote.")
@@ -1001,7 +1011,7 @@ class Mutations:
                                          ("delete", "DELETE", None)]:
                 status, _ = self.request(method, url, caller, data, dab=True)
                 self.require("review-denied-" + caller.label + "-" + label, status == 403,
-                             "Consumer cannot change review content/owner or delete via vote-only permission.")
+                             "Consumer cannot change review content/owner or delete through DAB.")
                 current = self.rows("ProductReview", caller, suffix)
                 self.require("review-unchanged-" + caller.label + "-" + label, current == snapshot,
                              "Persisted review remains unchanged after denied operation.")
@@ -1016,8 +1026,8 @@ class Mutations:
                 errors = body.get("errors") if isinstance(body, dict) else None
                 self.require("review-graphql-denied-" + caller.label + "-" + label,
                              status == 200 and isinstance(errors, list) and len(errors) > 0 and
-                             all(isinstance(error, dict) and error.get("message") ==
-                                 "Unauthorized due to one or more fields in this mutation." for error in errors) and
+                             all(isinstance(error, dict) and error.get("message") in DAB_UPDATE_DENIALS
+                                 for error in errors) and
                              (data is None or isinstance(data, dict) and data.get("updateProductReview") is None),
                              "GraphQL cannot change review content or owner.")
                 current = self.rows("ProductReview", caller, suffix)
@@ -1043,23 +1053,25 @@ class Mutations:
             votes = snapshot[0].get("HelpfulVotes")
             self.require("review-vote-fixture-" + caller.label, type(votes) is int and votes >= 0,
                          "Persisted vote count must be an integer before increment.")
+            review_id = snapshot[0]["ProductReviewID"]
+            vote_url = f"{self.functions}/api/reviews/{review_id}/vote"
+            self.host_denials("review-vote-" + caller.label, caller, "POST", vote_url, None,
+                              lambda: self.rows("ProductReview", caller, suffix) == snapshot)
+            status, body = self.request("POST", vote_url, caller)
+            self.require("review-vote-own-denied-" + caller.label, status == 403 and
+                         self.rows("ProductReview", caller, suffix) == snapshot,
+                         "A consumer cannot vote for their own review; HTTP " + str(status))
             voter = callers[1 if caller is callers[0] else 0]
-            query = ("mutation Vote($id: Int!, $votes: Int!) { "
-                     "updateProductReview(ProductReviewID: $id, item: { HelpfulVotes: $votes }) "
-                     "{ ProductReviewID HelpfulVotes } }")
-            status, body = self.request("POST", self.graphql, voter, {
-                "query": query, "variables": {"id": snapshot[0]["ProductReviewID"], "votes": votes + 1}
-            }, dab=True)
-            result = body.get("data", {}).get("updateProductReview") if isinstance(body, dict) and \
-                isinstance(body.get("data"), dict) else None
-            self.require("review-vote-" + caller.label, status == 200 and isinstance(body, dict) and
-                         not body.get("errors") and result == {
-                             "ProductReviewID": snapshot[0]["ProductReviewID"], "HelpfulVotes": votes + 1},
-                         "Other authenticated consumer can update only the vote count via GraphQL; HTTP " + str(status))
+            for attempt, changed in [("first", True), ("repeat", False)]:
+                status, body = self.request("POST", vote_url, voter)
+                self.require(f"review-vote-{attempt}-" + caller.label, status == 200 and body == {
+                                 "productReviewId": review_id, "helpfulVotes": votes + 1,
+                                 "voted": True, "changed": changed},
+                             "Other consumer records one helpful vote through Functions; HTTP " + str(status))
             current = self.rows("ProductReview", caller, suffix)
             expected = {**snapshot[0], "HelpfulVotes": votes + 1}
             self.require("review-vote-persisted-" + caller.label, current == [expected],
-                         "Separate read proves only the allowed vote field changed.")
+                         "Separate read proves one vote per user changed only the vote count.")
 
     def run(self):
         callers = self.accounts()

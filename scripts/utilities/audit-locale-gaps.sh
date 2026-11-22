@@ -15,7 +15,7 @@ REPO_ROOT="$PWD"
 LOCALES_DIR="$REPO_ROOT/app/src/locales"
 CULTURE_BASE="$REPO_ROOT/seed-job/sql/Culture.csv"
 CULTURE_AI="$REPO_ROOT/seed-job/sql/Culture-ai.csv"
-NAMESPACES="common account product cart footer chat"
+NAMESPACES="common account product cart footer chat helpme"
 
 # --- Require run from repo root ---
 if [ ! -d "$LOCALES_DIR/en" ] || [ ! -f "$CULTURE_BASE" ]; then

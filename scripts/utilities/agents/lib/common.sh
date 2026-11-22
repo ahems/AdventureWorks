@@ -5,9 +5,8 @@
 #
 # Sourced by every agent script in the parent directory and by the orchestrator
 # (create-foundry-agents.sh).  Exports environment variables, logging helpers,
-# and the three main functions used by all agent scripts:
+# and the two main functions used by all agent scripts:
 #
-#   setup_shared_connections   — create / verify the DAB MCP project connection
 #   upsert_memory_store        — create (or return existing) a memory store
 #   upsert_agent               — create or update a "kind: prompt" Foundry agent
 # =============================================================================
@@ -24,11 +23,8 @@ AGENT_TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/adventureworks-agent.XXXXXXXX") || {
     exit 1
 }
 cleanup_agent_temp() {
-    rm -f -- "$AGENT_TEMP_DIR/connection-get.json" "$AGENT_TEMP_DIR/connection-create.json" \
-        "$AGENT_TEMP_DIR/connection-arm.json" "$AGENT_TEMP_DIR/memory-store.json" \
-        "$AGENT_TEMP_DIR/agent-get.json" "$AGENT_TEMP_DIR/agent-response.json" \
-        "$AGENT_TEMP_DIR/intent-get.json" "$AGENT_TEMP_DIR/intent-response.json" \
-        "$AGENT_TEMP_DIR/workflow-get.json" "$AGENT_TEMP_DIR/workflow-response.json"
+    rm -f -- "$AGENT_TEMP_DIR/memory-store.json" \
+        "$AGENT_TEMP_DIR/agent-get.json" "$AGENT_TEMP_DIR/agent-response.json"
     rmdir -- "$AGENT_TEMP_DIR"
 }
 trap cleanup_agent_temp EXIT
@@ -51,7 +47,6 @@ API_URL=$(get_azd_value "API_URL")
 CHAT_GPT_DEPLOYMENT=$(get_azd_value "chatGptDeploymentName")
 EMBEDDING_DEPLOYMENT="embedding"   # deployment name (not the model name)
 AZURE_SUBSCRIPTION_ID=$(get_azd_value "AZURE_SUBSCRIPTION_ID")
-AZURE_RESOURCE_GROUP=$(get_azd_value "AZURE_RESOURCE_GROUP")
 APPINSIGHTS_CONNECTION_STRING=$(get_azd_value "APPLICATIONINSIGHTS_CONNECTION_STRING")
 
 # Derive the DAB MCP URL from the GraphQL API URL:
@@ -79,165 +74,10 @@ if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
     exit 1
 fi
 
-# Connection ID exported by setup_shared_connections; used as
-# project_connection_id in DAB MCP tool configs.
-DAB_MCP_CONNECTION_ID=""
-
 # ── Get a fresh Azure AI Foundry bearer token ─────────────────────────────────
 get_ai_token() {
     az account get-access-token --subscription "$AZURE_SUBSCRIPTION_ID" --resource "https://ai.azure.com/" \
         --query accessToken -o tsv 2>/dev/null | tr -d '\n\r '
-}
-
-# ── Get an Azure management-plane token ───────────────────────────────────────
-_get_mgmt_token() {
-    az account get-access-token --subscription "$AZURE_SUBSCRIPTION_ID" --resource "https://management.azure.com/" \
-        --query accessToken -o tsv 2>/dev/null | tr -d '\n\r '
-}
-
-# ── Extract project name from the Foundry endpoint URL ───────────────────────
-# PROJECT_ENDPOINT: https://{account}.services.ai.azure.com/api/projects/{project}
-_get_project_name() {
-    echo "$PROJECT_ENDPOINT" | python3 -c "
-import sys, re
-m = re.search(r'/projects/([^/?#]+)', sys.stdin.read())
-print(m.group(1) if m else '')
-"
-}
-
-# =============================================================================
-# setup_shared_connections
-#
-# Creates (or verifies) a project connection for the DAB MCP endpoint so that
-# Foundry manages the stateful Streamable HTTP session handshake on behalf of
-# agents that use DAB MCP tools.
-#
-# Without a project_connection_id, DAB's Streamable HTTP transport rejects
-# Foundry requests with 400 "Mcp-Session-Id header is required" because Foundry
-# skips the MCP initialize handshake.  With project_connection_id, Foundry's
-# backend performs the full handshake automatically.
-#
-# On success exports DAB_MCP_CONNECTION_ID (the connection name).
-# On failure warns and continues — agents are still created, but DAB MCP tools
-# may not function until the connection is added manually.
-# =============================================================================
-setup_shared_connections() {
-    info "Setting up shared project connections..."
-
-    local conn_name="adventureworks-dab-mcp"
-    local token
-    token=$(get_ai_token)
-
-    if [ -z "$token" ]; then
-        warn "Could not obtain Azure AI token — skipping connection setup"
-        return 0
-    fi
-
-    if [ -z "$DAB_MCP_URL" ] || [ "$DAB_MCP_URL" = "/mcp" ]; then
-        warn "Could not derive DAB MCP URL from API_URL ($API_URL) — skipping connection setup"
-        return 0
-    fi
-
-    # ── Check whether the connection already exists (Foundry data plane) ──────
-    local get_status
-    get_status=$(curl -s -o "$AGENT_TEMP_DIR/connection-get.json" -w "%{http_code}" \
-        -H "Authorization: Bearer $token" \
-        "${PROJECT_ENDPOINT}/connections/${conn_name}?api-version=${API_VERSION}" 2>/dev/null)
-
-    if [ "$get_status" = "200" ]; then
-        DAB_MCP_CONNECTION_ID="$conn_name"
-        success "DAB MCP connection already exists: $DAB_MCP_CONNECTION_ID"
-        return 0
-    fi
-
-    # ── Try to create via Foundry data-plane API ──────────────────────────────
-    local fp_body
-    fp_body=$(python3 -c "
-import json, sys
-print(json.dumps({
-    'name':            sys.argv[1],
-    'connection_type': 'HttpEndpoint',
-    'target':          sys.argv[2],
-    'auth':            {'type': 'none'}
-}))
-" "$conn_name" "$DAB_MCP_URL")
-
-    local fp_status
-    fp_status=$(curl -s -o "$AGENT_TEMP_DIR/connection-create.json" -w "%{http_code}" -X POST \
-        -H "Authorization: Bearer $token" \
-        -H "Content-Type: application/json" \
-        -d "$fp_body" \
-        "${PROJECT_ENDPOINT}/connections?api-version=${API_VERSION}" 2>/dev/null)
-
-    if [ "$fp_status" = "200" ] || [ "$fp_status" = "201" ]; then
-        DAB_MCP_CONNECTION_ID="$conn_name"
-        success "Created DAB MCP project connection (Foundry API): $DAB_MCP_CONNECTION_ID"
-        return 0
-    fi
-
-    # ── Fall back to ARM REST API (CognitiveServices/accounts/projects path) ──
-    local mgmt_token
-    mgmt_token=$(_get_mgmt_token)
-
-    # Extract account and project names from the project endpoint URL:
-    #   https://{account}.services.ai.azure.com/api/projects/{project}
-    local account_name project_name
-    account_name=$(echo "$PROJECT_ENDPOINT" | python3 -c "
-import sys, re
-m = re.match(r'https://([^.]+)\.', sys.stdin.read())
-print(m.group(1) if m else '')
-")
-    project_name=$(_get_project_name)
-
-    if [ -n "$mgmt_token" ] && [ -n "$account_name" ] && [ -n "$project_name" ] && \
-       [ -n "$AZURE_SUBSCRIPTION_ID" ] && [ -n "$AZURE_RESOURCE_GROUP" ]; then
-
-        local arm_url
-        arm_url="https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}"
-        arm_url+="/resourceGroups/${AZURE_RESOURCE_GROUP}"
-        arm_url+="/providers/Microsoft.CognitiveServices/accounts/${account_name}"
-        arm_url+="/projects/${project_name}"
-        arm_url+="/connections/${conn_name}?api-version=2025-04-01-preview"
-
-        local arm_body
-        arm_body=$(python3 -c "
-import json, sys
-print(json.dumps({
-    'properties': {
-        'category': 'CustomKeys',
-        'target':   sys.argv[1],
-        'authType': 'None',
-        'credentials': {}
-    }
-}))
-" "$DAB_MCP_URL")
-
-        local arm_status
-        arm_status=$(curl -s -o "$AGENT_TEMP_DIR/connection-arm.json" -w "%{http_code}" -X PUT \
-            -H "Authorization: Bearer $mgmt_token" \
-            -H "Content-Type: application/json" \
-            -d "$arm_body" \
-            "$arm_url" 2>/dev/null)
-
-        if [ "$arm_status" = "200" ] || [ "$arm_status" = "201" ]; then
-            DAB_MCP_CONNECTION_ID="$conn_name"
-            success "Created DAB MCP project connection (ARM API): $DAB_MCP_CONNECTION_ID"
-            return 0
-        fi
-
-        local arm_resp
-        arm_resp=$(cat "$AGENT_TEMP_DIR/connection-arm.json" 2>/dev/null || echo "")
-        warn "ARM connection creation returned HTTP $arm_status: ${arm_resp:0:200}"
-    fi
-
-    # ── Both methods failed — continue without a connection ───────────────────
-    local fp_resp
-    fp_resp=$(cat "$AGENT_TEMP_DIR/connection-create.json" 2>/dev/null || echo "")
-    warn "Could not create DAB MCP project connection (Foundry HTTP $fp_status: ${fp_resp:0:150})."
-    warn "Agents requiring DAB MCP will be created with a direct server_url."
-    warn "DAB MCP tool calls may fail until the connection is added manually in the Foundry portal."
-    DAB_MCP_CONNECTION_ID=""
-    return 0
 }
 
 # =============================================================================
@@ -389,7 +229,7 @@ upsert_agent() {
     local tools_json
     if ! tools_json=$(python3 "$(dirname "${BASH_SOURCE[0]}")/build-agent-tools.py" \
         "$MCP_SERVICE_URL" "$DAB_MCP_URL" "$allowed_tools" "$include_dabmcp" \
-        "$DAB_MCP_CONNECTION_ID" "$allowed_dab_tools"); then
+        "$allowed_dab_tools"); then
         error "Could not build a fail-closed MCP tool configuration for $name."
         return 1
     fi

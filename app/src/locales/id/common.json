@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "Menggunakan embedding AI untuk memahami kueri bahasa alami. Coba: \"sepeda merah\", \"perlengkapan tahan air untuk pendakian saat hujan\", atau \"peralatan ringan untuk pesepeda\"",
     "matchCounts": "Ditemukan {{descriptionMatches}} kecocokan deskripsi, {{reviewMatches}} kecocokan ulasan, dan {{nameMatches}} kecocokan nama",
     "semanticUnavailable": "Layanan pencarian semantik tidak tersedia. Harap periksa apakah layanan AI sedang berjalan dan embedding sudah diindeks.",
+    "aiRateLimited": "Pencarian AI sedang sibuk. Silakan coba lagi dalam {{minutes}} menit.",
     "noMatchingProducts": "Tidak ditemukan produk yang sesuai",
     "enterSearchQuery": "Masukkan kata kunci pencarian untuk menemukan produk",
     "noResultsForQuery": "Pencarian bertenaga AI kami tidak menemukan produk yang cocok dengan \"{{query}}\". Coba kata kunci atau frasa yang berbeda.",
@@ -267,7 +268,11 @@
       "lastName": "Doe",
       "email": "john@example.id",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Hanya nomor kartu uji publik (misalnya 4242 4242 4242 4242) yang dapat disimpan. Hanya jenis kartu, empat digit terakhir, dan tanggal kedaluwarsa yang disimpan.",
+    "errorSavePayment": "Gagal menyimpan metode pembayaran. Silakan coba lagi.",
+    "addCard": "Tambah kartu",
+    "invalidTestCard": "Kartu ini tidak dapat disimpan. Gunakan nomor kartu uji publik yang valid dan belum kedaluwarsa."
   },
   "checkout": {
     "backToCart": "Kembali ke Keranjang",

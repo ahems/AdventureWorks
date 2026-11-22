@@ -37,7 +37,7 @@ the **[OAuth server design](../docs/features/mcp-oauth/README.md)** and the comp
 | `AdventureWorks/Services/` | SQL data access, Functions proxy and AI helpers |
 | `AdventureWorks/Telemetry/` | Application Insights telemetry helpers |
 | `AdventureWorks.Tests/` | xUnit tests (OAuth, tool authorization, inventory) |
-| `AppHost/`, `ServiceDefaults/` | .NET Aspire host for local runs and shared defaults; the container does not use AppHost |
+| `ServiceDefaults/` | Shared OpenTelemetry, health and resilience defaults |
 
 ## Endpoints
 
@@ -46,16 +46,15 @@ the **[OAuth server design](../docs/features/mcp-oauth/README.md)** and the comp
 (readiness). The `API_MCP_URL` / `MCP_SERVICE_URL` azd outputs end in `/mcp`; strip it
 for the OAuth issuer base.
 
-## Test, run and call
+## Test and call
 
 ```bash
 dotnet test api-mcp/AdventureWorks.Tests
 python3 scripts/utilities/azure-auth.py token --identity manufacturing --resource mcp   # never print or share tokens
 ```
 
-Use the deployed service for most work. For local debugging,
-`dotnet run --project api-mcp/AppHost/AppHost.csproj` starts the Aspire host. Browse and
-call tools interactively with the [MCP Inspector](../docs/apps/mcp-inspector.md).
+The service runs only in Azure; deploy changes with `azd deploy api-mcp --no-prompt`.
+Browse and call tools interactively with the [MCP Inspector](../docs/apps/mcp-inspector.md).
 
 ## Configuration
 

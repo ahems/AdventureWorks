@@ -26,7 +26,7 @@ public enum ManufacturingAgentMode
 /// Persists the manufacturing agent autonomy mode as a single row in Azure Table Storage.
 /// PartitionKey = "config", RowKey = "manufacturing-agent".
 /// </summary>
-internal class ManufacturingAgentConfigEntity : ITableEntity
+public class ManufacturingAgentConfigEntity : ITableEntity
 {
     public string PartitionKey { get; set; } = "config";
     public string RowKey       { get; set; } = "manufacturing-agent";

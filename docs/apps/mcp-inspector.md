@@ -147,7 +147,7 @@ The three required URLs must be on different origins. Bicep sets them on the Con
 
 See [monitoring](../operations/monitoring.md#mcp-inspector-requests).
 
-## Local development
+## Deploying and testing
 
 The gateway needs HTTPS URLs on separate origins and a registered redirect URI, so it is meant to be tested in the deployed environment. Deploy changes with `azd deploy mcp-inspector --no-prompt`, then open `MCP_INSPECTOR_URL`. To call MCP tools from a script instead, use the authenticated helper:
 

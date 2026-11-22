@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getRestApiUrl, getFunctionsApiUrl } from "@/lib/utils";
+import { dabFetch } from "@/services/dabFetch";
 
 export interface Address {
   id: string;
@@ -50,7 +51,7 @@ export const useAdminCustomerAddresses = (businessEntityId: number | null) => {
     try {
       const dabApiUrl = getRestApiUrl();
 
-      const response = await fetch(
+      const response = await dabFetch(
         `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${businessEntityId}`,
       );
       if (!response.ok) {
@@ -81,7 +82,7 @@ export const useAdminCustomerAddresses = (businessEntityId: number | null) => {
           let countryName: string | undefined;
 
           try {
-            const stateResponse = await fetch(
+            const stateResponse = await dabFetch(
               `${dabApiUrl}/StateProvince/StateProvinceID/${apiAddress.stateProvinceID}`,
             );
             if (stateResponse.ok) {
@@ -92,7 +93,7 @@ export const useAdminCustomerAddresses = (businessEntityId: number | null) => {
               }
               if (stateProvince?.CountryRegionCode) {
                 countryCode = stateProvince.CountryRegionCode;
-                const countryResponse = await fetch(
+                const countryResponse = await dabFetch(
                   `${dabApiUrl}/CountryRegion/CountryRegionCode/${countryCode}`,
                 );
                 if (countryResponse.ok) {
@@ -147,7 +148,7 @@ export const useAdminCustomerAddresses = (businessEntityId: number | null) => {
         const functionsApiUrl = getFunctionsApiUrl();
         const dabApiUrl = getRestApiUrl();
 
-        const beaResponse = await fetch(
+        const beaResponse = await dabFetch(
           `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${businessEntityId} and AddressTypeID eq 2`,
         );
         const beaData = await beaResponse.json();
@@ -244,13 +245,13 @@ export const useAdminCustomerAddresses = (businessEntityId: number | null) => {
             ([_, label]) => label === updates.addressType,
           )?.[0];
           if (newTypeId) {
-            const beaSearch = await fetch(
+            const beaSearch = await dabFetch(
               `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${businessEntityId} and AddressID eq ${addressId}`,
             );
             const beaData = await beaSearch.json();
             const bea = beaData.value?.[0] as BusinessEntityAddress | undefined;
             if (bea) {
-              await fetch(
+              await dabFetch(
                 `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${businessEntityId}/AddressID/${addressId}/AddressTypeID/${bea.AddressTypeID}`,
                 {
                   method: "PATCH",
@@ -280,14 +281,14 @@ export const useAdminCustomerAddresses = (businessEntityId: number | null) => {
         const dabApiUrl = getRestApiUrl();
         const functionsApiUrl = getFunctionsApiUrl();
 
-        const beaResponse = await fetch(
+        const beaResponse = await dabFetch(
           `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${businessEntityId} and AddressID eq ${addressId}`,
         );
         if (beaResponse.ok) {
           const beaData = await beaResponse.json();
           const bea = beaData.value?.[0] as BusinessEntityAddress | undefined;
           if (bea) {
-            await fetch(
+            await dabFetch(
               `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${businessEntityId}/AddressID/${addressId}/AddressTypeID/${bea.AddressTypeID}`,
               { method: "DELETE" },
             );

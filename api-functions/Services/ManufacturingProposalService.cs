@@ -87,51 +87,77 @@ public class ManufacturingProposalService
         return results;
     }
 
+    /// <summary>Default display cap and TTL shared by the read route and the maintenance timer.</summary>
+    public const int DefaultDisplayLimit = 10;
+    public const int DefaultTtlMinutes   = 5;
+
     /// <summary>
-    /// Returns pending proposals, newest first, capped at <paramref name="limit"/>.
-    /// Proposals older than <paramref name="ttlMinutes"/> are auto-rejected.
-    /// Proposals beyond the cap are also auto-rejected so the UI stays manageable.
+    /// Splits pending proposals into the visible set (newest first, within the TTL, capped at
+    /// <paramref name="limit"/>) and the set that is expired or beyond the cap.
+    /// </summary>
+    public static (List<ManufacturingProposalEntity> Visible, List<ManufacturingProposalEntity> Stale) Partition(
+        IEnumerable<ManufacturingProposalEntity> pending, int limit, int ttlMinutes, DateTimeOffset now)
+    {
+        // RowKey is inverted-tick, so ascending RowKey order is newest first.
+        var all = pending.OrderBy(p => p.RowKey, StringComparer.Ordinal).ToList();
+        var cutoff  = now.AddMinutes(-ttlMinutes);
+        var active  = all.Where(p => p.CreatedAt >= cutoff).ToList();
+        var visible = active.Take(limit).ToList();
+        var stale   = all.Where(p => p.CreatedAt < cutoff).Concat(active.Skip(limit)).ToList();
+        return (visible, stale);
+    }
+
+    /// <summary>Returns the visible pending proposals without changing any state.</summary>
+    public async Task<List<ManufacturingProposalEntity>> ListVisiblePendingAsync(
+        int limit = DefaultDisplayLimit,
+        int ttlMinutes = DefaultTtlMinutes) =>
+        Partition(await ListPendingAsync(), limit, ttlMinutes, DateTimeOffset.UtcNow).Visible;
+
+    /// <summary>
+    /// Returns pending proposals, newest first, capped at <paramref name="limit"/>, and rejects
+    /// proposals that are older than <paramref name="ttlMinutes"/> or beyond the cap.
+    /// Only for write paths (approve-all and the maintenance timer).
     /// </summary>
     public async Task<List<ManufacturingProposalEntity>> ListPendingWithLimitAsync(
-        int limit = 10,
-        int ttlMinutes = 5)
+        int limit = DefaultDisplayLimit,
+        int ttlMinutes = DefaultTtlMinutes)
     {
-        var table   = await GetTableClientAsync();
-        var all     = new List<ManufacturingProposalEntity>();
+        var (visible, stale) = Partition(await ListPendingAsync(), limit, ttlMinutes, DateTimeOffset.UtcNow);
+        await RejectStaleAsync(stale);
+        return visible;
+    }
 
-        await foreach (var entity in table.QueryAsync<ManufacturingProposalEntity>(
-            e => e.PartitionKey == PartitionKey && e.Status == "pending"))
+    /// <summary>Rejects expired and over-cap pending proposals. Returns how many were rejected.</summary>
+    public async Task<int> ExpirePendingAsync(
+        int limit = DefaultDisplayLimit,
+        int ttlMinutes = DefaultTtlMinutes)
+    {
+        var (_, stale) = Partition(await ListPendingAsync(), limit, ttlMinutes, DateTimeOffset.UtcNow);
+        return await RejectStaleAsync(stale);
+    }
+
+    private async Task<int> RejectStaleAsync(List<ManufacturingProposalEntity> stale)
+    {
+        if (stale.Count == 0) return 0;
+
+        var table = await GetTableClientAsync();
+        int rejected = 0;
+        foreach (var p in stale)
         {
-            all.Add(entity);
-        }
-
-        // Sort newest first (RowKey is inverted-tick so sort ascending by RowKey = newest first)
-        all.Sort((a, b) => string.Compare(a.RowKey, b.RowKey, StringComparison.Ordinal));
-
-        var cutoff  = DateTimeOffset.UtcNow.AddMinutes(-ttlMinutes);
-        var expired = all.Where(p => p.CreatedAt < cutoff).ToList();
-        var active  = all.Where(p => p.CreatedAt >= cutoff).ToList();
-
-        // Auto-reject those beyond the display limit
-        var overflow = active.Skip(limit).ToList();
-        var visible  = active.Take(limit).ToList();
-
-        // Batch-reject expired + overflow
-        var toAutoReject = expired.Concat(overflow).ToList();
-        if (toAutoReject.Count > 0)
-        {
-            _logger.LogInformation(
-                "[Proposal] Auto-rejecting {Count} proposal(s): {Expired} expired, {Overflow} overflow",
-                toAutoReject.Count, expired.Count, overflow.Count);
-            foreach (var p in toAutoReject)
+            p.Status     = "rejected";
+            p.ActionedAt = DateTimeOffset.UtcNow;
+            try
             {
-                p.Status    = "rejected";
-                p.ActionedAt = DateTimeOffset.UtcNow;
                 await table.UpdateEntityAsync(p, p.ETag, TableUpdateMode.Replace);
+                rejected++;
+            }
+            catch (RequestFailedException ex) when (ex.Status is 404 or 412)
+            {
+                // Approved, rejected or removed concurrently.
             }
         }
-
-        return visible;
+        _logger.LogInformation("[Proposal] Auto-rejected {Count} expired or over-cap proposal(s).", rejected);
+        return rejected;
     }
 
     /// <summary>Rejects all pending proposals and returns how many were rejected.</summary>

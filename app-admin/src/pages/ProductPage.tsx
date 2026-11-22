@@ -19,6 +19,8 @@ import ProductImageGallery from "@/components/ProductImageGallery";
 import AiImageGeneratorDialog from "@/components/AiImageGeneratorDialog";
 import CreateVariationsDialog from "@/components/CreateVariationsDialog";
 import { useAuth } from "@/context/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   useAdminProductById,
   useAdminCategoryById,
@@ -198,6 +200,10 @@ const TransactionHistorySection: React.FC<TransactionHistorySectionProps> = ({
 const ProductPage: React.FC = () => {
   const { productId } = useParams<{ productId: string }>();
   const { isAuthenticated } = useAuth();
+  // AI generation, image and translation jobs are Functions routes requiring admin.write.
+  const canUseAi = useCan(Scopes.AdminWrite);
+  // Product details, descriptions and photos are written through DAB by admin.write roles.
+  const canEditProduct = useCan(Scopes.AdminWrite);
   const prodIdNum = productId ? parseInt(productId) : 0;
   const { data: product, isLoading: productLoading } =
     useAdminProductById(prodIdNum);
@@ -524,14 +530,16 @@ const ProductPage: React.FC = () => {
         }
 
         // 3. Fire-and-forget translation to all other cultures
-        translateProductContent([resolvedProductModelId]).catch(() => {
-          toast({
-            title: "Translation Warning",
-            description:
-              "Product saved, but auto-translation to other languages failed.",
-            variant: "destructive",
+        if (canUseAi) {
+          translateProductContent([resolvedProductModelId]).catch(() => {
+            toast({
+              title: "Translation Warning",
+              description:
+                "Product saved, but auto-translation to other languages failed.",
+              variant: "destructive",
+            });
           });
-        });
+        }
       }
 
       toast({
@@ -599,6 +607,7 @@ const ProductPage: React.FC = () => {
                 productName={product.Name}
                 color={product.Color}
               />
+              {canUseAi && (
               <AiImageGeneratorDialog
                 productId={product.ProductID}
                 productName={name}
@@ -623,6 +632,7 @@ const ProductPage: React.FC = () => {
                     : null
                 }
               />
+              )}
               {product.ProductSubcategoryID && (
                 <CreateVariationsDialog
                   product={product}
@@ -635,7 +645,7 @@ const ProductPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleDeleteAiImages}
-                disabled={isDeletingAiImages}
+                disabled={isDeletingAiImages || !canEditProduct}
                 className="doodle-button w-full py-3 flex items-center justify-center gap-2 text-doodle-accent border-doodle-accent/50 hover:bg-doodle-accent/10 disabled:opacity-60"
               >
                 {isDeletingAiImages ? (
@@ -1154,8 +1164,12 @@ const ProductPage: React.FC = () => {
                       type="button"
                       onClick={handleGenerateWithAI}
                       disabled={
-                        isGenerating || !editCategoryId || !editSubcategoryId
+                        !canUseAi ||
+                        isGenerating ||
+                        !editCategoryId ||
+                        !editSubcategoryId
                       }
+                      title={canUseAi ? undefined : "Your role cannot run AI generation"}
                       className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0 disabled:opacity-50"
                     >
                       {isGenerating ? (
@@ -1186,7 +1200,7 @@ const ProductPage: React.FC = () => {
 
                   <button
                     onClick={handleSave}
-                    disabled={isSaving}
+                    disabled={isSaving || !canEditProduct}
                     className="doodle-button doodle-button-primary w-full py-3 flex items-center justify-center gap-2 disabled:opacity-60"
                   >
                     <Save className="w-5 h-5" />
@@ -1249,12 +1263,15 @@ const ProductPage: React.FC = () => {
                       }
                     }}
                     disabled={
+                      !canUseAi ||
                       isGeneratingReviews ||
                       eligibilityLoading ||
                       eligibleReviewerCount === 0
                     }
                     title={
-                      eligibleReviewerCount === 0
+                      !canUseAi
+                        ? "Your role cannot generate reviews"
+                        : eligibleReviewerCount === 0
                         ? "No eligible customers: reviews can only be generated for eshop customers who purchased and received this product but haven't yet written a review."
                         : eligibleReviewerCount !== null
                           ? `${eligibleReviewerCount} eligible customer${eligibleReviewerCount !== 1 ? "s" : ""} who purchased and received this product without yet reviewing it`

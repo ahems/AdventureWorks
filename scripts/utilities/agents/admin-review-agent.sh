@@ -17,9 +17,6 @@
 # =============================================================================
 source "$(dirname "$0")/lib/common.sh"
 
-# Set up shared project connections when running standalone.
-[[ "${FOUNDRY_CONNECTIONS_READY:-}" = "1" ]] || setup_shared_connections
-
 # ── Memory store ───────────────────────────────────────────────────────────────
 echo "Upserting memory store for admin-review-agent..."
 MEMORY_STORE=$(upsert_memory_store \

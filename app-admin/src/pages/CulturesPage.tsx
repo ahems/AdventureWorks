@@ -53,12 +53,16 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import LocalizationDialog from "@/components/LocalizationDialog";
 import { format } from "date-fns";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 const CulturesPage = () => {
   const { toast } = useToast();
   const { data: apiCultures = [], isLoading: culturesLoading } =
     useAdminCultures();
   const { data: localizationCounts = {} } = useAdminLocalizationCounts();
+  // Culture and localization writes go through DAB, granted to admin.write roles.
+  const canWrite = useCan(Scopes.AdminWrite);
   const [cultures, setCultures] = useState<Culture[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -205,7 +209,7 @@ const CulturesPage = () => {
                 </p>
               </div>
             </div>
-            <Button onClick={openCreateDialog}>
+            <Button onClick={openCreateDialog} disabled={!canWrite}>
               <Plus className="h-4 w-4 mr-2" />
               Add Culture
             </Button>
@@ -303,6 +307,7 @@ const CulturesPage = () => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openEditDialog(culture)}
+                                disabled={!canWrite}
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
@@ -310,6 +315,7 @@ const CulturesPage = () => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openDeleteDialog(culture)}
+                                disabled={!canWrite}
                                 className="text-destructive hover:text-destructive"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -386,7 +392,7 @@ const CulturesPage = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
+            <Button onClick={handleSave} disabled={isSaving || !canWrite}>
               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {editingCulture ? "Save Changes" : "Create Culture"}
             </Button>

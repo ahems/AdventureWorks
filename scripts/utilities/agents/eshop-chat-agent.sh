@@ -11,11 +11,6 @@
 # =============================================================================
 source "$(dirname "$0")/lib/common.sh"
 
-# Set up shared project connections when running standalone.
-# The orchestrator sets FOUNDRY_CONNECTIONS_READY=1 before calling this script,
-# which skips the duplicate connection upserts.
-[[ "${FOUNDRY_CONNECTIONS_READY:-}" = "1" ]] || setup_shared_connections
-
 # ── Memory store ───────────────────────────────────────────────────────────────
 echo "Upserting memory store for eshop-chat-agent..."
 MEMORY_STORE=$(upsert_memory_store \

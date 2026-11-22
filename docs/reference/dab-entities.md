@@ -43,14 +43,26 @@ A caller picks a role with the `X-MS-API-ROLE` header. The role must be in the `
 | `anonymous` | Storefront visitors who are not signed in | 33 | 0 |
 | `authenticated` | Any signed-in caller with no role header (same permissions as `consumer`) | 42 | 7 |
 | `consumer` | Signed-in shoppers | 42 | 7 |
-| `sales-admin` | Admin portal sales staff | 61 | 56 |
-| `marketing-admin` | Admin portal marketing staff | 61 | 56 |
-| `inventory-admin` | Admin portal inventory staff | 65 | 62 |
-| `operations-admin` | Admin portal operations staff | 65 | 62 |
-| `executive-admin` | Admin portal executives (all entities except `ShoppingCartItem`) | 68 | 62 |
+| `sales-admin` | Admin portal sales staff | 62 | 10 |
+| `marketing-admin` | Admin portal marketing staff | 62 | 52 |
+| `inventory-admin` | Admin portal inventory staff (read-only) | 65 | 0 |
+| `operations-admin` | Admin portal operations staff | 66 | 10 |
+| `executive-admin` | Admin portal executives (all entities) | 69 | 62 |
 | `manufacturing-engineer` | Manufacturing portal users | 46 | 8 |
 
 Consumer and authenticated writes are limited to their own rows on `BusinessEntity`, `Customer`, `EmailAddress`, `Person`, `PersonCreditCard`, `PersonPhone` and `ProductReview`. Manufacturing engineers can write `BillOfMaterials`, `Location`, `Product`, `ProductInventory`, `ProductModel`, `ScrapReason`, `WorkOrder` and `WorkOrderRouting`.
+
+Admin-role writes follow the role's api-mcp Functions write scopes (`ApplicationRoles.DefaultRoleScopes`), so a role cannot change data through DAB that it could not change through Functions:
+
+| Entities | Write scope | Admin roles that can write |
+|---|---|---|
+| Customer data: `BusinessEntity`, `BusinessEntityAddress`, `BusinessEntityContact`, `CreditCard`, `Customer`, `EmailAddress`, `Person`, `PersonCreditCard`, `PersonPhone`, `Store` | `customers.write` | sales, marketing, operations, executive |
+| Orders: `SalesOrderHeader`, `SalesOrderDetail`, `SalesOrderHeaderSalesReason` | `orders.write` | executive |
+| `Product`, `ProductModel`, `ProductInventory` | `admin.write` or `manufacturing.write` | marketing, executive (plus `manufacturing-engineer`) |
+| Manufacturing tables: `BillOfMaterials`, `Location`, `ScrapReason`, `TransactionHistory`, `TransactionHistoryArchive`, `WorkOrder`, `WorkOrderRouting` | `manufacturing.write` | executive (plus `manufacturing-engineer`) |
+| Everything else (catalog, promotions, reviews, reference data, HR, purchasing) | `admin.write` | marketing, executive |
+
+Other admin roles keep read access. `inventory-admin` has no write scope and is read-only. `executive-admin` keeps every admin write, including manufacturing tables it has no `manufacturing.write` scope for, because the validator requires it to be a superset of the other roles. `tests/auth/validate.py` (`dab_write_decision_violations`) enforces this alignment.
 
 ## Row-level policies
 
@@ -64,7 +76,9 @@ DAB database policies filter rows by claims in the token, so shoppers only see a
 | `@item.ShoppingCartID eq @claims.business_entity_id` | `ShoppingCartItem` |
 | `@item.UserID eq @claims.business_entity_id` | `ProductReview` (create) |
 
-Shoppers can update only the `HelpfulVotes` field of a `ProductReview`, with no ownership policy, so any signed-in shopper can vote a review helpful.
+Shoppers cannot update or delete a `ProductReview` through DAB. Helpful votes go through the Functions route `POST`/`DELETE /api/reviews/{id}/vote`, which stores one `Production.ProductReviewVote` row per shopper and review and changes `HelpfulVotes` in the same transaction. Shoppers cannot vote for their own review.
+
+The sales, marketing, operations and executive admin roles (the roles with `customers.read`) can read every `ShoppingCartItem` for the admin Smart Cart Recovery page. Only shoppers can change carts, through owned Functions routes.
 
 ## Tables not exposed through DAB
 
@@ -74,6 +88,8 @@ Shoppers can update only the `HelpfulVotes` field of a `ProductReview`, with no 
 | `HumanResources.Employee` | `hierarchyid` columns | The `Employee` entity, backed by the view `HumanResources.vEmployee` |
 | `Production.Document`, `Production.ProductDocument` | `Document.DocumentNode` is a `hierarchyid` column | Not exposed |
 | `Sales.GuestCartSession` | Guest-cart state is owned by Functions | Cart routes in Azure Functions |
+| `Person.PasswordResetToken` | Password-reset token hashes are owned by Functions | Password reset routes in Azure Functions |
+| `Production.ProductReviewVote` | One helpful vote per shopper and review, owned by Functions | `POST`/`DELETE /api/reviews/{id}/vote` in Azure Functions |
 | `dbo.RealtimeNotificationOutbox` | Internal real-time outbox written by SQL triggers | `DatabaseChanges` SQL trigger function |
 | `dbo.AWBuildVersion`, `dbo.ErrorLog` | Not used by the application | Not exposed |
 
@@ -85,92 +101,92 @@ Permission letters: **C** create, **R** read, **U** update, **D** delete, **—*
 
 | Entity | Source | GraphQL list / single | anon | consumer, authenticated | sales | marketing | inventory | operations | executive | mfg engineer | Field limits and row policies |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `UnitMeasure` | `Production.UnitMeasure` | `unitMeasures` / `unitMeasure_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `Culture` | `Production.Culture` | `cultures` / `culture_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `Illustration` | `Production.Illustration` | `illustrations` / `illustration_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `Location` | `Production.Location` | `locations` / `location_by_pk` | — | — | R | R | CRUD | CRUD | CRUD | CRUD | — |
-| `ProductCategory` | `Production.ProductCategory` | `productCategories` / `productCategory_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductSubcategory` | `Production.ProductSubcategory` | `productSubcategories` / `productSubcategory_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductModel` | `Production.ProductModel` | `productModels` / `productModel_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | CRUD | — |
-| `ProductDescription` | `Production.ProductDescription` | `productDescriptions` / `productDescription_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductModelProductDescriptionCulture` | `Production.ProductModelProductDescriptionCulture` | `productModelProductDescriptionCultures` / `productModelProductDescriptionCulture_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
+| `UnitMeasure` | `Production.UnitMeasure` | `unitMeasures` / `unitMeasure_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `Culture` | `Production.Culture` | `cultures` / `culture_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `Illustration` | `Production.Illustration` | `illustrations` / `illustration_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `Location` | `Production.Location` | `locations` / `location_by_pk` | — | — | R | R | R | R | CRUD | CRUD | — |
+| `ProductCategory` | `Production.ProductCategory` | `productCategories` / `productCategory_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `ProductSubcategory` | `Production.ProductSubcategory` | `productSubcategories` / `productSubcategory_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `ProductModel` | `Production.ProductModel` | `productModels` / `productModel_by_pk` | R | R | R | CRUD | R | R | CRUD | CRUD | — |
+| `ProductDescription` | `Production.ProductDescription` | `productDescriptions` / `productDescription_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `ProductModelProductDescriptionCulture` | `Production.ProductModelProductDescriptionCulture` | `productModelProductDescriptionCultures` / `productModelProductDescriptionCulture_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
 | `ProductSearch` | `Production.vProductSearch` (view; keys ProductID, ProductDescriptionID) | `productSearches` / `productSearch_by_pk` | R | R | R | R | R | R | R | R | — |
-| `ProductModelIllustration` | `Production.ProductModelIllustration` | `productModelIllustrations` / `productModelIllustration_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `Product` | `Production.Product` | `products` / `product_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | CRUD | anonymous/authenticated/consumer read: excludes StandardCost, SafetyStockLevel, ReorderPoint, DaysToManufacture |
-| `ProductName` | `Production.ProductName` | `productNames` / `productName_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductCostHistory` | `Production.ProductCostHistory` | `productCostHistories` / `productCostHistory_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductListPriceHistory` | `Production.ProductListPriceHistory` | `productListPriceHistories` / `productListPriceHistory_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductInventory` | `Production.ProductInventory` | `productInventories` / `productInventory_by_pk` | R | R | R | R | CRUD | CRUD | CRUD | CRUD | anonymous/authenticated/consumer read: excludes Shelf, Bin |
-| `ScrapReason` | `Production.ScrapReason` | `scrapReasons` / `scrapReason_by_pk` | — | — | — | — | CRUD | CRUD | CRUD | CRUD | — |
-| `ProductPhoto` | `Production.ProductPhoto` | `productPhotos` / `productPhoto_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductProductPhoto` | `Production.ProductProductPhoto` | `productProductPhotos` / `productProductPhoto_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `TransactionHistory` | `Production.TransactionHistory` | `transactionHistories` / `transactionHistory_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `TransactionHistoryArchive` | `Production.TransactionHistoryArchive` | `transactionHistoryArchives` / `transactionHistoryArchive_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `WorkOrder` | `Production.WorkOrder` | `workOrders` / `workOrder_by_pk` | — | — | — | — | CRUD | CRUD | CRUD | CRUD | — |
-| `WorkOrderRouting` | `Production.WorkOrderRouting` | `workOrderRoutings` / `workOrderRouting_by_pk` | — | — | — | — | CRUD | CRUD | CRUD | CRUD | — |
-| `ProductReview` | `Production.ProductReview` | `productReviews` / `productReview_by_pk` | R | CRU | CRUD | CRUD | CRUD | CRUD | CRUD | R | anonymous/authenticated/consumer/manufacturing-engineer read: excludes EmailAddress<br>authenticated/consumer create: only ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, UserID; policy `@item.UserID eq @claims.business_entity_id`<br>authenticated/consumer update: only HelpfulVotes |
-| `ProductReviewReply` | `Production.ProductReviewReply` | `productReviewReplies` / `productReviewReply_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `BillOfMaterials` | `Production.BillOfMaterials` | `billOfMaterials` / `billOfMaterials_by_pk` | — | — | — | — | CRUD | CRUD | CRUD | CRUD | — |
+| `ProductModelIllustration` | `Production.ProductModelIllustration` | `productModelIllustrations` / `productModelIllustration_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `Product` | `Production.Product` | `products` / `product_by_pk` | R | R | R | CRUD | R | R | CRUD | CRUD | anonymous/authenticated/consumer read: excludes StandardCost, SafetyStockLevel, ReorderPoint, DaysToManufacture |
+| `ProductName` | `Production.ProductName` | `productNames` / `productName_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `ProductCostHistory` | `Production.ProductCostHistory` | `productCostHistories` / `productCostHistory_by_pk` | — | — | R | CRUD | R | R | CRUD | R | — |
+| `ProductListPriceHistory` | `Production.ProductListPriceHistory` | `productListPriceHistories` / `productListPriceHistory_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `ProductInventory` | `Production.ProductInventory` | `productInventories` / `productInventory_by_pk` | R | R | R | CRUD | R | R | CRUD | CRUD | anonymous/authenticated/consumer read: excludes Shelf, Bin |
+| `ScrapReason` | `Production.ScrapReason` | `scrapReasons` / `scrapReason_by_pk` | — | — | — | — | R | R | CRUD | CRUD | — |
+| `ProductPhoto` | `Production.ProductPhoto` | `productPhotos` / `productPhoto_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `ProductProductPhoto` | `Production.ProductProductPhoto` | `productProductPhotos` / `productProductPhoto_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `TransactionHistory` | `Production.TransactionHistory` | `transactionHistories` / `transactionHistory_by_pk` | — | — | R | R | R | R | CRUD | R | — |
+| `TransactionHistoryArchive` | `Production.TransactionHistoryArchive` | `transactionHistoryArchives` / `transactionHistoryArchive_by_pk` | — | — | R | R | R | R | CRUD | — | — |
+| `WorkOrder` | `Production.WorkOrder` | `workOrders` / `workOrder_by_pk` | — | — | — | — | R | R | CRUD | CRUD | — |
+| `WorkOrderRouting` | `Production.WorkOrderRouting` | `workOrderRoutings` / `workOrderRouting_by_pk` | — | — | — | — | R | R | CRUD | CRUD | — |
+| `ProductReview` | `Production.ProductReview` | `productReviews` / `productReview_by_pk` | R | CR | R | CRUD | R | R | CRUD | R | anonymous/authenticated/consumer/manufacturing-engineer read: excludes EmailAddress<br>authenticated/consumer create: only ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, UserID; policy `@item.UserID eq @claims.business_entity_id`<br>no consumer update or delete; helpful votes use `POST /api/reviews/{id}/vote` |
+| `ProductReviewReply` | `Production.ProductReviewReply` | `productReviewReplies` / `productReviewReply_by_pk` | R | R | R | CRUD | R | R | CRUD | — | — |
+| `BillOfMaterials` | `Production.BillOfMaterials` | `billOfMaterials` / `billOfMaterials_by_pk` | — | — | — | — | R | R | CRUD | CRUD | — |
 | `HelpMeChoose` | `Production.vHelpMeChoose` (view; keys CultureID, ProductID) | `helpMeChooses` / `helpMeChoose_by_pk` | R | R | R | R | R | R | R | R | — |
 
 ### `Sales` schema (19 entities)
 
 | Entity | Source | GraphQL list / single | anon | consumer, authenticated | sales | marketing | inventory | operations | executive | mfg engineer | Field limits and row policies |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `Currency` | `Sales.Currency` | `currencies` / `currency_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `SalesReason` | `Sales.SalesReason` | `salesReasons` / `salesReason_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `CreditCard` | `Sales.CreditCard` | `creditCards` / `creditCard_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `CurrencyRate` | `Sales.CurrencyRate` | `currencyRates` / `currencyRate_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `SalesTerritory` | `Sales.SalesTerritory` | `salesTerritories` / `salesTerritory_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `PersonCreditCard` | `Sales.PersonCreditCard` | `personCreditCards` / `personCreditCard_by_pk` | — | RD | CRUD | CRUD | CRUD | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
-| `SalesPerson` | `Sales.SalesPerson` | `salesPeople` / `salesPerson_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `Store` | `Sales.Store` | `stores` / `store_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `Customer` | `Sales.Customer` | `customers` / `customer_by_pk` | — | CR | CRUD | CRUD | CRUD | CRUD | CRUD | — | authenticated/consumer read: excludes rowguid, ModifiedDate; policy `@item.PersonID eq @claims.business_entity_id`<br>authenticated/consumer create: only PersonID, TerritoryID; policy `@item.PersonID eq @claims.business_entity_id` |
-| `SpecialOffer` | `Sales.SpecialOffer` | `specialOffers` / `specialOffer_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `SpecialOfferProduct` | `Sales.SpecialOfferProduct` | `specialOfferProducts` / `specialOfferProduct_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `SalesOrderHeader` | `Sales.SalesOrderHeader` | `salesOrderHeaders` / `salesOrderHeader_by_pk` | — | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | authenticated/consumer read: policy `@item.CustomerID eq @claims.customer_id`<br>manufacturing-engineer read: only SalesOrderID, SalesOrderNumber, OrderDate, DueDate, Status, OnlineOrderFlag, CustomerID, TotalDue |
-| `SalesOrderDetail` | `Sales.SalesOrderDetail` | `salesOrderDetails` / `salesOrderDetail_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | manufacturing-engineer read: only SalesOrderID, SalesOrderDetailID, ProductID, OrderQty, LineTotal |
-| `SalesOrderHeaderSalesReason` | `Sales.SalesOrderHeaderSalesReason` | `salesOrderHeaderSalesReasons` / `salesOrderHeaderSalesReason_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `ShoppingCartItem` | `Sales.ShoppingCartItem` | `shoppingCartItems` / `shoppingCartItem_by_pk` | — | R | — | — | — | — | — | — | authenticated/consumer read: policy `@item.ShoppingCartID eq @claims.business_entity_id` |
-| `CountryRegionCurrency` | `Sales.CountryRegionCurrency` | `countryRegionCurrencies` / `countryRegionCurrency_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `SalesTaxRate` | `Sales.SalesTaxRate` | `salesTaxRates` / `salesTaxRate_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `SalesPersonQuotaHistory` | `Sales.SalesPersonQuotaHistory` | `salesPersonQuotaHistories` / `salesPersonQuotaHistory_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `SalesTerritoryHistory` | `Sales.SalesTerritoryHistory` | `salesTerritoryHistories` / `salesTerritoryHistory_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
+| `Currency` | `Sales.Currency` | `currencies` / `currency_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `SalesReason` | `Sales.SalesReason` | `salesReasons` / `salesReason_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `CreditCard` | `Sales.CreditCard` | `creditCards` / `creditCard_by_pk` | — | — | CRUD | CRUD | R | CRUD | CRUD | — | — |
+| `CurrencyRate` | `Sales.CurrencyRate` | `currencyRates` / `currencyRate_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `SalesTerritory` | `Sales.SalesTerritory` | `salesTerritories` / `salesTerritory_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `PersonCreditCard` | `Sales.PersonCreditCard` | `personCreditCards` / `personCreditCard_by_pk` | — | RD | CRUD | CRUD | R | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
+| `SalesPerson` | `Sales.SalesPerson` | `salesPeople` / `salesPerson_by_pk` | — | — | R | CRUD | R | R | CRUD | — | — |
+| `Store` | `Sales.Store` | `stores` / `store_by_pk` | — | — | CRUD | CRUD | R | CRUD | CRUD | — | — |
+| `Customer` | `Sales.Customer` | `customers` / `customer_by_pk` | — | CR | CRUD | CRUD | R | CRUD | CRUD | — | authenticated/consumer read: excludes rowguid, ModifiedDate; policy `@item.PersonID eq @claims.business_entity_id`<br>authenticated/consumer create: only PersonID, TerritoryID; policy `@item.PersonID eq @claims.business_entity_id` |
+| `SpecialOffer` | `Sales.SpecialOffer` | `specialOffers` / `specialOffer_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `SpecialOfferProduct` | `Sales.SpecialOfferProduct` | `specialOfferProducts` / `specialOfferProduct_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `SalesOrderHeader` | `Sales.SalesOrderHeader` | `salesOrderHeaders` / `salesOrderHeader_by_pk` | — | R | R | R | R | R | CRUD | R | authenticated/consumer read: policy `@item.CustomerID eq @claims.customer_id`<br>manufacturing-engineer read: only SalesOrderID, SalesOrderNumber, OrderDate, DueDate, Status, OnlineOrderFlag, CustomerID, TotalDue |
+| `SalesOrderDetail` | `Sales.SalesOrderDetail` | `salesOrderDetails` / `salesOrderDetail_by_pk` | — | — | R | R | R | R | CRUD | R | manufacturing-engineer read: only SalesOrderID, SalesOrderDetailID, ProductID, OrderQty, LineTotal |
+| `SalesOrderHeaderSalesReason` | `Sales.SalesOrderHeaderSalesReason` | `salesOrderHeaderSalesReasons` / `salesOrderHeaderSalesReason_by_pk` | — | — | R | R | R | R | CRUD | — | — |
+| `ShoppingCartItem` | `Sales.ShoppingCartItem` | `shoppingCartItems` / `shoppingCartItem_by_pk` | — | R | R | R | — | R | R | — | authenticated/consumer read: policy `@item.ShoppingCartID eq @claims.business_entity_id`<br>sales/marketing/operations/executive admin: read only |
+| `CountryRegionCurrency` | `Sales.CountryRegionCurrency` | `countryRegionCurrencies` / `countryRegionCurrency_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `SalesTaxRate` | `Sales.SalesTaxRate` | `salesTaxRates` / `salesTaxRate_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `SalesPersonQuotaHistory` | `Sales.SalesPersonQuotaHistory` | `salesPersonQuotaHistories` / `salesPersonQuotaHistory_by_pk` | — | — | R | CRUD | R | R | CRUD | — | — |
+| `SalesTerritoryHistory` | `Sales.SalesTerritoryHistory` | `salesTerritoryHistories` / `salesTerritoryHistory_by_pk` | — | — | R | CRUD | R | R | CRUD | — | — |
 
 ### `Person` schema (12 entities)
 
 | Entity | Source | GraphQL list / single | anon | consumer, authenticated | sales | marketing | inventory | operations | executive | mfg engineer | Field limits and row policies |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `AddressType` | `Person.AddressType` | `addressTypes` / `addressType_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ContactType` | `Person.ContactType` | `contactTypes` / `contactType_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `PhoneNumberType` | `Person.PhoneNumberType` | `phoneNumberTypes` / `phoneNumberType_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `CountryRegion` | `Person.CountryRegion` | `countryRegions` / `countryRegion_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `StateProvince` | `Person.StateProvince` | `stateProvinces` / `stateProvince_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `BusinessEntity` | `Person.BusinessEntity` | `businessEntities` / `businessEntity_by_pk` | — | RD | CRUD | CRUD | CRUD | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
-| `BusinessEntityAddress` | `Person.BusinessEntityAddress` | `businessEntityAddresses` / `businessEntityAddress_by_pk` | — | R | CRUD | CRUD | CRUD | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
-| `Person` | `Person.Person` | `people` / `person_by_pk` | — | RUD | CRUD | CRUD | CRUD | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer update: excludes rowguid, ModifiedDate; policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
+| `AddressType` | `Person.AddressType` | `addressTypes` / `addressType_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `ContactType` | `Person.ContactType` | `contactTypes` / `contactType_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `PhoneNumberType` | `Person.PhoneNumberType` | `phoneNumberTypes` / `phoneNumberType_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `CountryRegion` | `Person.CountryRegion` | `countryRegions` / `countryRegion_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `StateProvince` | `Person.StateProvince` | `stateProvinces` / `stateProvince_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `BusinessEntity` | `Person.BusinessEntity` | `businessEntities` / `businessEntity_by_pk` | — | RD | CRUD | CRUD | R | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
+| `BusinessEntityAddress` | `Person.BusinessEntityAddress` | `businessEntityAddresses` / `businessEntityAddress_by_pk` | — | R | CRUD | CRUD | R | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
+| `Person` | `Person.Person` | `people` / `person_by_pk` | — | RUD | CRUD | CRUD | R | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer update: excludes rowguid, ModifiedDate; policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
 | `Password` | `Person.Password` | `passwords` / `password_by_pk` | — | — | — | — | — | — | R | — | executive-admin read: excludes PasswordHash, PasswordSalt |
-| `EmailAddress` | `Person.EmailAddress` | `emailAddresses` / `emailAddress_by_pk` | — | RUD | CRUD | CRUD | CRUD | CRUD | CRUD | — | authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer update: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
-| `PersonPhone` | `Person.PersonPhone` | `personPhones` / `personPhone_by_pk` | — | CRUD | CRUD | CRUD | CRUD | CRUD | CRUD | — | authenticated/consumer create: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer update: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
-| `BusinessEntityContact` | `Person.BusinessEntityContact` | `businessEntityContacts` / `businessEntityContact_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
+| `EmailAddress` | `Person.EmailAddress` | `emailAddresses` / `emailAddress_by_pk` | — | CRUD | CRUD | CRUD | R | CRUD | CRUD | — | authenticated/consumer create: only BusinessEntityID, EmailAddress; policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer update: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
+| `PersonPhone` | `Person.PersonPhone` | `personPhones` / `personPhone_by_pk` | — | CRUD | CRUD | CRUD | R | CRUD | CRUD | — | authenticated/consumer create: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer read: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer update: policy `@item.BusinessEntityID eq @claims.business_entity_id`<br>authenticated/consumer delete: policy `@item.BusinessEntityID eq @claims.business_entity_id` |
+| `BusinessEntityContact` | `Person.BusinessEntityContact` | `businessEntityContacts` / `businessEntityContact_by_pk` | — | — | CRUD | CRUD | R | CRUD | CRUD | — | — |
 
 ### `Purchasing` schema (5 entities)
 
 | Entity | Source | GraphQL list / single | anon | consumer, authenticated | sales | marketing | inventory | operations | executive | mfg engineer | Field limits and row policies |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `ShipMethod` | `Purchasing.ShipMethod` | `shipMethods` / `shipMethod_by_pk` | R | R | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `Vendor` | `Purchasing.Vendor` | `vendors` / `vendor_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `ProductVendor` | `Purchasing.ProductVendor` | `productVendors` / `productVendor_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
-| `PurchaseOrderHeader` | `Purchasing.PurchaseOrderHeader` | `purchaseOrderHeaders` / `purchaseOrderHeader_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `PurchaseOrderDetail` | `Purchasing.PurchaseOrderDetail` | `purchaseOrderDetails` / `purchaseOrderDetail_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
+| `ShipMethod` | `Purchasing.ShipMethod` | `shipMethods` / `shipMethod_by_pk` | R | R | R | CRUD | R | R | CRUD | R | — |
+| `Vendor` | `Purchasing.Vendor` | `vendors` / `vendor_by_pk` | — | — | R | CRUD | R | R | CRUD | R | — |
+| `ProductVendor` | `Purchasing.ProductVendor` | `productVendors` / `productVendor_by_pk` | — | — | R | CRUD | R | R | CRUD | — | — |
+| `PurchaseOrderHeader` | `Purchasing.PurchaseOrderHeader` | `purchaseOrderHeaders` / `purchaseOrderHeader_by_pk` | — | — | R | CRUD | R | R | CRUD | R | — |
+| `PurchaseOrderDetail` | `Purchasing.PurchaseOrderDetail` | `purchaseOrderDetails` / `purchaseOrderDetail_by_pk` | — | — | R | CRUD | R | R | CRUD | R | — |
 
 ### `HumanResources` schema (6 entities)
 
 | Entity | Source | GraphQL list / single | anon | consumer, authenticated | sales | marketing | inventory | operations | executive | mfg engineer | Field limits and row policies |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `Department` | `HumanResources.Department` | `departments` / `department_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `Shift` | `HumanResources.Shift` | `shifts` / `shift_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | R | — |
-| `EmployeeDepartmentHistory` | `HumanResources.EmployeeDepartmentHistory` | `employeeDepartmentHistories` / `employeeDepartmentHistory_by_pk` | — | — | CRUD | CRUD | CRUD | CRUD | CRUD | — | — |
+| `Department` | `HumanResources.Department` | `departments` / `department_by_pk` | — | — | R | CRUD | R | R | CRUD | R | — |
+| `Shift` | `HumanResources.Shift` | `shifts` / `shift_by_pk` | — | — | R | CRUD | R | R | CRUD | R | — |
+| `EmployeeDepartmentHistory` | `HumanResources.EmployeeDepartmentHistory` | `employeeDepartmentHistories` / `employeeDepartmentHistory_by_pk` | — | — | R | CRUD | R | R | CRUD | — | — |
 | `EmployeePayHistory` | `HumanResources.EmployeePayHistory` | `employeePayHistories` / `employeePayHistory_by_pk` | — | — | — | — | — | — | R | — | — |
 | `JobCandidate` | `HumanResources.JobCandidate` | `jobCandidates` / `jobCandidate_by_pk` | — | — | — | — | — | — | R | — | — |
 | `Employee` | `HumanResources.vEmployee` (view; keys BusinessEntityID) | `employees` / `employee_by_pk` | — | — | R | R | R | R | R | — | — |

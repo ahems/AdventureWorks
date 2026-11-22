@@ -28,6 +28,8 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import { Customer } from "@/types/customer";
 import {
   useAdminCustomers,
@@ -119,6 +121,8 @@ const CustomerEditSection: React.FC<{
     updateAddress,
     deleteAddress,
   } = useAdminCustomerAddresses(customer.CustomerID);
+  // Address create/update/delete are Functions routes requiring customers.write.
+  const canEditAddresses = useCan(Scopes.CustomersWrite);
 
   return (
     <div className="space-y-8">
@@ -206,6 +210,7 @@ const CustomerEditSection: React.FC<{
                       {addr.countryName ? ` · ${addr.countryName}` : ""}
                     </p>
                   </div>
+                  {canEditAddresses && (
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => setEditingAddressId(addr.id)}
@@ -230,6 +235,7 @@ const CustomerEditSection: React.FC<{
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+                  )}
                 </div>
               ),
             )}
@@ -255,7 +261,7 @@ const CustomerEditSection: React.FC<{
               onCancel={() => setShowAddAddress(false)}
             />
           </div>
-        ) : (
+        ) : canEditAddresses && (
           <button
             onClick={() => setShowAddAddress(true)}
             className="font-doodle text-sm text-doodle-accent border-2 border-dashed border-doodle-accent/40 px-4 py-2 hover:border-doodle-accent hover:bg-doodle-accent/5 transition-colors"
@@ -482,6 +488,8 @@ const ExpandedCustomerView: React.FC<{
 // ── Main page ─────────────────────────────────────────────────────────────────
 const CustomersPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  // AI customer generation, AI email and AI order generation require admin.write.
+  const canUseAi = useCan(Scopes.AdminWrite);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSelectForOrderMode = searchParams.get("selectForOrder") === "true";
@@ -706,13 +714,15 @@ const CustomersPage: React.FC = () => {
               </h1>
               <div className="flex flex-wrap items-center gap-2">
                 {/* Generate with AI */}
-                <button
-                  onClick={() => setGenerateDialogOpen(true)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 font-doodle text-sm bg-doodle-accent text-white border-2 border-doodle-text rounded transition-colors hover:bg-doodle-accent/90"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Generate with AI
-                </button>
+                {canUseAi && (
+                  <button
+                    onClick={() => setGenerateDialogOpen(true)}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 font-doodle text-sm bg-doodle-accent text-white border-2 border-doodle-text rounded transition-colors hover:bg-doodle-accent/90"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Generate with AI
+                  </button>
+                )}
                 {/* Stats link */}
                 <Link
                   to="/customer-stats"
@@ -938,7 +948,7 @@ const CustomersPage: React.FC = () => {
                   : "Select all"}
               </button>
             </div>
-            {selectedCustomerIds.size > 0 && (
+            {canUseAi && selectedCustomerIds.size > 0 && (
               <button
                 onClick={() => setBulkEmailDialogOpen(true)}
                 className="doodle-button doodle-button-primary flex items-center gap-2 py-2 px-4"
@@ -1069,7 +1079,7 @@ const CustomersPage: React.FC = () => {
                               <Sparkles className="w-3.5 h-3.5" />
                               Select
                             </button>
-                          ) : (
+                          ) : canUseAi && (
                             <button
                               type="button"
                               title="Generate Order with AI"

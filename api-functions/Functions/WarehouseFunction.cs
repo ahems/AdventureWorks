@@ -77,7 +77,6 @@ public class WarehouseFunction
     {
         try
         {
-            await _warehouse.InitializeAsync();
             var metrics = await _warehouse.GetStatusAsync();
             return await OkJsonAsync(req, metrics);
         }
@@ -116,7 +115,6 @@ public class WarehouseFunction
     {
         try
         {
-            await _warehouse.InitializeAsync();
             var snapshot = await _warehouse.GetWorkerSnapshotAsync();
             return await OkJsonAsync(req, snapshot);
         }
@@ -197,7 +195,6 @@ public class WarehouseFunction
     {
         try
         {
-            await _warehouse.InitializeAsync();
             var configs = await _warehouse.GetSubcategoryConfigsAsync();
             return await OkJsonAsync(req, configs);
         }
@@ -264,7 +261,6 @@ public class WarehouseFunction
     {
         try
         {
-            await _warehouse.InitializeAsync();
             var configs = await _warehouse.GetSupplierReceiveConfigsAsync();
             return await OkJsonAsync(req, configs);
         }
@@ -327,7 +323,6 @@ public class WarehouseFunction
     {
         try
         {
-            await _warehouse.InitializeAsync();
             var configs = await _warehouse.GetDamageConfigsAsync();
             // Also return the available damage reason names so UI can display them
             var response = new

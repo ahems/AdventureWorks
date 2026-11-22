@@ -90,7 +90,7 @@ const HeroSection: React.FC = () => {
               className="doodle-button doodle-button-primary text-lg px-8 py-3 inline-flex items-center justify-center gap-2"
             >
               {t("hero.shopBikes")}
-              <ArrowRight className="w-5 h-5" />
+              <ArrowRight className="w-5 h-5 rtl:rotate-180" />
             </Link>
             <Link
               to="/help-me-choose"

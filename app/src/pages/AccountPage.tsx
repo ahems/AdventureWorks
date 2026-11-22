@@ -36,6 +36,7 @@ import {
   type Order,
 } from "@/hooks/useOrders";
 import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
+import { dabFetch } from "@/lib/dabFetch";
 import { functionsFetch } from "@/services/functionsAuth";
 import {
   useEmailAddresses,
@@ -102,9 +103,37 @@ const AccountPage: React.FC = () => {
   } = useAddresses();
   const {
     paymentMethods,
+    addPaymentMethod,
     removePaymentMethod,
     isLoading: paymentMethodsLoading,
   } = usePaymentMethods();
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [savingCard, setSavingCard] = useState(false);
+  const [newCard, setNewCard] = useState({ cardNumber: "", cardExpiry: "" });
+
+  const handleSaveCard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingCard(true);
+    const result = await addPaymentMethod({ type: "card", ...newCard });
+    setSavingCard(false);
+    if (result.ok) {
+      setNewCard({ cardNumber: "", cardExpiry: "" });
+      setShowCardForm(false);
+      toast({
+        title: t("checkout.paymentMethodSaved"),
+        description: t("checkout.paymentMethodSavedDesc"),
+      });
+      return;
+    }
+    toast({
+      title: t("account.error"),
+      description:
+        result.reason === "request-failed"
+          ? t("account.errorSavePayment")
+          : t("account.invalidTestCard"),
+      variant: "destructive",
+    });
+  };
   const [customerId, setCustomerId] = useState<number | null>(null);
   const { data: orders = [], isLoading: ordersLoading } = useOrders(
     customerId || 0,
@@ -183,8 +212,9 @@ const AccountPage: React.FC = () => {
               import.meta.env.VITE_API_URL?.replace("/graphql", "/api") ||
               "http://localhost:5000/api";
 
-            const response = await fetch(
-              `${apiUrl}/Person/BusinessEntityID/${user.businessEntityId}`,
+            // Person reads are owner-scoped in DAB, so send the shopper's token.
+            const response = await dabFetch(
+              `${apiUrl}/Person/BusinessEntityID/${user.businessEntityId}?$select=BusinessEntityID,ModifiedDate`,
             );
             if (response.ok) {
               const result = await response.json();
@@ -1704,7 +1734,81 @@ const AccountPage: React.FC = () => {
                       ({paymentMethods.length} {t("account.saved")})
                     </span>
                   </div>
+                  {!showCardForm && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCardForm(true)}
+                      className="doodle-button doodle-button-primary flex items-center gap-2 text-sm"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {t("account.addCard")}
+                    </button>
+                  )}
                 </div>
+
+                {showCardForm && (
+                  <form
+                    onSubmit={handleSaveCard}
+                    className="mb-6 p-4 border-2 border-dashed border-doodle-text/20 space-y-4"
+                  >
+                    <p className="font-doodle text-sm text-doodle-text/70">
+                      {t("account.testCardsOnly")}
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="block font-doodle text-sm text-doodle-text">
+                        {t("checkout.cardNumber")}
+                        <input
+                          required
+                          inputMode="numeric"
+                          autoComplete="off"
+                          value={newCard.cardNumber}
+                          onChange={(e) =>
+                            setNewCard((c) => ({ ...c, cardNumber: e.target.value }))
+                          }
+                          placeholder="4242 4242 4242 4242"
+                          className="doodle-input w-full mt-1"
+                        />
+                      </label>
+                      <label className="block font-doodle text-sm text-doodle-text">
+                        {t("checkout.expiryDate")}
+                        <input
+                          required
+                          autoComplete="off"
+                          value={newCard.cardExpiry}
+                          onChange={(e) =>
+                            setNewCard((c) => ({ ...c, cardExpiry: e.target.value }))
+                          }
+                          placeholder="MM/YY"
+                          className="doodle-input w-full mt-1"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={savingCard}
+                        className="doodle-button doodle-button-primary flex items-center gap-2 text-sm"
+                      >
+                        {savingCard ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4" />
+                        )}
+                        {t("checkout.save")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCardForm(false);
+                          setNewCard({ cardNumber: "", cardExpiry: "" });
+                        }}
+                        className="doodle-button text-sm"
+                      >
+                        {t("account.cancel")}
+                      </button>
+                    </div>
+                  </form>
+                )}
 
                 {paymentMethodsLoading ? (
                   <div className="space-y-3">

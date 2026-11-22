@@ -14,7 +14,7 @@ namespace ApiFunctions.Tests;
 public class AIAgentServiceTests
 {
     [Fact]
-    public async Task Chat_uses_prompt_agent_even_when_workflow_is_configured()
+    public async Task Chat_routes_customer_and_admin_messages_to_their_prompt_agents()
     {
         using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
         using var handler = new RecordingHandler();
@@ -27,7 +27,6 @@ public class AIAgentServiceTests
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["AI_AGENT_CHAT_ID"] = "eshop-chat-agent",
-            ["AI_AGENT_WORKFLOW_CHAT_ID"] = "eshop-workflow-agent",
             ["AI_AGENT_ADMIN_CHAT_ID"] = "admin-chat-agent"
         }).Build();
         var service = new AIAgentService(NullLogger<AIAgentService>.Instance, config, client, new TelemetryClient(telemetry));

@@ -1,0 +1,52 @@
+{
+  "title": "選ぶのを手伝って",
+  "intro": {
+    "title": "あなたにぴったりのギアを見つけましょう！",
+    "description": "5 つの簡単な質問に答えると、AI がカタログからあなたにぴったりの商品を探します。",
+    "cta": "はじめる",
+    "hint": "AI 搭載 · 所要時間は約 1 分"
+  },
+  "loading": {
+    "questions": "あなた向けの質問を作成しています…",
+    "recommendations": "カタログを検索しておすすめを作成しています…"
+  },
+  "progress": {
+    "question": "質問 {{current}} / {{total}}"
+  },
+  "nav": {
+    "back": "戻る",
+    "next": "次へ",
+    "findProducts": "商品を探す"
+  },
+  "results": {
+    "title": "あなたへのおすすめ",
+    "viewProduct": "商品を見る",
+    "noResults": "現在、完全に一致する商品が見つかりませんでした。カテゴリを見るか、検索バーをご利用ください。",
+    "startAgain": "最初からやり直す"
+  },
+  "profile": {
+    "title": "あなたについて",
+    "subtitle": "本当に合う商品を見つけるのに役立ちます。",
+    "gender": {
+      "label": "性別（任意）",
+      "male": "男性",
+      "female": "女性",
+      "preferNotToSay": "回答しない"
+    },
+    "height": {
+      "label": "身長",
+      "placeholder": "身長を選択…"
+    },
+    "colors": {
+      "label": "好きな色",
+      "hint": "特にない場合は空欄のままにしてください。"
+    },
+    "continue": "続ける"
+  },
+  "error": {
+    "loadQuestions": "質問の作成中に問題が発生しました。もう一度お試しください。",
+    "loadRecommendations": "おすすめの検索中に問題が発生しました。もう一度お試しください。",
+    "rateLimited": "AI リクエストが集中しています。{{minutes}} 分後にもう一度お試しください。",
+    "tryAgain": "再試行"
+  }
+}

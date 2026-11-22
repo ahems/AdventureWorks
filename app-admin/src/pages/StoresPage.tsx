@@ -21,6 +21,8 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { TableSkeleton, CardGridSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   useStores,
   useStoreOrders,
@@ -125,6 +127,8 @@ const StoreOrderHistory: React.FC<{
   store: StoreListItem;
 }> = ({ storeId, storeName, orderCount, store }) => {
   const { data: orders = [], isLoading, isError } = useStoreOrders(storeId);
+  // Placing store orders (/api/store-orders) requires admin.write.
+  const canPlaceOrder = useCan(Scopes.AdminWrite);
   const [reorderSalesOrderId, setReorderSalesOrderId] = useState<number | null>(
     null,
   );
@@ -253,7 +257,10 @@ const StoreOrderHistory: React.FC<{
                   <div className="flex items-center gap-1.5 justify-end">
                     <button
                       onClick={() => setReorderSalesOrderId(order.salesOrderID)}
-                      disabled={reorderSalesOrderId === order.salesOrderID}
+                      disabled={
+                        !canPlaceOrder ||
+                        reorderSalesOrderId === order.salesOrderID
+                      }
                       title="Reorder the same items"
                       className="flex items-center gap-1 px-2 py-1 text-xs font-doodle font-bold border border-doodle-text/40 hover:bg-doodle-accent hover:text-white hover:border-doodle-accent transition-colors disabled:opacity-40"
                     >
@@ -303,6 +310,7 @@ const StoreRow: React.FC<{
 }> = ({ store, rank, highlighted }) => {
   const [expanded, setExpanded] = useState(false);
   const [showOrderDialog, setShowOrderDialog] = useState(false);
+  const canPlaceOrder = useCan(Scopes.AdminWrite);
   const tier = getStoreTier(store.totalRevenue);
   const tierCfg = TIER[tier];
   const rowRef = useRef<HTMLTableRowElement>(null);
@@ -385,12 +393,14 @@ const StoreRow: React.FC<{
             className="flex items-center justify-end gap-1.5"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setShowOrderDialog(true)}
-              className="doodle-button doodle-button-primary flex items-center gap-1 px-2.5 py-1.5 text-xs"
-            >
-              <Plus className="w-3 h-3" /> Order
-            </button>
+            {canPlaceOrder && (
+              <button
+                onClick={() => setShowOrderDialog(true)}
+                className="doodle-button doodle-button-primary flex items-center gap-1 px-2.5 py-1.5 text-xs"
+              >
+                <Plus className="w-3 h-3" /> Order
+              </button>
+            )}
             <button
               onClick={() => setExpanded(!expanded)}
               className="p-1.5 border border-doodle-text/40 hover:bg-doodle-accent/10 transition-colors"

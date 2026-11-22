@@ -14,9 +14,9 @@ namespace api_functions.Functions;
 /// B2C orders (OnlineOrderFlag=1) and B2B store orders (OnlineOrderFlag=0) use
 /// separate, independently configurable minimum-day thresholds.
 ///
-/// Timer fires every hour.  An HTTP GET endpoint is also exposed for manual
+/// Timer fires every hour.  An HTTP POST endpoint is also exposed for manual
 /// triggering during development or testing:
-///   GET /api/orders/delivery/trigger
+///   POST /api/orders/delivery/trigger
 ///
 /// Order notification emails are gated behind the ORDER_NOTIFICATIONS_EMAIL_ENABLED
 /// environment variable.  When unset or set to any value other than "true", emails
@@ -65,7 +65,7 @@ public class OrderDeliveryTimerFunction
 
     [Function("OrderDelivery_HttpTrigger")]
     public async Task<HttpResponseData> RunHttp(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "orders/delivery/trigger")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "orders/delivery/trigger")]
         HttpRequestData req)
     {
         _logger.LogInformation("[OrderDelivery] Manual HTTP trigger fired.");
@@ -85,7 +85,9 @@ public class OrderDeliveryTimerFunction
 
         var deliveredIds = await _orderService.MarkOrdersAsDeliveredAsync(
             cfg.ShippedToDeliveredMinDaysB2C,
-            cfg.ShippedToDeliveredMinDaysB2B);
+            cfg.ShippedToDeliveredMaxDaysB2C,
+            cfg.ShippedToDeliveredMinDaysB2B,
+            cfg.ShippedToDeliveredMaxDaysB2B);
 
         if (deliveredIds.Count == 0)
         {
@@ -102,6 +104,8 @@ public class OrderDeliveryTimerFunction
             ["Count"]              = deliveredIds.Count.ToString(),
             ["MinDaysB2C"]         = cfg.ShippedToDeliveredMinDaysB2C.ToString(),
             ["MinDaysB2B"]         = cfg.ShippedToDeliveredMinDaysB2B.ToString(),
+            ["MaxDaysB2C"]         = cfg.ShippedToDeliveredMaxDaysB2C.ToString(),
+            ["MaxDaysB2B"]         = cfg.ShippedToDeliveredMaxDaysB2B.ToString(),
             ["EmailEnabled"]       = _emailEnabled.ToString(),
         });
 

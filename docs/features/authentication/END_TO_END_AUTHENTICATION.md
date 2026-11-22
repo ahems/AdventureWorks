@@ -60,13 +60,12 @@ completed/applicable, with failed assertions counted as executed, not passed.
 Accepted exceptions and inapplicable assertions do not inflate protected-operation
 coverage.
 
-Functions `GET` routes are not assumed to be read-only. The contract in
-[`contracts.json`](../../../tests/auth/contracts.json) lists `safeFunctionReadRoutes`
-(probed live) separately from `sideEffectingFunctionReads` (for example, reads
-that initialize Table Storage data on first use). Live denial sweeps probe only
+Functions `GET` routes must be read-only; state changes use `POST`. The contract in
+[`contracts.json`](../../../tests/auth/contracts.json) lists the reviewed read
+routes as `safeFunctionReadRoutes` (probed live). Live denial sweeps probe only
 the reviewed safe list; unknown or changed routes stay `BLOCKED` without a
-request, and `inventory:functions-get-review-closure` fails when the lists no
-longer cover the registered `GET` handlers.
+request, and `inventory:functions-get-review-closure` fails when a registered
+protected `GET` handler is not on the list.
 
 #### Reviewed mutation denial fixtures
 
@@ -346,7 +345,7 @@ never to resume a user conversation.
   never a trusted caller-supplied owner ID.
 - `FUNCTIONS_OAUTH_MODE` accepts `enforced`, `audit` or `disabled`. `enforced` or
   `audit` with missing configuration, or an invalid value, fails startup. An unset
-  mode is `disabled` for local development; deployments set `enforced`.
+  mode is `disabled`; deployments set `enforced`.
 - Enforced-denial tests must prove handlers and side effects were not reached;
   registry membership tests cannot establish this alone.
 - Resource-server metadata or key outages never become authorization success.
@@ -378,7 +377,7 @@ expansion requires review. Exceptions with an ID are emitted as
 | Application Insights ingestion | Browsers need a connection string; all producers share one resource | The connection string is not a read credential. Telemetry-based checks use fresh random per-run trace IDs and correlate independent services; telemetry is corroborating, not cryptographic, evidence. |
 | Static Web App deployment token | Used only by deployment | Kept out of reports; not an application credential. |
 | Guest cart capability | Public session issuance; handlers accept a one-day opaque capability or a consumer bearer | No anonymous DAB cart access and no DAB cart writes; see [Guest cart verification](#guest-cart-verification). |
-| Public reviews | Anonymous reads; authenticated create and vote | Create binds `UserID` to the signed `business_entity_id`; update permits only `HelpfulVotes`; reviewer email is excluded from public reads. |
+| Public reviews | Anonymous reads; authenticated create | Create binds `UserID` to the signed `business_entity_id`; consumers have no DAB update or delete; reviewer email is excluded from public reads. Helpful votes use Functions `POST`/`DELETE /api/reviews/{id}/vote`, which records one vote per signed consumer. |
 | Service-principal deployer (`infra:deployer-service-principal-rbac-admin`) | GitHub Actions fallback only | See [Service-principal (GitHub Actions) deployment path](#service-principal-github-actions-deployment-path). |
 
 DAB `create` database policies (Customer and review creation) are verified by
@@ -745,8 +744,7 @@ The scan fails on any `AzureKeyCredential`, `StorageSharedKeyCredential`,
 `AzureSasCredential`, `ApiKeyCredential`, `AccountKey=`, `SharedAccessKey=`,
 `UseDevelopmentStorage`, SAS-URI generation or a read of the `AzureWebJobsStorage`
 connection string. A missing service URI fails closed rather than selecting a key
-path; local development uses the identity-based `AzureWebJobsStorage__*` settings
-in `api-functions/local.settings.example.json`.
+path; deployments use the identity-based `AzureWebJobsStorage__*` app settings.
 
 SQL connection strings are not SDK credentials; `Authentication=Active Directory
 Default` is covered by the SQL identity checks. The scan proves source intent;
@@ -880,12 +878,18 @@ DAB REST role inheritance: named role → `authenticated` → `anonymous`. Wildc
 actions and unclassified roles fail the contract. It asserts:
 
 - no anonymous writes and no view writes
-- every consumer/`authenticated` write is either an exact
-  `@item.X eq @claims.business_entity_id` owner policy or the ProductReview
-  `HelpfulVotes`-only vote
+- every consumer/`authenticated` write has an exact
+  `@item.X eq @claims.business_entity_id` owner policy
 - consumer and `authenticated` decisions are identical
 - manufacturing-engineer's explicit grants are limited to `Production.*` tables
 - executive-admin holds every write granted to any other role
+- every other admin role (and manufacturing-engineer) writes an entity only when it
+  holds that entity's Functions write scope in api-mcp `ApplicationRoles`:
+  `customers.write` for customer data, `orders.write` for orders,
+  `manufacturing.write` for manufacturing tables, `admin.write` or
+  `manufacturing.write` for `Product`, `ProductModel` and `ProductInventory`, and
+  `admin.write` for everything else. `inventory-admin` has no write scope, so it is
+  read-only. See [DAB entities](../../reference/dab-entities.md#roles).
 - an internal role may inherit an `authenticated` write only through an owner
   policy. api-mcp adds `business_entity_id` only to consumer DAB/Functions tokens
   (`AuthorizationEndpoints.cs`), so such inherited grants fail closed for staff.
@@ -935,7 +939,7 @@ when every owner-bound surface has current-run evidence with two distinct owners
 
 | Surface | Gate | Evidence |
 | --- | --- | --- |
-| 17 consumer Functions handlers (`SelfOrInternal`) | `required:consumer-handlers-offline` | Exact registry closure, plus the address, password and receipt gates and named two-owner payment/order/cart and guarded-header cases |
+| 20 consumer Functions handlers (`SelfOrInternal`) | `required:consumer-handlers-offline` | Exact registry closure, plus the address, password and receipt gates and 22 named two-owner payment, order-read, cart, server-priced checkout and review-vote cases (including transactional checkout rollback) |
 | MCP `SelfOrInternal` tools | `required:mcp-tool-http-dispatch` | Real HTTP/OpenIddict dispatch with two consumer owners |
 | MCP tasks | `required:mcp-task-ownership-offline` | Owner, scope and app bound across store recreation; foreign operations denied |
 | Chat and agent continuations | `required:chat-continuation-ownership-offline` | Source-derived closure plus handler cases |
@@ -1030,13 +1034,13 @@ reconciles, so its Customer-bound evidence can close the ownership umbrella.
   `processingToApprovedMinMinutes` is at least one minute.
 - **Storefront:** two fresh `@example.invalid` consumers bind their own Customer
   rows through DAB, and refreshed tokens must carry `customer_id`. The owner
-  creates one address, one order header and one line through the storefront
-  Functions API. The runner then asserts:
-  - Denied: anonymous creation, a foreign customer adding a line, consumer
-    self-cancel and manufacturing cancel through DAB. The order must remain in
-    process after the denied cancels.
-  - Admin cancellation: the Admin UI's DAB mutation sets Status 6, and a separate
-    read confirms it.
+  creates one address and places one server-priced order through
+  `POST /api/orders/checkout`. The runner then asserts:
+  - Denied: anonymous checkout, a foreign customer checking out to the owner's
+    address, and consumer self-cancel and manufacturing cancel through DAB. The
+    order must remain in process after the denied cancels.
+  - Admin cancellation: the Admin UI's Functions route
+    `POST /api/orders/{id}/cancel` sets Status 6, and a separate read confirms it.
   - Reads: the owner can read the header (DAB `customer_id` policy) and its line
     (Functions); a foreign customer and anonymous callers cannot.
   - Email: Application Insights shows `[EmailSuppressed]` and no `Email sent`

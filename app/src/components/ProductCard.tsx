@@ -66,7 +66,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
       >
         {/* Sale Badge */}
         {product.DiscountPct && (
-          <div className="absolute top-6 left-6 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
+          <div className="absolute top-6 start-6 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
             {variant === "featured"
               ? product.SpecialOfferDescription ||
                 t("productCard.limitedTimeSpecial")
@@ -78,20 +78,20 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Stock Badge */}
         {!product.inStock && (
-          <div className="absolute bottom-6 left-6 z-10 bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
+          <div className="absolute bottom-6 start-6 z-10 bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
             {t("productCard.outOfStock")}
           </div>
         )}
         {product.inStock &&
           product.quantityAvailable !== undefined &&
           product.quantityAvailable < 50 && (
-            <div className="absolute bottom-6 left-6 z-10 bg-orange-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
+            <div className="absolute bottom-6 start-6 z-10 bg-orange-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
               {t("productCard.lowStock")}
             </div>
           )}
 
         {/* Compare Button */}
-        <div className="absolute top-6 right-6 z-10 flex flex-col gap-2">
+        <div className="absolute top-6 end-6 z-10 flex flex-col gap-2">
           <button
             onClick={handleToggleCompare}
             className={`p-2 border-2 transition-all ${

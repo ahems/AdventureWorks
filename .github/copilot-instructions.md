@@ -92,12 +92,14 @@ Details: [real-time eventing](../docs/architecture/realtime-eventing.md).
 
 ## Critical Development Workflows
 
-### Local Development Setup
+### Development Model: Deploy and Test in Azure
 
-**IMPORTANT**: Local development relies on Azure-hosted demo services. Agents must
-not remove, manually repair or recreate those resources. Follow the
-[demo/POC environment policy](#azure-environment-policy-demopoc-only): deploy
-service changes with `azd deploy`, or ask the user to recreate the environment.
+**IMPORTANT**: The solution is deploy-only; no service runs locally. Edit code in the
+dev container, deploy with `azd deploy --no-prompt` (or the user's GitHub runner
+workflow), then test against the deployment with `tests/`. Offline unit/contract tests
+(`dotnet test`, Vitest, node tests, `validate-auth.sh --offline`) still run locally.
+Agents must not remove, manually repair or recreate Azure resources; follow the
+[demo/POC environment policy](#azure-environment-policy-demopoc-only).
 
 **Environment configuration:**
 
@@ -126,29 +128,17 @@ them into every interactive shell. Read only needed values using
 Not every runtime setting is an azd output. DAB reads `DATABASE_CONNECTION_STRING`
 and `DAB_JWT_ISSUER` / `DAB_JWT_AUDIENCE`; Functions reads
 `SQL_CONNECTION_STRING`, identity-based `AzureWebJobsStorage__*` and
-`FUNCTIONS_JWT_*` / `FUNCTIONS_OAUTH_MODE` from its app settings.
-For local Functions configuration, start from
-`api-functions/local.settings.example.json`; never commit populated settings.
-SQL public networking is disabled after deployment, so local credentials alone
+`FUNCTIONS_JWT_*` / `FUNCTIONS_OAUTH_MODE` from its app settings, all set by Bicep
+and deployment hooks. SQL public networking is disabled after deployment, so local credentials alone
 do not provide direct SQL connectivity. Prefer deployed APIs rather than reopening SQL.
 `AZURE_RESOURCE_GROUP` and `SQL_DATABASE_NAME` are azd inputs (set by `preup.sh` or the
 deployment workflow), not Bicep outputs. Full list:
 [environment variables](../docs/reference/environment-variables.md).
 
-**Dev ports:** all three Vite apps serve on port 8080, but api-mcp registers local OAuth
-redirects only for the admin (5174) and manufacturing (5175) apps, so local sign-in to
-those apps needs a matching port override. The storefront signs in with a custom
-credentials grant and needs no redirect.
-
-**For Azure Functions (api-functions) local development:**
-
-The Functions project requires `MCP_SERVICE_URL` to connect to the Model Context Protocol server for AI agent capabilities. **Use the Azure-hosted MCP service** rather than running it locally:
-
-```bash
-# Get the MCP service URL from Azure
-azd env get-value MCP_SERVICE_URL --no-prompt
-```
-
+**Loopback OAuth redirects:** api-mcp registers `http://localhost:5174/oauth/callback`
+(admin) and `http://localhost:5175/oauth/callback` (manufacturing) as loopback callbacks
+for `scripts/utilities/azure-auth.py`, which reads the code from the redirect's
+`Location` header; nothing listens on those ports. Do not remove them (tests pin them).
 
 ### Azure Deployment (azd)
 
@@ -177,10 +167,9 @@ warning is automatically accepted. Deployment and seed durations vary.
 4. `scripts/hooks/predeploy.sh` - Generates storefront build/runtime configuration
 5. `azd deploy` - Remote-builds Container Apps, publishes Functions, builds/deploys
    the Static Web App and deploys the hosted Manufacturing agent; service hooks
-   (`api-postdeploy.sh`, `app-postdeploy.sh`, `app-admin-postdeploy.sh`,
-   `api-functions-postdeploy.sh`) apply their configuration
+   (`app-postdeploy.sh`) apply their configuration
 6. `scripts/hooks/postdeploy.sh` - Wires OAuth redirects and the hosted-agent endpoint,
-   then reapplies Functions agent settings
+   then applies Functions agent settings once (`api-functions-postdeploy.sh`)
 7. `scripts/hooks/postup.sh` - Ensures the hosted agent exists, disables public SQL
    access/removes the temporary client firewall rule, and reports service/seed status
 
@@ -237,21 +226,12 @@ query {
 }
 ```
 
-### VS Code Tasks
+### Building Locally
 
-Use built-in tasks for development (accessible via `Cmd/Ctrl+Shift+B`):
-
-- `func: host start` - Run Azure Functions locally (depends on build task)
-- `start frontend` - Run React dev server
-- `start api (DAB)` - Run local DAB server
-- `build all` - Builds `api-functions/api-functions.csproj` only (despite the label)
-
-These are local tasks, not proof of deployed-service behavior. The frontend task
-starts only `app/`; start admin/manufacturing from their own package scripts.
-
-**Do not run the `reseed-demo-logins` task.** It rebuilds and restarts the seed job
-directly with Azure CLI, bypassing azd and the demo/POC policy above, and it does not
-reseed demo logins on its own. Agents must not run it.
+There are no VS Code run/debug tasks or local `npm run dev` servers. Local commands only
+build, typecheck and run offline tests: `dotnet build AdventureWorks.sln`,
+`npm run typecheck` and `npx vite build` in each frontend, and the test commands under
+[Test Scripts](#test-scripts). Demo logins are reseeded only by the seed job during a normal deployment or environment recreation.
 
 ## Project-Specific Conventions
 
@@ -283,8 +263,6 @@ The project uses deployment/build/runtime configuration:
 
 - `api/dab-config.json` (demo CORS allows all origins without credentials; JWT auth
   is enabled with api-mcp issuer/audience and entity-specific role permissions)
-- `app/.env` (optional local Vite overrides; azd values are not automatically
-  inherited by `npm run dev`)
 - `app/.env.production` (generated by the predeploy hook)
 - `app/public/config.js` (generated runtime configuration for the storefront);
   admin/manufacturing container startup scripts generate their runtime configuration
@@ -308,7 +286,7 @@ builder.Services.AddScoped<AddressService>(sp => {
 public AddressFunctions(ILogger<AddressFunctions> logger, AddressService service)
 ```
 
-Connection string uses **Active Directory Default** authentication (Managed Identity in Azure, Azure CLI locally).
+Connection string uses **Active Directory Default** authentication (the runtime managed identity in Azure).
 Details: [Functions service](../docs/services/functions.md).
 
 ### Loading Skeletons (app-manufacturing)
@@ -551,14 +529,16 @@ Test scripts live under `tests/scripts/`, not the repository root:
   (no Azure calls); the same gate runs in the Build-Checker workflow
 - `.NET` tests: `dotnet test AdventureWorks.sln` (`api-functions.Tests/` and
   `api-mcp/AdventureWorks.Tests/`)
-- Frontends: `npm test` in `app-manufacturing/` (Vitest); storefront
+- Frontends: `npm run typecheck` in `app/`, `app-admin/` and `app-manufacturing/`;
+  `npm test` in `app-manufacturing/` and `app-admin/` (Vitest); storefront
   `cd app && node --test scripts/*.test.mjs`; `npm --prefix mcp-inspector test`
 - Seed job: `python3 -B -m unittest discover -s seed-job/tests -p 'test_*.py'` and the
   `seed-job/tests/Test-*.ps1` PowerShell scripts
 
 Details: [testing strategy](../docs/testing/testing-strategy.md).
 
-**Run functions locally** with the `func: host start` task, which auto-builds before starting.
+Validate Functions changes by deploying (`azd deploy api-functions --no-prompt`) and
+calling the deployed routes with the authenticated helper.
 
 ### Verifying GraphQL Endpoints
 
@@ -603,13 +583,13 @@ and [monitoring](../docs/operations/monitoring.md).
 
 ## Common Gotchas
 
-1. **DAB config during local dev**: Use the existing `api/dab-config.json`; supply its environment placeholders and use the configured OAuth issuer/audience. Do not disable auth to fix local failures.
+1. **DAB config changes**: Edit `api/dab-config.json`, deploy with `azd deploy api --no-prompt` and test against the deployed endpoint. Its `@env()` placeholders are supplied by the Container App; never disable auth to work around failures.
 2. **GraphQL query failures**: Check for `.items` in response - DAB wraps all lists
 3. **API pagination**: DAB defaults to 100 items per list page; follow GraphQL cursors or REST next links, not an assumed hard maximum or a single-page count.
 4. **DAB REST pagination parameters**: Use `$first` (not `$top`) to limit results in REST calls (e.g. `?$first=10`). `$skip` is unsupported — use `$after` for cursor-based pagination.
 5. **Address entity not in DAB**: `Person.Address` is excluded from DAB because the `SpatialLocation` (`geography`) column is unsupported. Use the `AddressFunctions` Azure Function for address data instead.
 6. **Direct SQL access**: Deployment disables public SQL access; use deployed DAB/Functions instead of reopening networking.
-7. **Build failures**: `dotnet build` restores by default; use `restore (functions)` when diagnosing missing dependencies or building with `--no-restore`.
+7. **Build failures**: `dotnet build` restores by default; run `dotnet restore AdventureWorks.sln` when diagnosing missing dependencies or building with `--no-restore`.
 8. **Connection errors**: Azure SDK access may need renewed `az login`; application API tokens instead renew through api-mcp OAuth. They are different credentials.
 9. **Missing env vars**: DAB reads `@env()` placeholders from container configuration; azd state is not automatically exported into a local shell. Read only required azd values.
 10. **Shopping Simulator AI requirement**: `OrderGenerationAgentService` requires `AI_AGENT_ORDER_ID` for all modes; no random-order fallback is implemented. Structured planning failures are saved as failed simulator results with failure codes; unhandled queue exceptions are rethrown for runtime retry/poison handling.
@@ -620,6 +600,10 @@ and [monitoring](../docs/operations/monitoring.md).
 15. **No runtime infra creation**: Application code must not call `CreateIfNotExistsAsync` or `CreateIfNotExists` on storage resources (queues, tables, containers). All storage infrastructure is provisioned by `infra/modules/storage.bicep` via `azd up`. If you need a new queue or table, add it to the Bicep file. A startup health check in `Program.cs` logs App Insights warnings for any missing resources.
 16. **MCP tool count**: api-mcp exposes 63 MCP tools over Streamable HTTP at `/mcp`.
 17. **Always-ready Functions cost**: `OrderPlacedSqlTrigger` and `DatabaseChanges` each have one always-ready Flex instance (two total), which can keep serverless SQL from auto-pausing while the environment exists.
+18. **Functions routes**: every HTTP function must be classified in `api-functions/Auth/FunctionAuthorizationRegistry.cs` and `tests/auth/contracts.json`. HTTP `GET`s are pure reads (listed in `safeFunctionReadRoutes`); state changes use POST/PUT/DELETE or the `SimulationMaintenance_Timer`. Full list: [Functions routes](../docs/reference/functions-routes.md).
+19. **Server-side commerce**: storefront orders go through `POST /api/orders/checkout` (server prices, `Sales.DiscountCode` codes, tax and freight in one transaction; `/checkout/quote` previews). Never price or validate discount codes in the browser. Review helpful votes use `POST`/`DELETE /api/reviews/{id}/vote`, not DAB.
+20. **Consumers are `PersonType = 'IN'` only**: api-mcp maps `EM` to employee and `IN` to consumer; other person types cannot sign in. Email addresses are unique (`UQ_EmailAddress_EmailAddress`).
+21. **Anonymous AI routes are rate-limited**: Help Me Choose and semantic search use `AiRateLimitService` (`aiRateLimits` table, `AI_RATE_LIMIT_*` settings) and return 429 with `Retry-After`.
 
 ### Shopping Simulator
 

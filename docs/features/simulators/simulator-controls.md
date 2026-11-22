@@ -21,9 +21,9 @@ AdventureWorks runs several cooperating simulations. This page collects the cont
 | [Production](../manufacturing/production-simulation.md) | `POST manufacturing/begin` | `POST manufacturing/stop` |
 | [Shopping](shopping-simulator.md) | `POST shopping-simulator/start` | `POST shopping-simulator/stop`; stops itself after `DurationHours` |
 | [Manufacturing agent](../manufacturing/manufacturing-agent.md) | `PUT manufacturing/agent-config` with mode 1–3 | Mode 0, or the auto-shutoff time |
-| [Supply chain](../supply-chain/supply-chain.md) | Starts on first use | `PUT supply/config` (speed multiplier 1–50) |
+| [Supply chain](../supply-chain/supply-chain.md) | Initialized by the maintenance timer on host start | `PUT supply/config` (speed multiplier 1–50) |
 | [Warehouse](../warehouse/warehouse-operations.md) | Always on | Idle when no work arrives |
-| [Bank](../finance/bank-simulator.md) | Seeded on first use | Reset only |
+| [Bank](../finance/bank-simulator.md) | Seeded by the maintenance timer on host start | Reset only |
 
 ## Try it
 
@@ -68,7 +68,7 @@ These MCP tools ask the user to confirm (MRTR) before acting unless the call pas
 Production and warehouse activity writes many `Production.TransactionHistory` rows. `TransactionHistoryArchiveFunction` moves rows older than one year into `Production.TransactionHistoryArchive`:
 
 - **Timer:** every Sunday at 02:00 UTC (`0 0 2 * * 0`).
-- **On demand:** `GET /api/archive/trigger` (`admin.write`) runs the archive immediately and returns `recordsArchived`. It changes data even though it is a `GET`.
+- **On demand:** `POST /api/archive/trigger` (`admin.write`) runs the archive immediately and returns `recordsArchived`.
 
 In the Admin portal, **Inventory Transactions** has a **Show Archive** toggle to browse archived rows.
 
@@ -85,7 +85,7 @@ Each step publishes its own simulator's events, such as `queue-cleared`, `state-
 | Action | Scope |
 |---|---|
 | `POST /api/simulators/reset` | `admin.write` |
-| `GET /api/archive/trigger` | `admin.write` |
+| `POST /api/archive/trigger` | `admin.write` |
 | MCP `reset_all_simulators` | `mcp.admin` |
 
 ## Configuration

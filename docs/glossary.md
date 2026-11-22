@@ -59,8 +59,6 @@ pages that cover each area in depth.
 | --- | --- |
 | **Microsoft Foundry** | Azure's AI platform. The demo deploys a Foundry account and project with chat and embedding models (and an optional image model). |
 | **Prompt agent** | A Foundry agent defined by instructions, a model and optionally MCP tools — for example the storefront chat agent or the promotion agent. |
-| **Workflow agent** | A Foundry agent defined in YAML (`workflows/`) that routes a conversation between other agents. |
-| **Intent agent** | A small classifier agent used inside a workflow to decide which agent should handle a request. |
 | **Hosted agent** | Agent code that Foundry runs for you. The demo's hosted Manufacturing agent (`manufacturing-agent/`) is deployed with `host: azure.ai.agent`. See [Hosted Manufacturing agent](services/manufacturing-agent.md). |
 | **Agent mode** | How much the Manufacturing agent may do: **Off** (0), **ReadOnly** (1, observe and report), **ProposePending** (2, propose actions for human approval) or **FullyAutonomous** (3, act directly until the auto-shutoff time). |
 | **Proposal** | An action suggested by the Manufacturing agent in ProposePending mode, such as starting a production run or placing a purchase order. A person approves or rejects it; unanswered proposals expire after five minutes. |

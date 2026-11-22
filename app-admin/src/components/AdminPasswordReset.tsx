@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import { KeyRound, Mail, Eye, EyeOff, Loader2, Check } from "lucide-react";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { toast } from "sonner";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
+import { describeAdminResetResponse } from "@/lib/passwordReset";
 
 interface AdminPasswordResetProps {
   businessEntityId: number;
@@ -12,6 +15,9 @@ export const AdminPasswordReset: React.FC<AdminPasswordResetProps> = ({
   businessEntityId,
   customerEmail,
 }) => {
+  // Setting a password (/api/password) and the staff reset email
+  // (/api/password/reset/admin-request) both require customers.write.
+  const canSetPassword = useCan(Scopes.CustomersWrite);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
@@ -35,18 +41,23 @@ export const AdminPasswordReset: React.FC<AdminPasswordResetProps> = ({
     try {
       const functionsUrl = getFunctionsApiUrl();
       const response = await fetch(
-        `${functionsUrl}/api/password/reset/request`,
+        `${functionsUrl}/api/password/reset/admin-request`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: customerEmail }),
+          body: JSON.stringify({ businessEntityID: businessEntityId, email: customerEmail }),
         },
       );
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const body = await response.json().catch(() => null);
+      const outcome = describeAdminResetResponse(response.status, body, customerEmail);
+      if (outcome.kind === "sent") {
+        setEmailSent(true);
+        toast.success(outcome.message);
+      } else if (outcome.kind === "not-eligible") {
+        toast.warning(outcome.message);
+      } else {
+        toast.error(outcome.message);
       }
-      setEmailSent(true);
-      toast.success(`Password reset email sent to ${customerEmail}`);
     } catch {
       toast.error("Failed to send password reset email");
     } finally {
@@ -117,7 +128,8 @@ export const AdminPasswordReset: React.FC<AdminPasswordResetProps> = ({
         </div>
         <button
           onClick={handleSendResetEmail}
-          disabled={isSendingEmail || !customerEmail || emailSent}
+          disabled={isSendingEmail || !customerEmail || emailSent || !canSetPassword}
+          title={canSetPassword ? undefined : "Requires the customers.write permission"}
           className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
         >
           {isSendingEmail ? (
@@ -132,6 +144,7 @@ export const AdminPasswordReset: React.FC<AdminPasswordResetProps> = ({
       </div>
 
       {/* Set new password */}
+      {canSetPassword && (
       <div className="p-4 bg-white border-2 border-doodle-text/10">
         <button
           onClick={() => setShowSetPassword((v) => !v)}
@@ -255,6 +268,7 @@ export const AdminPasswordReset: React.FC<AdminPasswordResetProps> = ({
           </form>
         )}
       </div>
+      )}
     </div>
   );
 };

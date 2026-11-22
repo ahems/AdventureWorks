@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "Verwendet KI-Embeddings, um natürliche Sprachabfragen zu verstehen. Probieren Sie: „rote Fahrräder“, „wasserdichte Ausrüstung für regnerische Wanderungen“ oder „leichtes Equipment für Radfahrer“",
     "matchCounts": "Gefunden wurden {{descriptionMatches}} Übereinstimmungen in der Beschreibung, {{reviewMatches}} Übereinstimmungen in Bewertungen und {{nameMatches}} Übereinstimmungen im Namen",
     "semanticUnavailable": "Semantischer Suchdienst nicht verfügbar. Bitte überprüfen Sie, ob der KI-Dienst läuft und die Einbettungen indexiert sind.",
+    "aiRateLimited": "Die KI-Suche ist gerade ausgelastet. Bitte versuchen Sie es in {{minutes}} Min. erneut.",
     "noMatchingProducts": "Keine passenden Produkte gefunden",
     "enterSearchQuery": "Geben Sie eine Suchanfrage ein, um Produkte zu finden",
     "noResultsForQuery": "Unsere KI-gestützte Suche hat keine Produkte gefunden, die \"{{query}}\" entsprechen. Versuchen Sie es mit anderen Schlüsselwörtern oder Formulierungen.",
@@ -267,7 +268,11 @@
       "lastName": "Doe",
       "email": "john@example.de",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Es können nur öffentliche Testkartennummern (zum Beispiel 4242 4242 4242 4242) gespeichert werden. Gespeichert werden nur Kartentyp, die letzten vier Ziffern und das Ablaufdatum.",
+    "errorSavePayment": "Zahlungsmethode konnte nicht gespeichert werden. Bitte versuche es erneut.",
+    "addCard": "Karte hinzufügen",
+    "invalidTestCard": "Diese Karte kann nicht gespeichert werden. Verwende eine gültige, nicht abgelaufene öffentliche Testkartennummer."
   },
   "checkout": {
     "backToCart": "Zurück zum Warenkorb",

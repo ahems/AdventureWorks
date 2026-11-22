@@ -81,6 +81,14 @@ public class ProcessSalesOrderStatus
         // Hand off to the warehouse service — it will re-enqueue Status=5 when all items are picked.
         if (status == 2 && msg.WarehousePickReady && _warehouse != null)
         {
+            var current = await _orderService.GetOrderStatusAsync(salesOrderId);
+            if (current != 2)
+            {
+                _logger.LogInformation(
+                    "SalesOrderID={SalesOrderId} is no longer Approved (Status={Current}); skipping warehouse pick.",
+                    salesOrderId, current);
+                return;
+            }
             _logger.LogInformation("SalesOrderID={SalesOrderId} WarehousePickReady — handing off to warehouse pick", salesOrderId);
             await _warehouse.EnqueueRetrieveOperationsForOrderAsync(salesOrderId);
             return; // Warehouse gates shipment — no further re-queuing here
@@ -89,10 +97,11 @@ public class ProcessSalesOrderStatus
         // Terminal statuses: update DB only, send email if Shipped, do not re-queue
         if (status == 4 || status == 5 || status == 6 || status == 7)
         {
-            var rows = await _orderService.UpdateOrderStatusAsync(salesOrderId, (byte)status);
+            var rows = await _orderService.UpdateOrderStatusAsync(
+                salesOrderId, (byte)status, ExpectedStatusesForTerminal(status));
             if (rows == 0)
             {
-                _logger.LogWarning("Order not found. SalesOrderID={SalesOrderId}. Stopping processing (e.g. order may have been removed by seed job).", salesOrderId);
+                _logger.LogWarning("Order not found or not in an eligible status for {Status}. SalesOrderID={SalesOrderId}. Stopping processing.", status, salesOrderId);
                 return;
             }
             if (status == 5)
@@ -108,10 +117,10 @@ public class ProcessSalesOrderStatus
         // Backordered (Status 3) re-queued message: next step is Shipped (5)
         if (status == 3)
         {
-            var rows = await _orderService.UpdateOrderStatusAsync(salesOrderId, 5);
+            var rows = await _orderService.UpdateOrderStatusAsync(salesOrderId, 5, BackorderedOnly);
             if (rows == 0)
             {
-                _logger.LogWarning("Order not found. SalesOrderID={SalesOrderId}. Stopping processing (e.g. order may have been removed by seed job).", salesOrderId);
+                _logger.LogWarning("Order not found or no longer Backordered. SalesOrderID={SalesOrderId}. Stopping processing.", salesOrderId);
                 return;
             }
             await SendShippedEmailAsync(salesOrderId);
@@ -124,7 +133,9 @@ public class ProcessSalesOrderStatus
         // Compute next status for 1 (In Process) or 2 (Approved)
         int nextStatus;
         if (status == 1)
-            nextStatus = Random.Shared.NextDouble() < 0.05 ? 4 : 2; // 5% Rejected, 95% Approved
+            // Admin promote-pending sets ForceApprove: approve without the random rejection,
+            // then follow the normal warehouse pick path below.
+            nextStatus = msg.ForceApprove ? 2 : (Random.Shared.NextDouble() < 0.05 ? 4 : 2); // 5% Rejected, 95% Approved
         else if (status == 2)
             nextStatus = Random.Shared.NextDouble() < 0.10 ? 3 : 5; // 10% Backordered, 90% Shipped
         else
@@ -133,10 +144,11 @@ public class ProcessSalesOrderStatus
             return;
         }
 
-        var updated = await _orderService.UpdateOrderStatusAsync(salesOrderId, (byte)nextStatus);
+        var updated = await _orderService.UpdateOrderStatusAsync(
+            salesOrderId, (byte)nextStatus, status == 1 ? InProcessOnly : ApprovedOnly);
         if (updated == 0)
         {
-            _logger.LogWarning("Order not found. SalesOrderID={SalesOrderId}. Stopping processing (e.g. order may have been removed by seed job).", salesOrderId);
+            _logger.LogWarning("Order not found or already advanced past Status={Status}. SalesOrderID={SalesOrderId}. Stopping processing.", status, salesOrderId);
             return;
         }
 
@@ -163,7 +175,7 @@ public class ProcessSalesOrderStatus
         var minHours = (double)cfg.ApprovedToShippedMinHours;
         var maxHours = (double)cfg.ApprovedToShippedMaxHours;
         var delayHours = minHours + (maxHours - minHours) * Random.Shared.NextDouble();
-        var visibilityApproved = TimeSpan.FromHours(Math.Max(delayHours, 0));
+        var visibilityApproved = msg.ForceApprove ? TimeSpan.Zero : TimeSpan.FromHours(Math.Max(delayHours, 0));
 
         if (_warehouse != null)
         {
@@ -313,6 +325,24 @@ public class ProcessSalesOrderStatus
         public int SalesOrderID { get; set; }
         public int Status { get; set; }
         public bool WarehousePickReady { get; set; }
+        public bool ForceApprove { get; set; }
     }
+
+    private static readonly byte[] InProcessOnly = [1];
+    private static readonly byte[] ApprovedOnly = [2];
+    private static readonly byte[] BackorderedOnly = [3];
+    private static readonly byte[] OpenStatuses = [1, 2, 3];
+
+    /// <summary>
+    /// Statuses an order must currently hold before a terminal queue message is applied.
+    /// Rejected only follows In Process; Shipped follows any open status; Cancelled and
+    /// Delivered keep the original terminal-only guard.
+    /// </summary>
+    public static IReadOnlyCollection<byte>? ExpectedStatusesForTerminal(int status) => status switch
+    {
+        4 => InProcessOnly,
+        5 => OpenStatuses,
+        _ => null,
+    };
 
 }

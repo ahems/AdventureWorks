@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
 import { dabFetch } from "@/lib/dabFetch";
+import { updateEmailAddress } from "@/lib/emailAddressApi";
 import { gql } from "graphql-request";
 import { toast } from "./use-toast";
 import { trackError } from "@/lib/appInsights";
@@ -73,23 +74,6 @@ const UPDATE_PERSON = gql`
   }
 `;
 
-const UPDATE_EMAIL_ADDRESS = gql`
-  mutation UpdateEmailAddress(
-    $businessEntityId: Int!
-    $emailAddressId: Int!
-    $emailAddress: String!
-  ) {
-    updateEmailAddress(
-      BusinessEntityID: $businessEntityId
-      EmailAddressID: $emailAddressId
-      item: { EmailAddress: $emailAddress }
-    ) {
-      EmailAddressID
-      EmailAddress
-    }
-  }
-`;
-
 export const useProfile = (businessEntityId: number) => {
   return useQuery<ProfileData>({
     queryKey: ["profile", businessEntityId],
@@ -139,11 +123,13 @@ export const useUpdateProfile = () => {
 
       // Update Email if changed
       if (profile.EmailAddressID) {
-        await graphqlClient.request(UPDATE_EMAIL_ADDRESS, {
-          businessEntityId: profile.BusinessEntityID,
-          emailAddressId: profile.EmailAddressID,
-          emailAddress: profile.EmailAddress,
-        });
+        await updateEmailAddress(
+          dabFetch,
+          restApiUrl,
+          profile.BusinessEntityID,
+          profile.EmailAddressID,
+          profile.EmailAddress,
+        );
       }
 
       // Update or create phone number

@@ -114,7 +114,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         </div>
 
         {/* Sale Badge */}
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 start-2">
           <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg] inline-block">
             {product.SpecialOfferDescription ||
               t("saleProductCard.limitedTimeSpecial")}
@@ -123,7 +123,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
 
         {/* Stock Badge */}
         {!product.inStock && (
-          <div className="absolute bottom-2 left-2">
+          <div className="absolute bottom-2 start-2">
             <span className="bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text inline-block">
               {t("saleProductCard.outOfStock")}
             </span>

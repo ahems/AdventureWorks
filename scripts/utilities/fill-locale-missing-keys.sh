@@ -9,7 +9,7 @@
 set -e
 REPO_ROOT="${PWD}"
 LOCALES_DIR="${REPO_ROOT}/app/src/locales"
-NAMESPACES="common account product cart footer chat"
+NAMESPACES="common account product cart footer chat helpme"
 SCRIPT_DIR="${REPO_ROOT}/scripts/utilities"
 
 if [ ! -d "$LOCALES_DIR/en" ]; then

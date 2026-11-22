@@ -118,11 +118,11 @@ Tokens, codes and PKCE verifiers are never logged. See [monitoring](../operation
 | Resource | Container app `av-mcp-*` ([`aca-api-mcp.bicep`](../../infra/modules/aca-api-mcp.bicep)) |
 | Image | [`api-mcp/Dockerfile`](../../api-mcp/Dockerfile), remote build in ACR |
 | Port | 8080, external HTTPS ingress |
-| Size and scale | 1 CPU, 2 Gi, 0–1 replicas |
+| Size and scale | 1 CPU, 2 Gi, 0–1 replicas (capped at one because OAuth state is in memory) |
 | Identity | Runtime managed identity for SQL, Key Vault, Storage and Azure OpenAI |
 
 - `postdeploy.sh` sets the OAuth redirect URIs and trusted service principals on the container after each deployment.
-- [`api-mcp/AppHost/`](../../api-mcp/AppHost/) is a .NET Aspire host for running api-mcp and Functions together locally. The container does not use it.
+- [`api-mcp/ServiceDefaults/`](../../api-mcp/ServiceDefaults/) holds the shared OpenTelemetry, health and resilience defaults that the service references.
 
 Settings are listed in [environment variables](../reference/environment-variables.md#oauth-and-mcp-server-api-mcp).
 

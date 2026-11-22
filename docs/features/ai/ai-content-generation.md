@@ -102,12 +102,13 @@ Generation routes need `admin.write`; status and helper reads need `admin.read`.
 |---|---|
 | `AI_AGENT_*_ID` | Agents listed above; see [Foundry agents](foundry-agents.md) |
 | `imageDeploymentModelName` | Image model selected at deployment; optional and dependent on regional quota |
+| `AI_IMAGE_DEPLOYMENT_NAME` | Functions setting with the deployed image deployment name (Bicep output); empty when none was deployed |
 | `embeddingDeploymentModelName` | Embedding model |
 | `chatGptDeploymentName` | Model used by prompt agents |
 
 ## Limits
 
-- Image generation depends on an image model deployment being available in `FOUNDRY_LOCATION`. When none is deployed, image jobs fail and other generators keep working.
+- Image generation depends on an image model deployment being available in `FOUNDRY_LOCATION`. When none is deployed, `AI_IMAGE_DEPLOYMENT_NAME` is empty, image jobs are skipped with a warning and other generators keep working.
 - Image jobs are slow and limited by the image deployment's quota; large batches can hit rate limits.
 - Bulk image generation clears any previously queued image and thumbnail jobs.
 

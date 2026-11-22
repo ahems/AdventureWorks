@@ -23,7 +23,7 @@
     },
     "host": {
       "port": 80,
-      "mode": "development",
+      "mode": "production",
       "cors": {
         "origins": [
           "*"
@@ -95,10 +95,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -113,19 +110,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -187,10 +178,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -205,19 +193,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -279,10 +261,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -297,19 +276,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -375,10 +348,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -393,19 +363,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -467,10 +431,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -485,19 +446,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -559,10 +514,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -577,19 +529,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -655,10 +601,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -673,19 +616,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -759,10 +696,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -843,10 +777,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -861,19 +792,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -957,10 +882,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -975,19 +897,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1077,10 +993,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1095,19 +1008,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1181,10 +1088,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1199,19 +1103,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1293,10 +1191,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1311,19 +1206,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1431,10 +1320,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1529,10 +1415,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1707,10 +1590,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -1839,6 +1719,18 @@
           "role": "authenticated",
           "actions": [
             {
+              "action": "create",
+              "policy": {
+                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
+              },
+              "fields": {
+                "include": [
+                  "BusinessEntityID",
+                  "EmailAddress"
+                ]
+              }
+            },
+            {
               "action": "read",
               "policy": {
                 "database": "@item.BusinessEntityID eq @claims.business_entity_id"
@@ -1861,6 +1753,18 @@
         {
           "role": "consumer",
           "actions": [
+            {
+              "action": "create",
+              "policy": {
+                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
+              },
+              "fields": {
+                "include": [
+                  "BusinessEntityID",
+                  "EmailAddress"
+                ]
+              }
+            },
             {
               "action": "read",
               "policy": {
@@ -1902,10 +1806,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2032,10 +1933,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2146,10 +2044,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2242,10 +2137,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2260,19 +2152,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2352,10 +2238,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2512,10 +2395,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2612,10 +2492,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2630,19 +2507,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2706,19 +2577,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2787,10 +2652,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2805,19 +2667,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2899,10 +2755,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -2917,19 +2770,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3025,10 +2872,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3043,19 +2887,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3140,10 +2978,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3158,19 +2993,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3236,10 +3065,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3254,19 +3080,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3461,10 +3281,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3479,19 +3296,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3693,10 +3504,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3711,19 +3519,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3838,10 +3640,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3856,19 +3655,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3920,10 +3713,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -3938,19 +3728,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4032,10 +3816,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4050,19 +3831,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4182,25 +3957,22 @@
         {
           "role": "marketing-admin",
           "actions": [
-            "read"
+            "read",
+            "create",
+            "update",
+            "delete"
           ]
         },
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4319,10 +4091,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4337,19 +4106,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4427,10 +4190,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4445,19 +4205,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4637,37 +4391,25 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "marketing-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4829,37 +4571,25 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "marketing-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -4936,37 +4666,25 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "marketing-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5056,6 +4774,30 @@
               }
             }
           ]
+        },
+        {
+          "role": "sales-admin",
+          "actions": [
+            "read"
+          ]
+        },
+        {
+          "role": "marketing-admin",
+          "actions": [
+            "read"
+          ]
+        },
+        {
+          "role": "operations-admin",
+          "actions": [
+            "read"
+          ]
+        },
+        {
+          "role": "executive-admin",
+          "actions": [
+            "read"
+          ]
         }
       ],
       "relationships": {
@@ -5113,10 +4855,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5131,19 +4870,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5243,10 +4976,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5261,19 +4991,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5338,19 +5062,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5392,10 +5110,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5410,19 +5125,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5474,10 +5183,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5492,19 +5198,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5560,10 +5260,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5578,19 +5275,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5713,10 +5404,7 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5805,10 +5493,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5823,19 +5508,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5911,10 +5590,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -5929,19 +5605,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6041,10 +5711,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6059,19 +5726,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6179,10 +5840,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6197,19 +5855,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6305,10 +5957,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6323,19 +5972,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6401,10 +6044,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6419,19 +6059,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "read",
-            "create",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6511,37 +6145,25 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "marketing-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6621,37 +6243,25 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "marketing-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6738,19 +6348,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6865,19 +6469,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6945,10 +6543,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -6963,19 +6558,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -7037,10 +6626,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -7055,19 +6641,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -7155,7 +6735,7 @@
         },
         {
           "name": "HelpfulVotes",
-          "description": "Running count of upvotes from other customers who found this review helpful. Incremented via the HelpfulVote Azure Function endpoint."
+          "description": "Running count of upvotes from other customers who found this review helpful. Changed only by the authenticated consumer endpoint POST/DELETE /api/reviews/{id}/vote, which records one Production.ProductReviewVote row per customer and adjusts this count in the same transaction."
         },
         {
           "name": "UserID",
@@ -7211,14 +6791,6 @@
                   "EmailAddress"
                 ]
               }
-            },
-            {
-              "action": "update",
-              "fields": {
-                "include": [
-                  "HelpfulVotes"
-                ]
-              }
             }
           ]
         },
@@ -7249,14 +6821,6 @@
                   "EmailAddress"
                 ]
               }
-            },
-            {
-              "action": "update",
-              "fields": {
-                "include": [
-                  "HelpfulVotes"
-                ]
-              }
             }
           ]
         },
@@ -7276,10 +6840,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -7294,19 +6855,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -7396,10 +6951,7 @@
         {
           "role": "sales-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -7414,19 +6966,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
@@ -7509,19 +7055,13 @@
         {
           "role": "inventory-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {
           "role": "operations-admin",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            "read"
           ]
         },
         {

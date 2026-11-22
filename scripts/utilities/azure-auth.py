@@ -18,6 +18,8 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# The localhost redirect URIs are loopback callbacks registered by api-mcp for this helper.
+# The authorization code is read from the redirect's Location header; no server listens.
 IDENTITIES = {
     "admin": ("ken0@adventure-works.com", "Admin1234!",
               "adventureworks-admin", "http://localhost:5174/oauth/callback",

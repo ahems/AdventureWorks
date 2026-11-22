@@ -59,10 +59,10 @@ See [storage resources](storage-resources.md) for every queue, table and contain
 | Container app `av-mcp-inspector-*` | [`aca-mcp-inspector.bicep`](../../infra/modules/aca-mcp-inspector.bicep) | 0.25 CPU, 0.5 Gi, 0–1 replicas | MCP Inspector | Runtime identity |
 | Container Apps job `av-seed-job-*` | [`aca-seed-job.bicep`](../../infra/modules/aca-seed-job.bicep) | 2 CPU, 4 Gi, manual trigger, 2,000-second timeout, no retries | Creates and loads the database | Seed identity |
 | Function App and plan `av-func-*` | [`flex-api-functions.bicep`](../../infra/modules/flex-api-functions.bicep) | Flex Consumption FC1, up to 5 instances, 2,048 MB, .NET 10 isolated, two always-ready instances (one each for the two SQL trigger functions) | Business logic, queues, timers, Durable orchestrations | Runtime identity; VNet integration; OAuth enforced |
-| Static Web App `av-app-*` | [`swa-app.bicep`](../../infra/modules/swa-app.bicep) | Standard, East US 2 (fixed) | Storefront | Deployment token |
+| Static Web App `av-app-*` | [`swa-app.bicep`](../../infra/modules/swa-app.bicep) | Standard; the main location when Static Web Apps supports it (`westus2`, `centralus`, `eastus2`, `westeurope`, `eastasia`), otherwise East US 2 (`staticWebAppLocation`) | Storefront | Deployment token |
 | Container registry `avacr*` | [`acr.bicep`](../../infra/modules/acr.bicep) | Basic | Images built remotely by azd | Admin user off; both identities have `AcrPull` |
 
-Container apps scale to zero, so the first request after an idle period is slow. [`swa-app-admin.bicep`](../../infra/modules/swa-app-admin.bicep) is not referenced by `main.bicep`; the admin portal runs as a container app.
+Container apps scale to zero, so the first request after an idle period is slow.
 
 ## Messaging and communication
 
@@ -76,7 +76,7 @@ Container apps scale to zero, so the first request after an idle period is slow.
 | Resource | Module | SKU / tier | Purpose | Identity and access |
 |---|---|---|---|---|
 | Foundry account (AIServices) | [`aiservices.bicep`](../../infra/modules/aiservices.bicep); created first by `preup.sh` | S0 in `FOUNDRY_LOCATION` | Models and agents | Local auth off; system and user-assigned identities |
-| Foundry project `av-aiproject-*` | `aiservices.bicep` | — | Prompt agents, workflow agents, connections and the hosted agent | Runtime identity has Azure AI Developer and data roles |
+| Foundry project `av-aiproject-*` | `aiservices.bicep` | — | Prompt agents, the api-mcp connection and the hosted agent | Runtime identity has Azure AI Developer and data roles |
 | Model deployments `chat`, `embedding` and an optional image deployment (`gpt-image-2`) | `aiservices.bicep` | Model, SKU and capacity selected by `preup.sh` | Chat, embeddings and image generation | Entra authentication |
 | Responsible AI policy and blocklist | [`eshop-chat-guardrails.bicep`](../../infra/modules/eshop-chat-guardrails.bicep) | — | Guardrails for storefront chat | — |
 | Hosted agent `manufacturing-agent` | `azure.yaml` (`host: azure.ai.agent`) | 0.5 CPU, 1 Gi | Manufacturing Responses agent | Agent identity trusted by api-mcp |

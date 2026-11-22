@@ -1,6 +1,6 @@
 ---
 title: Azure Functions app (api-functions/) — .NET 10 isolated on Flex Consumption
-summary: Component README for the AdventureWorks serverless backend (245 functions, 200 HTTP) covering business workflows, AI, simulators and real-time push; folders, local run, tests, configuration and deployment.
+summary: Component README for the AdventureWorks serverless backend (238 functions, 205 HTTP) covering business workflows, AI, simulators and real-time push; folders, tests, configuration and deployment.
 audience: [developer, operator, ai-agent]
 components: [api-functions]
 related: [docs/services/functions.md, docs/reference/functions-routes.md, docs/features/functions-oauth/ROUTE_SCOPE_MATRIX.md, docs/architecture/realtime-eventing.md]
@@ -11,8 +11,8 @@ related: [docs/services/functions.md, docs/reference/functions-routes.md, docs/f
 The serverless backend for everything that is not a good fit for Data API builder:
 orders and receipts, email, passwords and addresses, AI chat and content generation,
 semantic search, translations, manufacturing, supply chain, warehouse, bank and
-shopping simulators, reporting, SEO and health checks. The app contains **245
-functions, 200 of them HTTP**, plus queue, timer, Durable and SQL triggers. HTTP routes
+shopping simulators, reporting, SEO and health checks. The app contains **238
+functions, 205 of them HTTP**, plus queue, timer, Durable and SQL triggers. HTTP routes
 validate api-mcp OAuth bearer tokens (`FUNCTIONS_OAUTH_MODE=enforced`); explicit public
 routes stay anonymous. For the full service guide, see
 **[docs/services/functions.md](../docs/services/functions.md)**; every route is listed in
@@ -33,21 +33,18 @@ published directly by azd (`host: function`, no container image; azd service
 | `Models/` | DTOs and Table Storage entities |
 | `Program.cs` | Dependency injection, middleware and startup health checks |
 | `host.json` | Queue, Durable Task and logging settings |
-| `local.settings.example.json` | Template for local settings (never commit a populated copy) |
 | `../api-functions.Tests/` | xUnit tests |
 
-## Run, build and test
+## Build, test and call
 
 ```bash
 dotnet build api-functions/api-functions.csproj
 dotnet test api-functions.Tests
 ```
 
-To run locally, copy `local.settings.example.json` to `local.settings.json`, fill it from
-`azd env get-value <KEY> --no-prompt` (set `MCP_SERVICE_URL` to the deployed api-mcp),
-then run the VS Code task **func: host start**. The deployed SQL database and storage
-account are private, so test most changes by deploying. Call deployed routes with the
-authenticated helper:
+The app runs only in Azure (its SQL database and storage account are private). Deploy
+changes with `azd deploy api-functions --no-prompt`, then call the deployed routes with
+the authenticated helper:
 
 ```bash
 python3 scripts/utilities/azure-auth.py request \

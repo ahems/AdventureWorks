@@ -28,10 +28,10 @@ route where you see it, the backend that implements it and the page that explain
 | Sale page | Store `/sale` | DAB special offers | [Catalog and browsing](../features/commerce/catalog-and-browsing.md) |
 | Compare up to three products | Store `/compare` | DAB | [Catalog and browsing](../features/commerce/catalog-and-browsing.md) |
 | Guest cart that merges into the account on sign-in | Store `/cart` | Fn `cart/session`, `cart/items`, `cart/merge` | [Cart and checkout](../features/commerce/cart-and-checkout.md) |
-| Checkout: address, shipping, tax, currency, discount code | Store `/checkout`, `/order-confirmation` | Fn `orders`, `addresses`; DAB rates | [Cart and checkout](../features/commerce/cart-and-checkout.md) |
+| Checkout: address, shipping, tax, currency, discount code | Store `/checkout`, `/order-confirmation` | Fn `orders/checkout`, `orders/checkout/quote`, `addresses`; DAB rates | [Cart and checkout](../features/commerce/cart-and-checkout.md) |
 | Order history and tracking | Store `/account`, `/order-tracking/:orderId` | DAB orders; Fn `orders/details` | [Order lifecycle](../features/commerce/order-lifecycle.md) |
 | Simulated order pipeline (Pending → Approved → Shipped → Delivered) | Background | Fn SQL trigger, `sales-order-status` queue, hourly delivery timer | [Order lifecycle](../features/commerce/order-lifecycle.md) |
-| Order list, detail, ship, begin processing, cancel | Admin `/orders`, `/orders/:orderId` | DAB; Fn `orders/{id}/ship`, `orders/begin-processing-order` | [Order lifecycle](../features/commerce/order-lifecycle.md) |
+| Order list, detail, ship, begin processing, cancel | Admin `/orders`, `/orders/:orderId` | DAB; Fn `orders/{id}/ship`, `orders/{id}/cancel`, `orders/begin-processing-order` | [Order lifecycle](../features/commerce/order-lifecycle.md) |
 | Order pipeline timing and manual promotion | Admin `/order-pipeline` | Fn `orders/pipeline/*` | [Order lifecycle](../features/commerce/order-lifecycle.md) |
 | B2B store accounts and reseller orders | Admin `/stores` | Fn `stores`, `store-orders` | [Order lifecycle](../features/commerce/order-lifecycle.md) |
 | PDF receipts: download, resend, generate missing | Store `/account`; Admin `/orders/:orderId` | Fn receipt queue, private blob storage | [Receipts](../features/commerce/receipts.md) |
@@ -50,7 +50,7 @@ route where you see it, the backend that implements it and the page that explain
 | Profile, addresses and payment methods | Store `/account` | DAB; Fn `addresses`, `payment-methods` | [Accounts and sign-in](../features/customers/accounts-and-sign-in.md) |
 | Change password and reset a forgotten password | Store `/account`, `/reset-password` | Fn `password`, `password/reset/*` | [Passwords and reset](../features/customers/passwords-and-reset.md) |
 | Employee sign-in with OAuth + PKCE | Admin `/login`; Mfg `/login` | api-mcp | [Accounts and sign-in](../features/customers/accounts-and-sign-in.md) |
-| Customer list, detail, addresses, payment methods, password reset | Admin `/customers`, `/customers/:customerId` | DAB; Fn `person-addresses`, `addresses`, `password` | [Admin portal](../apps/admin-portal.md) |
+| Customer list, detail, addresses, payment methods, password reset | Admin `/customers`, `/customers/:customerId` | DAB; Fn `person-addresses`, `addresses`, `password`, `password/reset/admin-request` | [Admin portal](../apps/admin-portal.md) |
 | Customer statistics by country, region and month | Admin `/customer-stats` | Fn `customer-stats`, breakdowns | [Reporting](../features/finance/reporting.md) |
 | Order confirmation email with PDF receipt | Background after checkout | Fn email queue; Azure Communication Services | [Email notifications](../features/email/email-notifications.md) |
 | Shipped and delivered emails (off by default) | Background | Fn order pipeline | [Email notifications](../features/email/email-notifications.md) |
@@ -68,7 +68,7 @@ route where you see it, the backend that implements it and the page that explain
 | Semantic product search and suggestions | Store `/search`, header search | Fn `search/semantic`, `search/suggestions`; SQL vectors | [Semantic search](../features/search/semantic-search.md) |
 | "Help me choose" product wizard | Store `/help-me-choose` | Fn `helpme/*`; Foundry + MCP | [Help me choose](../features/search/help-me-choose.md) |
 | Admin product search | Admin `/search` | DAB | [Admin portal](../apps/admin-portal.md) |
-| Product reviews and helpful votes | Store `/product/:productId` | DAB | [Product reviews](../features/reviews/product-reviews.md) |
+| Product reviews and helpful votes | Store `/product/:productId` | DAB; Fn `reviews/{id}/vote` | [Product reviews](../features/reviews/product-reviews.md) |
 | Review moderation with AI analysis and replies | Admin `/reviews` | DAB; Fn `reviews/*`; Foundry | [Product reviews](../features/reviews/product-reviews.md) |
 | AI verified-purchaser review generation | Admin `/utilities`, `/product/:productId` | Fn `generate-verified-reviews/*`; Foundry | [Product reviews](../features/reviews/product-reviews.md) |
 | Product management and AI product wizard | Admin `/products`, `/product/:productId` | DAB; Fn `products/generate-content` | [AI content generation](../features/ai/ai-content-generation.md) |

@@ -159,12 +159,17 @@ public class FunctionAuthorizationRegistryTests
     [InlineData("GetAddressById", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal)]
     [InlineData("GetPaymentMethods", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal)]
     [InlineData("GetOwnedOrderDetails", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal)]
-    [InlineData("CreateOrderHeader", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal)]
+    [InlineData("PlaceCheckoutOrder", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal)]
+    [InlineData("QuoteCheckout", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal)]
     [InlineData("CreateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal)]
+    [InlineData("VoteReviewHelpful", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal)]
+    [InlineData("RemoveReviewHelpfulVote", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal)]
     // Authenticated, group-scoped capability; group grants are resolved from signed scopes.
     [InlineData("NegotiateWebPubSub", AccessTier.Authenticated, FunctionScopes.RealtimeConnect, AccessMode.GroupScoped)]
     // Tier I — internal-only.
     [InlineData("AIJobQueue_Status", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly)]
+    [InlineData("AdminRequestPasswordReset", AccessTier.Internal, FunctionScopes.CustomersWrite, AccessMode.InternalOnly)]
+    [InlineData("CancelOrder", AccessTier.Internal, FunctionScopes.OrdersWrite, AccessMode.InternalOnly)]
     // MCP-proxied routes — internal-only; scopes mirror the MCP tool policy.
     [InlineData("BankDeposit", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly)]
     [InlineData("ManufacturingStatus", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly)]

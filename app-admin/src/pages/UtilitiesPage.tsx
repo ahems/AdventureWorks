@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import GenerateVerifiedReviewsWizardDialog from "@/components/GenerateVerifiedReviewsWizardDialog";
+import { Can } from "@/components/Can";
+import { Scopes } from "@/lib/permissions";
 
 import {
   Bot,
@@ -41,20 +43,22 @@ const UtilitiesPage: React.FC = () => {
           AI Generators
         </h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Link
-            to="/generate-order"
-            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
-          >
-            <ShoppingBag className="w-8 h-8 text-doodle-purple shrink-0" />
-            <div>
-              <p className="font-doodle font-semibold text-doodle-text">
-                Generate Orders
-              </p>
-              <p className="font-doodle text-sm text-doodle-text/60">
-                Create realistic AI-generated orders using persona profiles
-              </p>
-            </div>
-          </Link>
+          <Can scope={Scopes.AdminWrite}>
+            <Link
+              to="/generate-order"
+              className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+            >
+              <ShoppingBag className="w-8 h-8 text-doodle-purple shrink-0" />
+              <div>
+                <p className="font-doodle font-semibold text-doodle-text">
+                  Generate Orders
+                </p>
+                <p className="font-doodle text-sm text-doodle-text/60">
+                  Create realistic AI-generated orders using persona profiles
+                </p>
+              </div>
+            </Link>
+          </Can>
           <Link
             to="/customers"
             className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
@@ -125,7 +129,9 @@ const UtilitiesPage: React.FC = () => {
               </p>
             </div>
           </Link>
-          <GenerateVerifiedReviewsWizardDialog />
+          <Can scope={Scopes.AdminWrite}>
+            <GenerateVerifiedReviewsWizardDialog />
+          </Can>
         </div>
 
         {/* Tools & Inspectors */}
@@ -133,20 +139,22 @@ const UtilitiesPage: React.FC = () => {
           Tools &amp; Inspectors
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
-          <Link
-            to="/stale-carts"
-            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
-          >
-            <Bot className="w-8 h-8 text-doodle-purple shrink-0" />
-            <div>
-              <p className="font-doodle font-semibold text-doodle-text">
-                Smart Cart Recovery
-              </p>
-              <p className="font-doodle text-sm text-doodle-text/60">
-                Manage abandoned cart recovery campaigns
-              </p>
-            </div>
-          </Link>
+          <Can scope={Scopes.CustomersRead}>
+            <Link
+              to="/stale-carts"
+              className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+            >
+              <Bot className="w-8 h-8 text-doodle-purple shrink-0" />
+              <div>
+                <p className="font-doodle font-semibold text-doodle-text">
+                  Smart Cart Recovery
+                </p>
+                <p className="font-doodle text-sm text-doodle-text/60">
+                  Manage abandoned cart recovery campaigns
+                </p>
+              </div>
+            </Link>
+          </Can>
           <Link
             to="/order-pipeline"
             className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"

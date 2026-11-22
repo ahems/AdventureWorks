@@ -43,6 +43,16 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
   undefined
 );
 
+export const RTL_LANGUAGES = new Set(["ar", "he"]);
+
+export const getLanguageDirection = (code: string): "rtl" | "ltr" =>
+  RTL_LANGUAGES.has(code.toLowerCase().split("-")[0]) ? "rtl" : "ltr";
+
+export const getRequestedLanguage = (search: string): string | null => {
+  const requested = new URLSearchParams(search).get("lang")?.toLowerCase();
+  return LANGUAGES.find((lang) => lang.code === requested)?.code ?? null;
+};
+
 const detectBrowserLanguage = (): string => {
   // Get browser language
   const browserLang = navigator.language.toLowerCase();
@@ -75,6 +85,9 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const { i18n } = useTranslation();
   const [selectedLanguage, setSelectedLanguageState] = useState<string>(() => {
+    // An explicit ?lang= (used by hreflang alternates) wins over saved state
+    const requested = getRequestedLanguage(window.location.search);
+    if (requested) return requested;
     // Try to get saved language from localStorage
     const saved = localStorage.getItem("selectedLanguage");
     // If no saved preference, detect from browser
@@ -90,6 +103,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Save to localStorage and sync with i18next whenever language changes
   useEffect(() => {
+    document.documentElement.lang = selectedLanguage;
+    document.documentElement.dir = getLanguageDirection(selectedLanguage);
     localStorage.setItem("selectedLanguage", selectedLanguage);
     if (i18n.language !== selectedLanguage) {
       i18n.changeLanguage(selectedLanguage);

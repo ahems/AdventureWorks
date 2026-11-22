@@ -47,7 +47,7 @@
   "containerEnv": {
     "AZD_SKIP_FIRST_RUN": "true"
   },
-  "postCreateCommand": "git lfs pull || true && az bicep install && npm ci && (cd app && npm ci) && (cd app-admin && npm ci) && (cd app-manufacturing && npm ci) && dotnet restore api-functions/api-functions.csproj && dotnet restore api-mcp/ServiceDefaults/ServiceDefaults.csproj && dotnet restore api-mcp/AppHost/AppHost.csproj",
+  "postCreateCommand": "git lfs pull || true && az bicep install && npm ci && (cd app && npm ci) && (cd app-admin && npm ci) && (cd app-manufacturing && npm ci) && dotnet restore api-functions/api-functions.csproj && dotnet restore api-mcp/ServiceDefaults/ServiceDefaults.csproj",
   "hostRequirements": {
     "memory": "8gb"
   }

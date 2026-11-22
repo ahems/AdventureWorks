@@ -1,13 +1,4 @@
 {
-  // Azure Functions settings
-  "azureFunctions.deploySubpath": "api-functions",
-  "azureFunctions.scmDoBuildDuringDeployment": true,
-  "azureFunctions.projectLanguage": "C#",
-  "azureFunctions.projectRuntime": "~4",
-  "azureFunctions.preDeployTask": "build (functions)",
-
-  // .NET settings
-
   // Exclude patterns for cleaner workspace
   "files.exclude": {
     "**/bin": true,

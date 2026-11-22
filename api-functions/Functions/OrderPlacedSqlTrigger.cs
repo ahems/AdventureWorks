@@ -74,6 +74,10 @@ public class OrderPlacedSqlTrigger
                 "SQL trigger: new order SalesOrderID={SalesOrderId}, CustomerID={CustomerId}",
                 order.SalesOrderID, order.CustomerID);
 
+            // Independent of the manufacturing agent mode; the orders group sanitizes the payload.
+            await _webPubSub.SendToGroupAsync("orders",
+                new { @event = "order-placed", salesOrderId = order.SalesOrderID, customerId = order.CustomerID });
+
             try
             {
                 await EnqueueReceiptAndStatusAsync(order.SalesOrderID);
@@ -190,7 +194,6 @@ public class OrderPlacedSqlTrigger
             "Enqueued manufacturing agent job for SalesOrderID={SalesOrderId}, RunId={RunId}, Mode={Mode}",
             salesOrderId, runId, mode);
 
-        await _webPubSub.SendToGroupAsync("orders", new { @event = "order-placed", salesOrderId, customerId });
         await _webPubSub.SendToGroupAsync("manufacturing-agent", new { @event = "run-created", runId, salesOrderId });
     }
 
@@ -211,10 +214,7 @@ public class OrderPlacedSqlTrigger
 
             var queueSvcClient = new QueueServiceClient(new Uri(queueServiceUri), new DefaultAzureCredential(),
                 new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
-            var queue = queueSvcClient.GetQueueClient(AutoPromotionQueueName);
-
-            var msg = JsonSerializer.Serialize(new { orderType });
-            await queue.SendMessageAsync(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(msg)));
+            await EnqueueAutoPromotionAsync(queueSvcClient.GetQueueClient(AutoPromotionQueueName), orderType);
 
             _logger.LogInformation("[AutoPromotion] Threshold met for {OrderType} — enqueued generation job.", orderType);
         }
@@ -223,6 +223,13 @@ public class OrderPlacedSqlTrigger
             _logger.LogWarning(ex, "[AutoPromotion] Failed to check/enqueue auto-promotion threshold.");
         }
     }
+
+    /// <summary>
+    /// Sends raw JSON: the queue client is configured with <see cref="QueueMessageEncoding.Base64"/>,
+    /// which already applies the single Base64 layer the Functions queue trigger decodes.
+    /// </summary>
+    public static Task EnqueueAutoPromotionAsync(QueueClient queue, string orderType) =>
+        queue.SendMessageAsync(AutoPromotionQueueTrigger.SerializeMessage(orderType));
 }
 
 public class SalesOrderHeaderRow

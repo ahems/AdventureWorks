@@ -1,6 +1,6 @@
 ---
-title: GitHub workflows (.github/workflows/) — build checks, service-principal deployment and seed image publishing
-summary: Component README for the GitHub Actions workflows, including the offline build checker, the one-time OIDC service-principal setup and conditioned role grant for the azd up deployment workflow, running it, recreating the local azd environment afterwards, and the seed-job image publisher.
+title: GitHub workflows (.github/workflows/) — build checks and service-principal deployment
+summary: Component README for the GitHub Actions workflows, including the offline build checker, the one-time OIDC service-principal setup and conditioned role grant for the azd up deployment workflow, running it, and recreating the local azd environment afterwards.
 audience: [developer, operator, security-reviewer]
 components: [ci-cd, infra]
 related: [docs/operations/ci-cd.md, docs/AZD_DEPLOYER_PERMISSIONS.md, docs/operations/deployment.md, docs/testing/testing-strategy.md]
@@ -13,22 +13,27 @@ and what CI covers, see **[CI/CD workflows](../../docs/operations/ci-cd.md)**.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| [`build-checker.yaml`](build-checker.yaml) | Manual or scheduled | Offline authentication assurance, container and Functions build checks, storefront SWA build |
+| [`build-checker.yaml`](build-checker.yaml) | Manual or scheduled | Offline authentication assurance, offline tests and typechecks, container and Functions build checks, storefront SWA build |
 | [`azd-up-service-principal.yml`](azd-up-service-principal.yml) | Manual | Full `azd up --no-prompt` as an Entra service principal over GitHub OIDC |
-| [`publish-seed-job.yml`](publish-seed-job.yml) | Manual | Publishes the seed-job image to GitHub Container Registry; deployments build their own image in ACR |
 
 ## build-checker.yaml
 
-[Build-Checker](build-checker.yaml) runs three independent jobs:
+[Build-Checker](build-checker.yaml) runs four independent jobs:
 
 - `auth-offline` restores the .NET, locked Node and assurance Python dependencies and
   runs `bash tests/scripts/validate-auth.sh --offline`, without Azure login, secrets or
   deployed API calls. Any assertion failure fails the job; exit code 2 is allowed only
   when every deterministic gate passes and the remaining live coverage is explicitly
   blocked. JSON, JUnit and TRX evidence is uploaded. It does not authorize live mutations.
-- `build-check` runs `docker build` for `app`, `api`, `seed-job`, `api-mcp`,
-  `app-admin`, `app-manufacturing` and `.devcontainer`, and `dotnet publish` for
-  `api-functions`.
+- `build-check` runs `docker build` for `api`, `seed-job`, `api-mcp`,
+  `app-admin`, `app-manufacturing`, `mcp-inspector`, `manufacturing-agent` and
+  `.devcontainer`, and `dotnet publish` for `api-functions`.
+- `offline-tests` runs `npm run typecheck` for the three frontends, the
+  `app-admin` and `app-manufacturing` Vitest suites, the storefront and
+  `mcp-inspector` `node --test` suites, the offline frontend harnesses in
+  `tests/scripts`, `pytest tests/scripts`, the seed-job Python tests and a
+  `manufacturing-agent` `dotnet build`. Every step runs; the last step reports all
+  failures.
 - `swa-build` runs `swa build` for the storefront.
 
 ## azd-up-service-principal.yml

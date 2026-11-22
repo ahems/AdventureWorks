@@ -43,7 +43,7 @@ Never repair deployed resources by hand.
 | `401 Unauthorized` from Functions, DAB or `/mcp` | The token is missing, expired, or has the wrong audience. DAB, Functions and MCP each need a token issued for their own resource. | Get a fresh token for the correct resource with [`azure-auth.py`](../testing/AZURE_AUTHENTICATED_SCRIPTS.md). An unauthenticated `POST /mcp` returns 401 with a `WWW-Authenticate` header that points to the protected-resource metadata. |
 | `403 Forbidden` | The token is valid, but the user lacks the scope, the category (internal versus consumer), or ownership of the record | This is expected. Use an identity whose role grants the scope. Do not silently retry as a more privileged identity. See the [Functions OAuth](../features/functions-oauth/README.md) and [MCP scope matrix](../features/mcp-oauth/TOOL_SCOPE_MATRIX.md) docs. |
 | `/api/agent/chat` returns 401 with a valid Functions token | The chat route requires an **MCP-audience** token, which it forwards to the MCP server | Request the token with `--resource mcp`. |
-| `invalid_request` at `/authorize` during local development | The redirect URI does not match the registered one. Local OAuth redirects are registered for `http://localhost:5173` (storefront), `5174` (admin) and `5175` (manufacturing), while all three Vite configs default to port 8080. | Start each app on its registered port, for example `npm run dev -- --port 5174`. |
+| `invalid_request` at `/authorize` | The redirect URI does not match a registered one. Deployed apps use `<app URL>/oauth/callback`; `azure-auth.py` uses the loopback callbacks `http://localhost:5174` (admin) and `5175` (manufacturing), which only capture the code from the `Location` header. | Check the app URL settings that `postdeploy.sh` wires into api-mcp, then redeploy. |
 | Signing certificate or Key Vault errors in api-mcp | Missing certificate, RBAC propagation or private DNS | See [MCP OAuth troubleshooting](../features/mcp-oauth/README.md#troubleshooting). |
 
 ## Services
@@ -67,13 +67,13 @@ Never repair deployed resources by hand.
 | Updates stop during heavy simulation | The Web PubSub Free tier allows 20 concurrent connections and 20,000 messages per day | Reduce simulator rates. Focusing the window again triggers React Query's normal refetch. Do not add polling. |
 | A new mutation does not refresh other users' screens | The producer or consumer side is not wired | Publish with `WebPubSubService.SendToGroupAsync` and register the query key or DOM listener. See [Real-time eventing](../architecture/realtime-eventing.md). |
 
-## Local development
+## Dev container and test scripts
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| A local tool cannot connect to SQL | Deployed SQL has public access disabled | Use the deployed DAB or Functions APIs. Do not reopen SQL networking. |
+| A script cannot connect to SQL | Deployed SQL has public access disabled | Use the deployed DAB or Functions APIs. Do not reopen SQL networking. |
 | Azure SDK calls fail with credential errors | The Azure CLI login has expired | Run `az login` again. Application API tokens are separate and come from api-mcp OAuth. |
-| `npm run dev` does not use the deployed URLs | azd values are not exported into the shell | Create `app/.env` from `azd env get-value` outputs; never hardcode URLs. |
+| A test script reports a missing URL | azd values are not exported into the shell, and no azd environment is selected | Run `azd env select <name>` or set the variable the script names. Test scripts have no localhost fallback. |
 
 ## Related
 

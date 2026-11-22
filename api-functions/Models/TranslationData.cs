@@ -27,14 +27,8 @@ public class CultureInfo
     public string Name { get; set; } = string.Empty;
 }
 
-public class TranslationActivityInput
-{
-    public List<TranslationRequest> Products { get; set; } = new();
-    public List<CultureInfo> Cultures { get; set; } = new();
-}
-
 /// <summary>
-/// Returned by SaveTranslationsActivity so the orchestrator can immediately
+/// Returned by ProductService.SaveTranslationsAsync so the AI translation job can
 /// chain embedding generation without an extra DB round-trip.
 /// </summary>
 public class SavedDescriptionResult

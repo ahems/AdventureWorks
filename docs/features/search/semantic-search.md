@@ -101,6 +101,9 @@ Search itself has no events. The product-name embedding orchestration sends `uti
 ## Security
 
 - `/api/search/semantic` and `/api/search/suggestions` are public and anonymous.
+- Anonymous AI calls are cost-limited by `AiRateLimitService`: a per-client fixed window (default 60 search or suggestion calls per 5 minutes) and a global daily budget (default 5000 per UTC day), counted in the `aiRateLimits` table with ETag concurrency. Clients are keyed by an HMAC of the first `X-Forwarded-For` hop (IPv6 grouped by /64); raw IPs are not stored. Refused calls get `429` with `Retry-After`, and the storefront shows a localized "try again in N min" message instead of retrying.
+- Request caps: bodies over 8 KB get `413`; a semantic query over 200 characters, `topN` outside 1–50 or a suggestion `q` over 100 characters gets `400`. Invalid requests are rejected before any model call and do not consume quota.
+- If the counter table cannot be reached, requests are allowed and a warning is logged, so a storage fault does not disable search in this demo.
 - Embedding generation routes require `admin.write`; `ai-job-queue/status` requires `admin.read`.
 - MCP `search_products` requires `products.read`.
 
@@ -112,6 +115,7 @@ Search itself has no events. The product-name embedding orchestration sends `uti
 | Deployment `embedding` | Embedding model deployment name (Bicep `embeddingDeploymentName`) |
 | `embeddingDeploymentModelName` | Model chosen by the preup hook (prefers a "small" embedding model) |
 | `SQL_CONNECTION_STRING` | Vector queries |
+| `AI_RATE_LIMIT_*` | Per-client window and daily budget for the anonymous routes; see [environment variables](../../reference/environment-variables.md) |
 
 ## Limits
 

@@ -173,7 +173,7 @@ const Header: React.FC = () => {
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 doodle-card p-2 z-50">
+                  <div className="absolute end-0 mt-2 w-48 doodle-card p-2 z-50">
                     <div className="px-3 py-2 border-b-2 border-dashed border-doodle-text/20 mb-2">
                       <p className="font-doodle font-bold text-doodle-text">
                         {user.firstName} {user.lastName}
@@ -266,7 +266,7 @@ const Header: React.FC = () => {
               </span>
               {totalItems > 0 && (
                 <span
-                  className="absolute -top-2 -right-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text"
+                  className="absolute -top-2 -end-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text"
                   data-testid="cart-count"
                 >
                   {totalItems}

@@ -977,47 +977,62 @@ public class WorkOrderSimulationService
         catch (Azure.RequestFailedException ex) when (ex.Status == 404) { /* Already gone */ }
     }
 
+    /// <summary>Returns shortages whose work order still exists. Read-only; stale rows are
+    /// removed by <see cref="PruneStaleShortagesAsync"/>.</summary>
     public async Task<List<ShortageData>> GetAllShortagesAsync()
     {
-        var results = new List<ShortageData>();
+        var (valid, _) = await SplitShortagesAsync();
+        return valid.Select(entity => new ShortageData(
+            entity.GetInt32("WorkOrderId") ?? 0,
+            entity.GetInt32("ProductId") ?? 0,
+            entity.GetString("ProductName") ?? "",
+            entity.GetInt32("Needed") ?? 0,
+            entity.GetInt32("Available") ?? 0,
+            entity.GetInt32("Shortfall") ?? 0,
+            entity.GetDateTimeOffset("LastRetryUtc")?.UtcDateTime ?? DateTime.UtcNow)).ToList();
+    }
+
+    /// <summary>Deletes shortage rows that reference deleted work orders. Returns the number removed.</summary>
+    public async Task<int> PruneStaleShortagesAsync()
+    {
+        var (_, stale) = await SplitShortagesAsync();
+        foreach (var entity in stale)
+        {
+            try
+            {
+                await _tableClient.DeleteEntityAsync(entity.PartitionKey, entity.RowKey);
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status == 404) { /* Already gone */ }
+        }
+        return stale.Count;
+    }
+
+    private async Task<(List<TableEntity> Valid, List<TableEntity> Stale)> SplitShortagesAsync()
+    {
         var entities = new List<TableEntity>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SHORTAGE}'"))
         {
             entities.Add(entity);
         }
-        if (entities.Count == 0) return results;
+        if (entities.Count == 0) return (entities, new List<TableEntity>());
 
-        // Validate against SQL — prune stale records referencing deleted work orders
         var woIds = entities.Select(e => e.GetInt32("WorkOrderId") ?? 0).Where(id => id > 0).Distinct().ToList();
         var validIds = new HashSet<int>();
-        using var conn = await GetConnectionAsync();
-        foreach (var batch in woIds.Chunk(500))
+        if (woIds.Count > 0)
         {
-            var ids = string.Join(",", batch);
-            var rows = await conn.QueryAsync<int>($"SELECT WorkOrderID FROM Production.WorkOrder WHERE WorkOrderID IN ({ids})");
-            foreach (var id in rows) validIds.Add(id);
+            using var conn = await GetConnectionAsync();
+            foreach (var batch in woIds.Chunk(500))
+            {
+                var rows = await conn.QueryAsync<int>(
+                    "SELECT WorkOrderID FROM Production.WorkOrder WHERE WorkOrderID IN @Ids", new { Ids = batch });
+                foreach (var id in rows) validIds.Add(id);
+            }
         }
 
-        foreach (var entity in entities)
-        {
-            var woId = entity.GetInt32("WorkOrderId") ?? 0;
-            if (!validIds.Contains(woId))
-            {
-                // Stale record — delete from Table Storage
-                _ = _tableClient.DeleteEntityAsync(entity.PartitionKey, entity.RowKey);
-                continue;
-            }
-            results.Add(new ShortageData(
-                woId,
-                entity.GetInt32("ProductId") ?? 0,
-                entity.GetString("ProductName") ?? "",
-                entity.GetInt32("Needed") ?? 0,
-                entity.GetInt32("Available") ?? 0,
-                entity.GetInt32("Shortfall") ?? 0,
-                entity.GetDateTimeOffset("LastRetryUtc")?.UtcDateTime ?? DateTime.UtcNow));
-        }
-        return results;
+        var valid = entities.Where(e => validIds.Contains(e.GetInt32("WorkOrderId") ?? 0)).ToList();
+        var stale = entities.Where(e => !validIds.Contains(e.GetInt32("WorkOrderId") ?? 0)).ToList();
+        return (valid, stale);
     }
 
     // ── Scrap events (Table Storage) ─────────────────────────────────────────

@@ -345,7 +345,7 @@ test("failed reads are reported, do not poll/retry silently, and recover on a ne
   stop();
 });
 
-test("storefront cart invalidates on push and reconnect without an interval", async () => {
+test("storefront cart and order history invalidate on push and reconnect without an interval", async () => {
   const invalidations = [];
   const pendingReads = [];
   const timers = [];
@@ -378,16 +378,20 @@ test("storefront cart invalidates on push and reconnect without an interval", as
   subscription.onMessage("orders", { event: "cart-changed" });
   subscription.onMessage("orders", { event: "cart-changed" });
   assert.equal(timers.length, 0);
-  pendingReads.shift()();
-  for (let i = 0; i < 8; i++) await Promise.resolve();
-  assert.equal(invalidations.length, 1);
-  assert.equal(timers.length, 1);
-  timers.shift()();
-  pendingReads.shift()();
+  pendingReads.splice(0).forEach(resolve => resolve());
   for (let i = 0; i < 8; i++) await Promise.resolve();
   assert.equal(invalidations.length, 2);
+  assert.equal(timers.length, 1);
+  timers.shift()();
+  pendingReads.splice(0).forEach(resolve => resolve());
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.equal(invalidations.length, 4);
   assert.equal(timers.length, 0);
-  assert.ok(invalidations.every(([filter, options]) => filter.queryKey[0] === "shoppingCart" && options.cancelRefetch === false));
+  assert.ok(invalidations.every(([filter, options]) => options.cancelRefetch === false));
+  assert.equal(JSON.stringify(invalidations.slice(0, 2).map(([filter]) => filter.queryKey).sort()),
+    '[["orders"],["shoppingCart"]]');
+  const orders = await readFile(new URL("../../app/src/hooks/useOrders.ts", import.meta.url), "utf8");
+  assert.match(orders, /queryKey: \["orders", customerId\]/);
   const cart = await readFile(new URL("../../app/src/hooks/useShoppingCart.ts", import.meta.url), "utf8");
   assert.ok(!cart.includes("refetchInterval"));
 });
@@ -437,6 +441,9 @@ async function loadSocket(app, fetchResponse) {
   const cleanups = [];
   const requests = [];
   let generation = "test-session";
+  let sessionGeneration = 0;
+  const sessionListeners = new Set();
+  let effect;
   let fetches = 0;
   class Client {
     handlers = {};
@@ -458,7 +465,16 @@ async function loadSocket(app, fetchResponse) {
   }).outputText, { context });
   await module.link(async name => {
     const exports = name === "react"
-      ? { useRef: value => ({ current: value }), useEffect: callback => { cleanups.push(callback()); } }
+      ? {
+        useRef: value => ({ current: value }),
+        useSyncExternalStore: (subscribe, getSnapshot) => { subscribe(() => {}); return getSnapshot(); },
+        useEffect: (callback, dependencies) => {
+          if (effect && dependencies.every((value, i) => value === effect.dependencies[i])) return;
+          effect?.cleanup?.();
+          effect = { dependencies, cleanup: callback() };
+          cleanups.push(effect.cleanup);
+        },
+      }
       : name === "@azure/web-pubsub-client"
         ? { WebPubSubClient: Client }
         : name === "@/services/dabAuth" || name === "@/services/eshopOAuth"
@@ -466,6 +482,8 @@ async function loadSocket(app, fetchResponse) {
             getFunctionsAccessToken: async () => "test-functions-token",
             getEshopAccessToken: async () => "test-functions-token",
             getTabAuthorizationGeneration: () => generation,
+            getEshopSessionGeneration: () => sessionGeneration,
+            subscribeEshopSession: listener => { sessionListeners.add(listener); return () => sessionListeners.delete(listener); },
             isTabAuthorizationGenerationCurrent: expected => expected === generation,
           }
         : { getFunctionsApiUrl: () => "https://functions.example", getWebPubSubNegotiateUrl: () => "https://functions.example/api/webpubsub/negotiate" };
@@ -476,8 +494,35 @@ async function loadSocket(app, fetchResponse) {
   await module.evaluate();
   const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   return { api: module.namespace, timers, warnings, clients, cleanups, requests, settle,
-    setGeneration: value => { generation = value; }, fetches: () => fetches };
+    setGeneration: value => { generation = value; }, fetches: () => fetches,
+    changeEshopSession: () => { sessionGeneration++; sessionListeners.forEach(listener => listener()); } };
 }
+
+test("storefront re-negotiates after sign-in and sign-out and refreshes caches on the new socket", async () => {
+  const env = await loadSocket("app", async () => ({ ok: true, json: async () => ({ url: "wss://socket.example" }) }));
+  let connects = 0;
+  const render = () => env.api.useWebPubSub(["orders"], () => {}, () => { connects++; });
+  render();
+  await env.settle();
+  render();
+  await env.settle();
+  assert.equal(env.fetches(), 1);
+  assert.equal(connects, 1);
+
+  let stopped = 0;
+  const first = env.clients[0];
+  first.stop = () => { stopped++; };
+  env.changeEshopSession();
+  render();
+  await env.settle();
+  assert.equal(stopped, 1);
+  assert.equal(env.fetches(), 2);
+  assert.equal(env.clients.length, 2);
+  assert.equal(connects, 2);
+  assert.equal(env.api.getWebPubSubStatus(), "connected");
+  assert.equal(env.timers.size, 0);
+  env.cleanups.at(-1)();
+});
 
 for (const app of ["app", "app-admin"]) {
   if (app === "app-admin") test("admin does not negotiate after its session changes during token acquisition", async () => {

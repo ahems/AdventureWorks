@@ -43,7 +43,7 @@ public static class FunctionAuthorizationRegistry
         // ---- Tier A — authenticated; handler enforces per-group scopes ----
         new("NegotiateWebPubSub", AccessTier.Authenticated, FunctionScopes.RealtimeConnect, AccessMode.GroupScoped, null),  // /api/webpubsub/negotiate
 
-        // ---- Tier C — consumer self-or-internal, ownership (17) ----
+        // ---- Tier C — consumer self-or-internal, ownership (20) ----
         new("MergeGuestCart", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "consumer + guest session"),
         new("SetPassword", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityID(self; internal → customers only)"),  // /api/password
         new("VerifyPassword", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityID(self only)"),  // /api/password/verify
@@ -56,13 +56,17 @@ public static class FunctionAuthorizationRegistry
         new("GetAddresses", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses
         new("GetPersonAddresses", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/person-addresses
         new("GetPaymentMethods", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "business_entity_id(self)"),
-        new("CreateOrderHeader", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "customerId + businessEntityId (signed consumer)"),  // /api/orders
-        new("CreateOrderDetail", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "salesOrderId(owner CustomerID)"),  // /api/orders/{salesOrderId:int}/details
+        new("CreatePaymentMethod", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "business_entity_id(self; consumer only, masked card)"),  // POST /api/payment-methods
+        new("PlaceCheckoutOrder", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "customer_id + business_entity_id (signed consumer only; server-priced)"),  // POST /api/orders/checkout
+        new("QuoteCheckout", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal, "business_entity_id (signed consumer only; owned addresses)"),  // POST /api/orders/checkout/quote
         new("GetOwnedOrderDetails", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal, "orderIds(owner CustomerID)"),  // /api/orders/details
         new("SetAddressType", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}/type
         new("UpdateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
+        new("VoteReviewHelpful", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "business_entity_id(self; consumer only, one vote per review)"),  // POST /api/reviews/{productReviewId:int}/vote
+        new("RemoveReviewHelpfulVote", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "business_entity_id(self; consumer only, own vote)"),  // DELETE /api/reviews/{productReviewId:int}/vote
 
-        // ---- Tier I — internal-only (162) ----
+        // ---- Tier I — internal-only (124) ----
+        new("AdminRequestPasswordReset", AccessTier.Internal, FunctionScopes.CustomersWrite, AccessMode.InternalOnly, null),  // /api/password/reset/admin-request (staff-only; reports eligibility)
         new("GenerateManufacturingDiagram", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("GenerateManufacturingInstructions", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("ExportManufacturingIllustrations", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),
@@ -74,12 +78,13 @@ public static class FunctionAuthorizationRegistry
         new("AnalyzeReviewsBatch", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/reviews/analyze-batch
         new("ApproveAllManufacturingProposals", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/proposals/approve-all
         new("ApproveManufacturingProposal", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/proposals/{id}/approve
-        new("ArchiveTransactionHistoryHttp", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/archive/trigger
+        new("ArchiveTransactionHistoryHttp", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // POST /api/archive/trigger
         new("AutoPromotion_GetConfig", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/auto-promotion/config
         new("AutoPromotion_ResetCounters", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/auto-promotion/reset-counters
         new("AutoPromotion_UpdateConfig", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/auto-promotion/config
         new("BankGetAccounts", AccessTier.Internal, FunctionScopes.SalesRead, AccessMode.InternalOnly, null),  // /api/bank/accounts
         new("BeginProcessingOrder", AccessTier.Internal, FunctionScopes.OrdersWrite, AccessMode.InternalOnly, null),  // /api/orders/begin-processing-order
+        new("CancelOrder", AccessTier.Internal, FunctionScopes.OrdersWrite, AccessMode.InternalOnly, null),  // POST /api/orders/{salesOrderId:int}/cancel
         new("ClearManufacturingAgentPoisonQueue", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/agent-queue/poison
         new("ClearManufacturingAgentQueue", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/agent-queue
         new("CreateCategory", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/CreateCategory
@@ -124,7 +129,7 @@ public static class FunctionAuthorizationRegistry
         new("GetVerifiedReviewsStatus", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/generate-verified-reviews/status
         new("GetVerifiedReviewsSummary", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/generate-verified-reviews/summary
         new("ManufacturingWorkforceDetail", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/workforce/detail
-        new("OrderDelivery_HttpTrigger", AccessTier.Internal, FunctionScopes.OrdersWrite, AccessMode.InternalOnly, null),  // /api/orders/delivery/trigger
+        new("OrderDelivery_HttpTrigger", AccessTier.Internal, FunctionScopes.OrdersWrite, AccessMode.InternalOnly, null),  // POST /api/orders/delivery/trigger
         new("OrderPipeline_GetConfig", AccessTier.Internal, FunctionScopes.OrdersRead, AccessMode.InternalOnly, null),  // /api/orders/pipeline/config
         new("OrderPipeline_GetStatus", AccessTier.Internal, FunctionScopes.OrdersRead, AccessMode.InternalOnly, null),  // /api/orders/pipeline/status
         new("OrderPipeline_PromoteApproved", AccessTier.Internal, FunctionScopes.OrdersWrite, AccessMode.InternalOnly, null),  // /api/orders/pipeline/promote-approved
@@ -169,7 +174,7 @@ public static class FunctionAuthorizationRegistry
         new("TranslateCategoryName", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/TranslateCategoryName
         new("TranslateLanguageFile_HttpStart", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/TranslateLanguageFile_HttpStart
         new("TranslateLanguageFile_Status", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/TranslateLanguageFile_Status
-        new("TranslateLanguageFile_Terminate", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/TranslateLanguageFile_Terminate
+        new("TranslateLanguageFile_Terminate", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // POST /api/TranslateLanguageFile_Terminate
         new("TranslateProductDescriptions_HttpStart", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/TranslateProductDescriptions_HttpStart
         new("TranslatePromotion", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/TranslatePromotion
         new("WarehouseActiveOperations", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/warehouse/active

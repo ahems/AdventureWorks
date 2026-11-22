@@ -70,6 +70,13 @@ public class GenerateCustomerWithAIFunction
             });
             return response;
         }
+        catch (DuplicateEmailAddressException ex)
+        {
+            _logger.LogWarning("GenerateCustomerWithAI produced an email address that is already registered");
+            var conflict = req.CreateResponse(HttpStatusCode.Conflict);
+            await conflict.WriteAsJsonAsync(new { success = false, error = ex.Message });
+            return conflict;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GenerateCustomerWithAI");

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
 import { gql } from "graphql-request";
+import { dabFetch } from "@/services/dabFetch";
 
 export interface AdminCustomerProfile {
   BusinessEntityID: number;
@@ -165,13 +166,13 @@ export const useAdminUpdateCustomerProfile = () => {
         const phoneTypeId = profile.PhoneNumberTypeID || 1;
 
         // Delete any existing phones
-        const existing = await fetch(
+        const existing = await dabFetch(
           `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${profile.BusinessEntityID}`,
         ).then((r) => r.json());
 
         if (existing.value?.length > 0) {
           for (const p of existing.value) {
-            await fetch(
+            await dabFetch(
               `${restApiUrl}/PersonPhone/BusinessEntityID/${profile.BusinessEntityID}/PhoneNumber/${encodeURIComponent(p.PhoneNumber)}/PhoneNumberTypeID/${p.PhoneNumberTypeID}`,
               { method: "DELETE" },
             );
@@ -180,7 +181,7 @@ export const useAdminUpdateCustomerProfile = () => {
 
         // Insert new phone (only if non-empty)
         if (profile.PhoneNumber) {
-          await fetch(`${restApiUrl}/PersonPhone`, {
+          await dabFetch(`${restApiUrl}/PersonPhone`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

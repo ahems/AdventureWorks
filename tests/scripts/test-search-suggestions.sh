@@ -5,8 +5,11 @@
 
 set -e
 
-# Get the API URL from environment or use default
-API_URL="${API_FUNCTIONS_URL:-http://localhost:7071}"
+API_URL="${API_FUNCTIONS_URL:-$(azd env get-value API_FUNCTIONS_URL --no-prompt 2>/dev/null || true)}"
+if [ -z "$API_URL" ]; then
+  echo "Set API_FUNCTIONS_URL or select a deployed azd environment." >&2
+  exit 1
+fi
 
 # Get query from argument or use default
 QUERY="${1:-red bik}"

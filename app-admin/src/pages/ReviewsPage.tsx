@@ -45,6 +45,8 @@ import Footer from "@/components/Footer";
 import { TableSkeleton, KpiSkeleton } from "@/components/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/context/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   useAdminReviews,
   useAdminReviewsByProduct,
@@ -130,6 +132,11 @@ const flagColors: Record<string, string> = {
 
 const ReviewsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  // AI analysis, AI replies, analyze-and-approve-all and review generation are
+  // Functions routes requiring admin.write. DAB approve/reply/delete stay available.
+  const canUseAi = useCan(Scopes.AdminWrite);
+  // Review moderation (approve, reply, delete) writes through DAB, which grants it to admin.write roles.
+  const canModerate = useCan(Scopes.AdminWrite);
   const queryClient = useQueryClient();
   const [dabCursor, setDabCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
@@ -1104,6 +1111,7 @@ const ReviewsPage: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleStartReply(review.id, true)}
+                      disabled={!canModerate}
                       className="font-doodle text-xs h-6 gap-1 mt-1 text-doodle-text/50 hover:text-doodle-text"
                     >
                       <Reply className="w-3 h-3" /> Edit Reply
@@ -1179,6 +1187,7 @@ const ReviewsPage: React.FC = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleStartReply(review.id)}
+                  disabled={!canModerate}
                   className="font-doodle text-xs h-7 gap-1 mt-2 text-doodle-text/60"
                 >
                   <Reply className="w-3 h-3" /> Reply
@@ -1194,6 +1203,7 @@ const ReviewsPage: React.FC = () => {
               <TooltipTrigger asChild>
                 <button
                   onClick={() => handleApprove(review.id)}
+                  disabled={!canModerate}
                   className="doodle-button doodle-button-primary p-2"
                   title="Approve"
                 >
@@ -1206,6 +1216,7 @@ const ReviewsPage: React.FC = () => {
               <TooltipTrigger asChild>
                 <button
                   onClick={() => handleDelete(review.id)}
+                  disabled={!canModerate}
                   className="doodle-button p-2 hover:bg-doodle-accent/10 hover:text-doodle-accent"
                   title="Delete"
                 >
@@ -1330,7 +1341,7 @@ const ReviewsPage: React.FC = () => {
                     size="sm"
                     variant="outline"
                     onClick={handleGenerateReviews}
-                    disabled={isGenerating}
+                    disabled={!canUseAi || isGenerating}
                     className="font-doodle gap-1 h-8"
                   >
                     {isGenerating ? (
@@ -1347,6 +1358,7 @@ const ReviewsPage: React.FC = () => {
                       size="sm"
                       onClick={handleAnalyze}
                       disabled={
+                        !canUseAi ||
                         isAnalyzing ||
                         isAnalyzeApproveAllRunning ||
                         filteredReviews.length === 0
@@ -1388,6 +1400,7 @@ const ReviewsPage: React.FC = () => {
                         size="sm"
                         onClick={() => setIsAnalyzeApproveAllConfirmOpen(true)}
                         disabled={
+                          !canUseAi ||
                           isAnalyzeApproveAllRunning ||
                           isAnalyzing ||
                           (pendingWithoutReplyCount ?? 0) === 0
@@ -1978,6 +1991,7 @@ const ReviewsPage: React.FC = () => {
                     <Button
                       size="sm"
                       onClick={handleBulkApprove}
+                      disabled={!canModerate}
                       className="font-doodle gap-1 h-8"
                     >
                       <CheckCircle className="w-4 h-4" /> Approve (
@@ -1987,7 +2001,7 @@ const ReviewsPage: React.FC = () => {
                       size="sm"
                       variant="outline"
                       onClick={handleBulkReply}
-                      disabled={isAnalyzing}
+                      disabled={!canUseAi || isAnalyzing}
                       className="font-doodle gap-1 h-8"
                     >
                       <Sparkles className="w-4 h-4" /> AI Reply (
@@ -2002,6 +2016,7 @@ const ReviewsPage: React.FC = () => {
                       size="sm"
                       variant="destructive"
                       onClick={handleBulkDelete}
+                      disabled={!canModerate}
                       className="font-doodle gap-1 h-8"
                     >
                       <Trash2 className="w-4 h-4" /> Delete (

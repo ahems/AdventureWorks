@@ -38,8 +38,8 @@ scrolling.
 | Functions | `GET /api/health` | Process liveness only; existing response and status are unchanged. |
 | Azure SQL | Functions managed-identity catalog read | Connectivity and `Production.Product` read permission, not every SQL permission or data completeness. |
 | Blob storage | Read properties of receipt, locale, and deployment containers | Containers exist and are accessible, not blob completeness or write permission. |
-| Queue storage | Read properties of all 15 application queues and their poison queues | Queues exist and are accessible, not worker progress, write permission, queue contents, or message delivery. |
-| Table storage | Read a single page (at most one row, partition key only) from each of the 13 Functions application tables | Tables are readable, not write permission, record correctness, or simulator activity. No row data is returned to the browser. |
+| Queue storage | Read properties of all 16 application queues and their poison queues | Queues exist and are accessible, not worker progress, write permission, queue contents, or message delivery. |
+| Table storage | Read a single page (at most one row, partition key only) from each of the 14 Functions application tables | Tables are readable, not write permission, record correctness, or simulator activity. No row data is returned to the browser. |
 | MCP | Backend requests to `/health` and `/ready` | Process liveness plus the MCP service's own catalog SQL and task-store read access. In-memory task storage is valid locally but not durable. |
 | OAuth | Backend authorization-server discovery request | Issuer/token metadata and PKCE `S256`, not a complete login, signing-key access, or authenticated tool execution. |
 | Web PubSub | Read-only `orders` group-existence request | Service reachable using managed identity. A group with no connections is valid; no event is sent. |
@@ -97,8 +97,8 @@ are **not** healthy. Missing/duplicate/malformed dependency results fail explici
 
 The optional `sql-identity` result reads the current SQL principal's type and SID
 and compares it with `AZURE_CLIENT_ID`; it exposes neither identifier nor SQL
-data. It does not change the core readiness headline and may be unconfigured for
-local development. The assurance runner also verifies that the configured client
+data. It does not change the core readiness headline and reports unconfigured
+when `AZURE_CLIENT_ID` is unset. The assurance runner also verifies that the configured client
 ID belongs to the selected attached runtime identity. This proves that particular
 Functions probe connection, not every SQL caller or effective permission.
 

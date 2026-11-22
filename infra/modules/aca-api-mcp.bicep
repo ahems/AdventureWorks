@@ -7,11 +7,18 @@ param containerAppEnvId string
 param bootstrapImage string = 'mcr.microsoft.com/dotnet/aspnet:10.0'
 param apiFunctionsUrl string
 @minValue(0)
-@maxValue(25)
+@maxValue(1)
 param minReplica int = 0
-@minValue(0)
-@maxValue(25)
-param maxReplica int = 3
+// api-mcp keeps OAuth state in process memory: the OpenIddict store, the single-use
+// authorization-code/assertion replay cache (OneTimeUseCache), the /token and /login rate
+// limiters and the login-cookie Data Protection keys. A second replica would accept a
+// replayed code, split rate-limit budgets and reject cookies issued by its peer, so the
+// app is capped at one replica. Scale-to-zero (min 0) is kept for cost: issued access and
+// refresh tokens are self-contained and signed with the Key Vault key, so only a sign-in
+// still in progress during an idle scale-in has to be restarted.
+@minValue(1)
+@maxValue(1)
+param maxReplica int = 1
 @secure()
 param revisionSuffix string
 @secure()

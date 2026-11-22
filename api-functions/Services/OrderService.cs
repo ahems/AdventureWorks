@@ -446,9 +446,31 @@ public class OrderService
     /// Updates the status of a sales order in Sales.SalesOrderHeader.
     /// </summary>
     /// <returns>Number of rows affected (0 or 1).</returns>
-    public async Task<int> UpdateOrderStatusAsync(int salesOrderId, byte status)
+    /// <param name="expectedCurrentStatuses">
+    /// When supplied, the update only applies if the order is currently in one of these
+    /// statuses, so stale or duplicate queue messages cannot regress or repeat a transition.
+    /// </param>
+    public virtual async Task<int> UpdateOrderStatusAsync(
+        int salesOrderId, byte status, IReadOnlyCollection<byte>? expectedCurrentStatuses = null)
     {
         using var connection = await GetConnectionAsync();
+        if (expectedCurrentStatuses is { Count: > 0 })
+        {
+            const string guardedSql = @"
+            UPDATE Sales.SalesOrderHeader
+            SET    Status       = @Status,
+                   ShipDate     = CASE WHEN @Status = 5 AND ShipDate IS NULL THEN GETDATE() ELSE ShipDate END,
+                   ModifiedDate = GETDATE()
+            WHERE  SalesOrderID = @SalesOrderId
+              AND  Status NOT IN (4, 6, 7)
+              AND  Status IN @Expected";
+            return await connection.ExecuteAsync(guardedSql, new
+            {
+                SalesOrderId = salesOrderId,
+                Status = status,
+                Expected = expectedCurrentStatuses.Select(s => (int)s).ToArray(),
+            });
+        }
         // Guard: do not overwrite a terminal status (Rejected=4, Cancelled=6, Delivered=7).
         // Shipped (5) is no longer guarded here — the delivery timer must be able to
         // transition 5→7.  Rejected, Cancelled, and Delivered are true terminals.
@@ -462,6 +484,17 @@ public class OrderService
             WHERE  SalesOrderID = @SalesOrderId
               AND  Status NOT IN (4, 6, 7)";
         return await connection.ExecuteAsync(sql, new { SalesOrderId = salesOrderId, Status = status });
+    }
+
+    /// <summary>
+    /// Returns the current Status of a sales order, or null when the order does not exist.
+    /// </summary>
+    public virtual async Task<byte?> GetOrderStatusAsync(int salesOrderId)
+    {
+        using var connection = await GetConnectionAsync();
+        return await connection.QuerySingleOrDefaultAsync<byte?>(
+            "SELECT Status FROM Sales.SalesOrderHeader WHERE SalesOrderID = @SalesOrderId",
+            new { SalesOrderId = salesOrderId });
     }
 
     /// <summary>
@@ -576,14 +609,39 @@ public class OrderService
     }
 
     /// <summary>
-    /// Promotes all Shipped (Status=5) orders whose ship date has elapsed the configured
-    /// delivery window to Delivered (Status=7).  B2C and B2B orders use separate minimum
-    /// day thresholds.  Falls back to ModifiedDate when ShipDate is NULL so that orders
-    /// shipped before the ShipDate-on-ship fix are also handled correctly.
+    /// Normalizes a configured delivery window so min is at least 0 and max is at least min.
+    /// </summary>
+    public static (int Min, int Max) NormalizeDeliveryWindow(int minDays, int maxDays)
+    {
+        var min = Math.Max(0, minDays);
+        return (min, Math.Max(min, maxDays));
+    }
+
+    /// <summary>
+    /// Deterministic per-order delivery threshold within the inclusive [min, max] window.
+    /// Mirrors the SQL used by <see cref="MarkOrdersAsDeliveredAsync"/>, so every order is
+    /// delivered no earlier than min days and no later than max days after shipping.
+    /// </summary>
+    public static int DeliveryThresholdDays(int salesOrderId, int minDays, int maxDays)
+    {
+        var (min, max) = NormalizeDeliveryWindow(minDays, maxDays);
+        return min + (int)((uint)salesOrderId % (uint)(max - min + 1));
+    }
+
+    /// <summary>
+    /// Promotes all Shipped (Status=5) orders whose ship date has elapsed their delivery
+    /// threshold to Delivered (Status=7). Each order's threshold is a deterministic value
+    /// in its order type's [min, max] window (see <see cref="DeliveryThresholdDays"/>), so
+    /// deliveries spread across the window and none exceed the max. Falls back to
+    /// ModifiedDate when ShipDate is NULL so that orders shipped before the
+    /// ShipDate-on-ship fix are also handled correctly.
     /// </summary>
     /// <returns>SalesOrderIDs that were promoted to Delivered.</returns>
-    public async Task<IReadOnlyList<int>> MarkOrdersAsDeliveredAsync(int minDaysB2C, int minDaysB2B)
+    public async Task<IReadOnlyList<int>> MarkOrdersAsDeliveredAsync(
+        int minDaysB2C, int maxDaysB2C, int minDaysB2B, int maxDaysB2B)
     {
+        var (minB2C, maxB2C) = NormalizeDeliveryWindow(minDaysB2C, maxDaysB2C);
+        var (minB2B, maxB2B) = NormalizeDeliveryWindow(minDaysB2B, maxDaysB2B);
         using var connection = await GetConnectionAsync();
         const string sql = @"
             UPDATE Sales.SalesOrderHeader
@@ -593,11 +651,17 @@ public class OrderService
             WHERE  Status = 5
               AND (
                     (OnlineOrderFlag = 1
-                     AND ISNULL(ShipDate, ModifiedDate) <= DATEADD(day, -@MinDaysB2C, GETDATE()))
+                     AND ISNULL(ShipDate, ModifiedDate) <= DATEADD(day,
+                         -(@MinDaysB2C + SalesOrderID % (@MaxDaysB2C - @MinDaysB2C + 1)), GETDATE()))
                  OR (OnlineOrderFlag = 0
-                     AND ISNULL(ShipDate, ModifiedDate) <= DATEADD(day, -@MinDaysB2B, GETDATE()))
+                     AND ISNULL(ShipDate, ModifiedDate) <= DATEADD(day,
+                         -(@MinDaysB2B + SalesOrderID % (@MaxDaysB2B - @MinDaysB2B + 1)), GETDATE()))
               )";
-        var ids = await connection.QueryAsync<int>(sql, new { MinDaysB2C = minDaysB2C, MinDaysB2B = minDaysB2B });
+        var ids = await connection.QueryAsync<int>(sql, new
+        {
+            MinDaysB2C = minB2C, MaxDaysB2C = maxB2C,
+            MinDaysB2B = minB2B, MaxDaysB2B = maxB2B,
+        });
         return ids.ToList();
     }
 }

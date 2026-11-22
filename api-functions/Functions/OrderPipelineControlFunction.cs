@@ -178,7 +178,7 @@ public class OrderPipelineControlFunction
         return resp;
     }
 
-    // ── POST promote-pending (Status=1 → Status=2 immediate) ─────────────────
+    // ── POST promote-pending (Status=1 → Approved → warehouse pick) ─────────────────
 
     [Function("OrderPipeline_PromotePending")]
     public async Task<HttpResponseData> PromotePending(
@@ -202,11 +202,13 @@ public class OrderPipelineControlFunction
         var queueClient = await GetQueueClientAsync();
         foreach (var id in orderIds)
         {
-            var message = JsonSerializer.Serialize(new { SalesOrderID = id, Status = 2 });
+            // Re-run the normal In Process step with ForceApprove so the processor approves
+            // the order and hands it straight to the warehouse pick path (no direct status write).
+            var message = JsonSerializer.Serialize(new { SalesOrderID = id, Status = 1, ForceApprove = true });
             await queueClient.SendMessageAsync(message);  // immediate (no visibility delay)
         }
 
-        _logger.LogInformation("[Pipeline] Promoted {Count} In Process orders → Approved (Status=2).", orderIds.Count);
+        _logger.LogInformation("[Pipeline] Enqueued {Count} In Process orders for forced approval and warehouse pick.", orderIds.Count);
 
         var resp = req.CreateResponse(HttpStatusCode.OK);
         await resp.WriteStringAsync(

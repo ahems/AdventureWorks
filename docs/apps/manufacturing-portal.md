@@ -236,17 +236,16 @@ The app uses the Application Insights web SDK with the cloud role name **`app-ma
 
 Model and part instructions come from the `Production.ProductModel.Instructions` XML. The app also bundles generated content: 56 model and 27 part instruction JSON files under `src/data/manufacturing/` and 95 SVG illustrations under `public/illustrations/`. The bundled content is used only when it matches the live XML. `npm run illustrations:export` regenerates the illustration export through the Functions `manufacturing/illustrations/export` route. See [manufacturing content](../features/manufacturing/manufacturing-content.md).
 
-## Local development
+## Building and deploying
 
 ```bash
 cd app-manufacturing
-npm install
-npm run dev        # Vite dev server on http://localhost:8080
+npm ci
+npm test                # Vitest
+npm run build           # production bundle in dist/
 ```
 
-- Set `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` and `VITE_API_MCP_URL` in `app-manufacturing/.env` to the deployed values (`azd env get-value <KEY> --no-prompt`).
-- api-mcp's built-in development redirect URI for this client is `http://localhost:5175/oauth/callback`. Either run Vite on port 5175 (`npm run dev -- --port 5175`) or register your local callback on api-mcp.
-- Deploy changes with `azd deploy app-manufacturing --no-prompt`. See [deployment](../operations/deployment.md).
+The portal runs only in Azure. Deploy changes with `azd deploy app-manufacturing --no-prompt` and test at `APP_MANUFACTURING_URL`. See [deployment](../operations/deployment.md). api-mcp's `http://localhost:5175/oauth/callback` registration is a loopback callback for [`azure-auth.py`](../testing/AZURE_AUTHENTICATED_SCRIPTS.md), not a dev server.
 
 ## Tests
 

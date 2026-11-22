@@ -62,7 +62,7 @@ public class OpenApiFunction
             },
             Servers = new List<OpenApiServer>
             {
-                new OpenApiServer { Url = "http://localhost:7071", Description = "Local development" }
+                new OpenApiServer { Url = "/", Description = "Current Functions host" }
             },
             Paths = new OpenApiPaths()
         };

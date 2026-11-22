@@ -192,6 +192,12 @@ public class AIJobProcessorFunction
             }
         }
 
+        if (_aiService.ImageDeploymentName is null)
+        {
+            _logger.LogWarning("Image job: no image model deployment is configured (AI_IMAGE_DEPLOYMENT_NAME) — skipping product {id}", productId);
+            return;
+        }
+
         _logger.LogInformation("Image job: generating {count} images for product {id}",
             4 - product.ExistingPhotoCount, productId);
 

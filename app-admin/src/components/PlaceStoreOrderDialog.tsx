@@ -653,8 +653,6 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
         items: lineItems.map((i) => ({
           productId: i.productId,
           quantity: i.quantity,
-          unitPrice: i.unitPrice,
-          discountPct: i.discountPct,
         })),
         shipMethodId,
         purchaseOrderNumber: purchaseOrderNumber.trim() || undefined, // always set since field is required
@@ -1387,7 +1385,10 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
                         colSpan={4}
                         className="py-2 px-3 font-doodle text-right font-bold text-doodle-text text-base"
                       >
-                        Total Due
+                        Estimated Total Due
+                        <span className="block text-xs font-normal text-doodle-text/60">
+                          Final prices use the catalogue list price and best active reseller offer
+                        </span>
                       </td>
                       <td className="py-2 px-3 font-doodle font-bold text-right text-doodle-accent text-base">
                         ${totalDue.toFixed(2)}

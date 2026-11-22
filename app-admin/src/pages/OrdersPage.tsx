@@ -23,6 +23,8 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   OrderStatus,
   ORDER_STATUS_WORKFLOW,
@@ -78,6 +80,7 @@ const ReceiptActions: React.FC<ReceiptActionsProps> = ({
 }) => {
   const { data: receiptStatus, isLoading: receiptStatusLoading } =
     useReceiptStatus(order.SalesOrderID);
+  const canGenerate = useCan(Scopes.AdminWrite);
 
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -143,7 +146,7 @@ const ReceiptActions: React.FC<ReceiptActionsProps> = ({
         ) : (
           <button
             onClick={(e) => onGenerate(e, order)}
-            disabled={isGenerating}
+            disabled={isGenerating || !canGenerate}
             className="doodle-button flex items-center gap-2 py-2 px-4 hover:bg-doodle-accent/10"
           >
             {isGenerating ? (
@@ -161,6 +164,9 @@ const ReceiptActions: React.FC<ReceiptActionsProps> = ({
 
 const OrdersPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  // Status transitions require orders.write; AI/receipt tooling requires admin.write.
+  const canWriteOrders = useCan(Scopes.OrdersWrite);
+  const canAdminWrite = useCan(Scopes.AdminWrite);
   const [searchParams] = useSearchParams();
   const [orderChannel, setOrderChannel] = useState<"consumer" | "b2b">(
     "consumer",
@@ -564,16 +570,18 @@ const OrdersPage: React.FC = () => {
                       🏢 B2B / Stores
                     </button>
                   </div>
-                  <Link
-                    to="/generate-order"
-                    className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    Generate with AI
-                  </Link>
+                  {canAdminWrite && (
+                    <Link
+                      to="/generate-order"
+                      className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Generate with AI
+                    </Link>
+                  )}
                   <button
                     onClick={handleGenerateMissingReceipts}
-                    disabled={missingReceiptsCooldown}
+                    disabled={!canAdminWrite || missingReceiptsCooldown}
                     className="doodle-button flex items-center gap-2 py-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {missingReceiptsCooldown ? (
@@ -1004,7 +1012,9 @@ const OrdersPage: React.FC = () => {
                                 ["Pending", "Processing", "Shipped"].includes(
                                   status,
                                 ));
-                            const isCancelled = order.Status === "Cancelled";
+                            const isCancelled =
+                              order.Status === "Cancelled" ||
+                              order.Status === "Rejected";
 
                             return (
                               <React.Fragment key={status}>
@@ -1063,8 +1073,17 @@ const OrdersPage: React.FC = () => {
                           </div>
                         )}
 
+                        {order.Status === "Rejected" && (
+                          <div className="flex items-center gap-2 p-3 bg-gray-100 border-2 border-gray-300 mb-4">
+                            <span className="text-xl">🚫</span>
+                            <span className="font-doodle text-gray-700">
+                              This order was rejected
+                            </span>
+                          </div>
+                        )}
+
                         {/* Status Actions */}
-                        {nextStatuses.length > 0 && (
+                        {canWriteOrders && nextStatuses.length > 0 && (
                           <div className="flex flex-wrap gap-2">
                             <span className="font-doodle text-sm text-doodle-text/60 self-center mr-2">
                               Actions:

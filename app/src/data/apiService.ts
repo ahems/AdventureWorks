@@ -1,4 +1,5 @@
 import { graphqlClient } from "@/lib/graphql-client";
+import { fetchAllPages } from "@/lib/graphql-pagination";
 import { trackError } from "@/lib/appInsights";
 import {
   GET_CATEGORIES,
@@ -34,6 +35,8 @@ import {
 // Type definitions for GraphQL responses
 interface GraphQLResponse<T> {
   items: T[];
+  hasNextPage?: boolean | null;
+  endCursor?: string | null;
 }
 
 interface CategoriesResponse {
@@ -375,12 +378,15 @@ const attachInventoryToProducts = async (
     // Fetch inventory data in batches
     const allInventories: ProductInventory[] = [];
     for (const chunk of chunks) {
-      const inventoryData =
-        await graphqlClient.request<ProductInventoriesResponse>(
-          GET_PRODUCTS_INVENTORY,
-          { productIds: chunk },
-        );
-      allInventories.push(...inventoryData.productInventories.items);
+      const inventories = await fetchAllPages(
+        (page) =>
+          graphqlClient.request<ProductInventoriesResponse>(
+            GET_PRODUCTS_INVENTORY,
+            { productIds: chunk, ...page },
+          ),
+        (data) => data.productInventories,
+      );
+      allInventories.push(...inventories);
     }
 
     // Create a map of ProductID -> Total Quantity (sum across all locations)
@@ -506,8 +512,10 @@ export const getProducts = async (
   cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
-    const data = await graphqlClient.request<ProductsResponse>(GET_PRODUCTS);
-    let products = data.products.items;
+    let products = await fetchAllPages(
+      (page) => graphqlClient.request<ProductsResponse>(GET_PRODUCTS, page),
+      (data) => data.products,
+    );
 
     // Always attach discounts (in given culture) and inventory
     products = await attachDiscountsToProducts(products, cultureId);
@@ -627,11 +635,14 @@ export const getProductsBySubcategory = async (
   cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
-    const data = await graphqlClient.request<ProductsResponse>(
-      GET_PRODUCTS_BY_SUBCATEGORY,
-      { subcategoryId },
+    let products = await fetchAllPages(
+      (page) =>
+        graphqlClient.request<ProductsResponse>(GET_PRODUCTS_BY_SUBCATEGORY, {
+          subcategoryId,
+          ...page,
+        }),
+      (data) => data.products,
     );
-    let products = data.products.items;
     products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);
@@ -664,11 +675,14 @@ export const getProductsByCategory = async (
     }
 
     // Then fetch products that belong to any of these subcategories using the 'in' filter
-    const data = await graphqlClient.request<ProductsResponse>(
-      GET_PRODUCTS_BY_SUBCATEGORY_IDS,
-      { subcategoryIds },
+    let products = await fetchAllPages(
+      (page) =>
+        graphqlClient.request<ProductsResponse>(
+          GET_PRODUCTS_BY_SUBCATEGORY_IDS,
+          { subcategoryIds, ...page },
+        ),
+      (data) => data.products,
     );
-    let products = data.products.items;
     products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);

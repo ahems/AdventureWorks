@@ -82,9 +82,9 @@ azd deploy manufacturing-agent --no-prompt
 - `postdeploy.sh` then refreshes the api-mcp trust settings and `api-functions-postdeploy.sh` writes `MANUFACTURING_AGENT_ENDPOINT` to the Function App.
 - [`manufacturing-agent/mcp-tools/azure.yaml`](../../manufacturing-agent/mcp-tools/azure.yaml) is a standalone project file for working on the agent on its own. The root `azure.yaml` is the one used for the demo.
 
-## Running locally
+## Testing changes
 
-From `manufacturing-agent/mcp-tools/`, `azd ai agent run` starts the agent on `http://localhost:8088`, and `azd ai agent invoke --local "<message>"` sends it a request. Set `MCP_SERVICE_URL` and `AZURE_AI_MODEL_DEPLOYMENT_NAME`. The managed-identity grant only trusts the deployed agent's principal, so MCP tool calls from a local run are rejected unless that principal is trusted. Test end-to-end against the deployed agent.
+Deploy the agent with `azd deploy manufacturing-agent --no-prompt` and test it end-to-end in Azure. The managed-identity grant only trusts the deployed agent's principal, so MCP tool calls from a local run are rejected.
 
 If you build the image yourself on an ARM64 machine (for example Apple Silicon), build for `linux/amd64`; ARM64 images do not run on the hosted agent service.
 

@@ -164,7 +164,6 @@ public class ReviewModerationQueueFunction
         HttpRequestData req)
     {
         var state = await _reviewService.GetReviewModerationJobStateAsync();
-        state = await ResetIfStaleAsync(state);
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(state);

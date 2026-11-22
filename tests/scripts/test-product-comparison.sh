@@ -2,12 +2,15 @@
 
 # Test script for product comparison functionality (anonymous users)
 # Tests the GraphQL API endpoints used by the compare feature
-# Usage: ./test-product-comparison.sh
+# Usage: ./test-product-comparison.sh   (API_URL overrides the selected azd environment)
 
 set -e
 
-# Get the API URL from environment or use default
-API_URL="${API_URL:-https://av-api-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io/graphql/}"
+API_URL="${API_URL:-$(azd env get-value API_URL --no-prompt 2>/dev/null || true)}"
+if [[ -z "$API_URL" ]]; then
+    echo "API_URL is not set and could not be read from the selected azd environment." >&2
+    exit 1
+fi
 
 # Colors for output
 GREEN='\033[0;32m'

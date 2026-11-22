@@ -1,0 +1,52 @@
+{
+  "title": "帮我选择",
+  "intro": {
+    "title": "一起找到最适合你的装备！",
+    "description": "回答 5 个简单问题，我们的 AI 将浏览商品目录，为你找到最匹配的产品。",
+    "cta": "开始吧",
+    "hint": "由 AI 提供支持 · 大约需要 1 分钟"
+  },
+  "loading": {
+    "questions": "正在生成个性化问题…",
+    "recommendations": "正在搜索商品目录并生成推荐…"
+  },
+  "progress": {
+    "question": "第 {{current}} 题，共 {{total}} 题"
+  },
+  "nav": {
+    "back": "返回",
+    "next": "下一步",
+    "findProducts": "查找我的产品"
+  },
+  "results": {
+    "title": "为你精选",
+    "viewProduct": "查看产品",
+    "noResults": "暂时没有找到完全匹配的产品。请浏览我们的分类或使用搜索栏。",
+    "startAgain": "重新开始"
+  },
+  "profile": {
+    "title": "关于你",
+    "subtitle": "帮助我们找到真正适合你的产品。",
+    "gender": {
+      "label": "性别（可选）",
+      "male": "男",
+      "female": "女",
+      "preferNotToSay": "不愿透露"
+    },
+    "height": {
+      "label": "你的身高",
+      "placeholder": "选择你的身高…"
+    },
+    "colors": {
+      "label": "喜欢的颜色",
+      "hint": "如无偏好请留空。"
+    },
+    "continue": "继续"
+  },
+  "error": {
+    "loadQuestions": "生成问题时出现问题，请重试。",
+    "loadRecommendations": "查找推荐时出现问题，请重试。",
+    "rateLimited": "您的 AI 请求过多。请在 {{minutes}} 分钟后重试。",
+    "tryAgain": "重试"
+  }
+}

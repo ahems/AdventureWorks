@@ -6,6 +6,8 @@ param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param sqlConnectionString string
 param aiFoundryEndpoint string = ''
 param chatGptDeploymentName string = ''
+// Foundry image deployment name (aiservices.bicep output); empty when no image model was deployed.
+param imageDeploymentName string = ''
 param storageAccountName string = ''
 param communicationServiceEndpoint string = ''
 param emailSenderDomain string = ''
@@ -13,10 +15,6 @@ param foundryProjectEndpoint string = ''
 param simulationTimeScaleFactor string = '60'
 param simulationScrapRate string = '0.05'
 param materialsRetryDelaySeconds string = '30'
-param agentWorkflowChatId string = ''
-param agentWorkflowPromotionId string = ''
-param agentWorkflowOrderId string = ''
-param agentWorkflowHelpMeChooseId string = ''
 param agentTranslationId string = ''
 param agentReviewBatchId string = ''
 param agentReviewAnalysisId string = ''
@@ -134,6 +132,35 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           value: chatGptDeploymentName
         }
         {
+          name: 'AI_IMAGE_DEPLOYMENT_NAME'
+          value: imageDeploymentName
+        }
+        // Anonymous storefront AI routes: per-client fixed window + global daily budget (aiRateLimits table).
+        {
+          name: 'AI_RATE_LIMIT_WINDOW_SECONDS'
+          value: '300'
+        }
+        {
+          name: 'AI_RATE_LIMIT_HELPME_PER_WINDOW'
+          value: '20'
+        }
+        {
+          name: 'AI_RATE_LIMIT_SEARCH_PER_WINDOW'
+          value: '60'
+        }
+        {
+          name: 'AI_RATE_LIMIT_HELPME_DAILY_BUDGET'
+          value: '1000'
+        }
+        {
+          name: 'AI_RATE_LIMIT_SEARCH_DAILY_BUDGET'
+          value: '5000'
+        }
+        {
+          name: 'AI_RATE_LIMIT_HASH_SALT'
+          value: uniqueString(subscription().id, resourceGroup().id, apiFunctionsName, 'ai-rate-limit')
+        }
+        {
           name: 'EMBEDDING_GENERATION_ENDPOINT'
           value: 'https://${apiFunctionsName}.azurewebsites.net/api/GenerateProductReviewEmbeddings_HttpStart'
         }
@@ -184,22 +211,6 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'MATERIALS_RETRY_DELAY_SECONDS'
           value: materialsRetryDelaySeconds
-        }
-        {
-          name: 'AI_AGENT_WORKFLOW_CHAT_ID'
-          value: agentWorkflowChatId
-        }
-        {
-          name: 'AI_AGENT_WORKFLOW_PROMOTION_ID'
-          value: agentWorkflowPromotionId
-        }
-        {
-          name: 'AI_AGENT_WORKFLOW_ORDER_ID'
-          value: agentWorkflowOrderId
-        }
-        {
-          name: 'AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID'
-          value: agentWorkflowHelpMeChooseId
         }
         {
           name: 'AI_AGENT_TRANSLATION_ID'

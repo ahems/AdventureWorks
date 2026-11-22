@@ -4,6 +4,7 @@
  */
 
 import { trackError } from "@/lib/appInsights";
+import { throwIfAiRateLimited } from "@/lib/aiRateLimit";
 
 const getFunctionsEndpoint = (): string => {
   if (typeof window !== "undefined" && window.APP_CONFIG?.API_FUNCTIONS_URL) {
@@ -76,6 +77,7 @@ export const getWizardQuestions = async (
       body: JSON.stringify({ context, cultureId }),
     });
 
+    throwIfAiRateLimited(res);
     if (!res.ok)
       throw new Error(`getWizardQuestions failed: ${res.statusText}`);
 
@@ -128,6 +130,7 @@ export const getRecommendations = async (
       }),
     });
 
+    throwIfAiRateLimited(res);
     if (!res.ok)
       throw new Error(`getRecommendations failed: ${res.statusText}`);
 

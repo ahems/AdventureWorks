@@ -27,6 +27,8 @@ import {
   type AutoPromotionConfig,
 } from "@/services/utilityService";
 import { toast } from "@/hooks/use-toast";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 function formatTimestamp(iso: string | null): string {
   if (!iso) return "Never";
@@ -37,6 +39,8 @@ function formatTimestamp(iso: string | null): string {
 }
 
 export default function AutoPromotionsPage() {
+  // Saving the config and resetting counters require admin.write.
+  const canWrite = useCan(Scopes.AdminWrite);
   const [config, setConfig] = React.useState<AutoPromotionConfig | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -178,7 +182,7 @@ export default function AutoPromotionsPage() {
               <Switch
                 checked={enabled}
                 onCheckedChange={setEnabled}
-                disabled={loading}
+                disabled={loading || !canWrite}
               />
             </div>
 
@@ -206,7 +210,7 @@ export default function AutoPromotionsPage() {
                     if (!v && !triggerStore) return;
                     setTriggerConsumer(v);
                   }}
-                  disabled={loading}
+                  disabled={loading || !canWrite}
                 />
               </div>
               <div className="flex items-center justify-between">
@@ -228,7 +232,7 @@ export default function AutoPromotionsPage() {
                     if (!v && !triggerConsumer) return;
                     setTriggerStore(v);
                   }}
-                  disabled={loading}
+                  disabled={loading || !canWrite}
                 />
               </div>
             </div>
@@ -250,7 +254,7 @@ export default function AutoPromotionsPage() {
                   step={10}
                   value={[consumerThreshold]}
                   onValueChange={([v]) => setConsumerThreshold(v)}
-                  disabled={loading}
+                  disabled={loading || !canWrite}
                   className="w-full"
                 />
                 <div className="flex justify-between">
@@ -281,7 +285,7 @@ export default function AutoPromotionsPage() {
                   step={10}
                   value={[storeThreshold]}
                   onValueChange={([v]) => setStoreThreshold(v)}
-                  disabled={loading}
+                  disabled={loading || !canWrite}
                   className="w-full"
                 />
                 <div className="flex justify-between">
@@ -299,7 +303,7 @@ export default function AutoPromotionsPage() {
             <div className="pt-2">
               <Button
                 onClick={handleSave}
-                disabled={!canSave || !isDirty}
+                disabled={!canWrite || !canSave || !isDirty}
                 className="doodle-button doodle-button-primary w-full flex items-center gap-2 justify-center py-3"
               >
                 {saving ? (
@@ -388,6 +392,7 @@ export default function AutoPromotionsPage() {
                   size="sm"
                   className="doodle-button font-doodle text-xs"
                   onClick={handleReset}
+                  disabled={!canWrite}
                 >
                   <RotateCcw className="w-3 h-3 mr-1" />
                   Reset Counters

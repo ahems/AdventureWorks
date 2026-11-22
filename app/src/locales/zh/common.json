@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "使用 AI 嵌入技术理解自然语言查询。试试：“红色自行车”、“雨天徒步防水装备”或“轻便骑行装备”",
     "matchCounts": "找到 {{descriptionMatches}} 条描述匹配，{{reviewMatches}} 条评论匹配，和 {{nameMatches}} 条名称匹配",
     "semanticUnavailable": "语义搜索服务不可用。请检查AI服务是否正在运行且嵌入已建立索引。",
+    "aiRateLimited": "AI 搜索当前繁忙。请在 {{minutes}} 分钟后重试。",
     "noMatchingProducts": "未找到匹配的产品",
     "enterSearchQuery": "输入搜索关键词以查找产品",
     "noResultsForQuery": "我们的 AI 驱动搜索未找到与“{{query}}”匹配的产品。请尝试使用不同的关键词或短语。",
@@ -267,7 +268,11 @@
       "lastName": "多",
       "email": "john@example.cn",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "只能保存公开的测试卡号（例如 4242 4242 4242 4242）。仅存储卡类型、卡号后四位和有效期。",
+    "errorSavePayment": "保存付款方式失败，请重试。",
+    "addCard": "添加卡",
+    "invalidTestCard": "无法保存此卡。请使用有效且未过期的公开测试卡号。"
   },
   "checkout": {
     "backToCart": "返回购物车",

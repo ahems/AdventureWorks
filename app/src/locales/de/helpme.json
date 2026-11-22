@@ -1,0 +1,52 @@
+{
+  "title": "Hilf mir bei der Auswahl",
+  "intro": {
+    "title": "Finden wir deine perfekte Ausrüstung!",
+    "description": "Beantworte 5 kurze Fragen und unsere KI durchsucht den Katalog nach Produkten, die perfekt zu dir passen.",
+    "cta": "Los geht's",
+    "hint": "KI-gestützt · Dauert etwa 1 Minute"
+  },
+  "loading": {
+    "questions": "Personalisierte Fragen werden erstellt…",
+    "recommendations": "Katalog wird durchsucht und Empfehlungen werden erstellt…"
+  },
+  "progress": {
+    "question": "Frage {{current}} von {{total}}"
+  },
+  "nav": {
+    "back": "Zurück",
+    "next": "Weiter",
+    "findProducts": "Meine Produkte finden"
+  },
+  "results": {
+    "title": "Deine persönliche Auswahl",
+    "viewProduct": "Produkt ansehen",
+    "noResults": "Wir konnten gerade keine genauen Treffer finden. Stöbere in unseren Kategorien oder nutze die Suchleiste.",
+    "startAgain": "Neu starten"
+  },
+  "profile": {
+    "title": "Ein wenig über dich",
+    "subtitle": "Hilft uns, Produkte zu finden, die wirklich passen.",
+    "gender": {
+      "label": "Geschlecht (optional)",
+      "male": "Männlich",
+      "female": "Weiblich",
+      "preferNotToSay": "Keine Angabe"
+    },
+    "height": {
+      "label": "Deine Körpergröße",
+      "placeholder": "Körpergröße auswählen…"
+    },
+    "colors": {
+      "label": "Lieblingsfarben",
+      "hint": "Leer lassen, wenn du keine Vorliebe hast."
+    },
+    "continue": "Weiter"
+  },
+  "error": {
+    "loadQuestions": "Beim Erstellen deiner Fragen ist ein Problem aufgetreten. Bitte versuche es erneut.",
+    "loadRecommendations": "Beim Suchen nach Empfehlungen ist ein Problem aufgetreten. Bitte versuche es erneut.",
+    "rateLimited": "Wir haben gerade sehr viele KI-Anfragen von Ihnen erhalten. Bitte versuchen Sie es in {{minutes}} Min. erneut.",
+    "tryAgain": "Erneut versuchen"
+  }
+}

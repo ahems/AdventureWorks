@@ -32,6 +32,7 @@ var applicationQueueDescriptions = {
   'simulation-order-queue': 'Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona.'
   'warehouse-ops-queue': 'Event-driven queue driving the warehouse simulation: each message represents one store/retrieve/receive operation phase for a warehouse worker at Finished Goods Storage (LocationID 7)'
   'review-moderation-queue': 'Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve.'
+  'verified-reviews-queue': 'Verified-review generation: one message per product of an admin-started job (job id, product, customer IDs); processed idempotently by the Functions queue trigger.'
   'manufacturing-agent-queue': 'Queue for manufacturing AI agent invocations triggered by new sales orders'
   'auto-promotion-queue': 'Queue for automatic AI promotion generation triggered by order volume thresholds'
   'utility-status-queue': 'Bounded Durable utility status observers; messages stop when the registered instance is terminal'
@@ -183,6 +184,9 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.33.0' = {
         }
         {
           name: 'awAutoPromotionConfig'
+        }
+        {
+          name: 'aiRateLimits'
         }
         {
           name: 'awMcpTasks'

@@ -47,8 +47,7 @@ public class AutoPromotionQueueTrigger
         AutoPromotionMessage? msg;
         try
         {
-            msg = JsonSerializer.Deserialize<AutoPromotionMessage>(queueMessage,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            msg = DeserializeMessage(queueMessage);
         }
         catch (Exception ex)
         {
@@ -161,5 +160,13 @@ public class AutoPromotionQueueTrigger
         }
     }
 
-    private record AutoPromotionMessage(string OrderType);
+    public record AutoPromotionMessage(string OrderType);
+
+    private static readonly JsonSerializerOptions MessageJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    public static string SerializeMessage(string orderType) =>
+        JsonSerializer.Serialize(new AutoPromotionMessage(orderType));
+
+    public static AutoPromotionMessage? DeserializeMessage(string queueMessage) =>
+        JsonSerializer.Deserialize<AutoPromotionMessage>(queueMessage, MessageJsonOptions);
 }

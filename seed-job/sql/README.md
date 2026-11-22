@@ -25,9 +25,11 @@ This folder contains the SQL scripts and CSV data used to build the AdventureWor
 | `date-shift-procedures.sql` | Active | `dbo.uspFindDateHighWatermark` and `dbo.uspShiftDatesForward`: moves seed-era dates forward so recent activity looks like yesterday, then re-anchors pending purchase orders and in-process work and sales orders to near-future dates |
 | `realtime-notification-outbox.sql` | Active | `dbo.RealtimeNotificationOutbox` and the DML triggers that feed real-time push |
 | `guest-cart-sessions.sql` | Active | Guest-cart session schema |
+| `discount-codes.sql` | Active | Checkout discount codes (`Sales.DiscountCode`) validated by Functions |
+| `password-reset-tokens.sql` | Active | Storefront password-reset token hashes (`Person.PasswordResetToken`) |
+| `product-review-votes.sql` | Active | One helpful vote per signed-in shopper per review (`Production.ProductReviewVote`), written by Functions |
+| `email-address-uniqueness.sql` | Active | `UQ_EmailAddress_EmailAddress`: each sign-in email address belongs to one person (DAB returns 409 for duplicates) |
 | `assign-database-roles.sql` | Legacy | Run by `postprovision.sh` only for a legacy database with public network access; grants `db_owner`. Fresh, private deployments get runtime grants from the seed job (`RuntimeDatabaseAccess.psm1`) instead |
-| `DropAndCreate.sql` | Unused | Not referenced by the seed job or hooks |
-| `usp_GetTotalProfit.sql` | Unused | Not referenced by the seed job or hooks |
 
 ## CSV data files
 

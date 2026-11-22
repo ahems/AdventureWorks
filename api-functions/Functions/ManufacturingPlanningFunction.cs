@@ -46,7 +46,6 @@ public class ManufacturingPlanningFunction
             Route = "plan/feasibility/{productId:int}")] HttpRequestData req,
         int productId)
     {
-        await _supply.InitializeAsync();
 
         var qs = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
         int qty = int.TryParse(qs["qty"], out var q) && q > 0 ? q : 1;
@@ -77,7 +76,6 @@ public class ManufacturingPlanningFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get",
             Route = "plan/feasibility")] HttpRequestData req)
     {
-        await _supply.InitializeAsync();
 
         var qs = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
         int qty = int.TryParse(qs["qty"], out var q) && q > 0 ? q : 1;
@@ -261,7 +259,6 @@ public class ManufacturingPlanningFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get",
             Route = "plan/reorder-recommendations")] HttpRequestData req)
     {
-        await _supply.InitializeAsync();
 
         var qs   = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
         int days = int.TryParse(qs["days"], out var d) && d > 0 ? d : 60;

@@ -3,6 +3,8 @@ import { useEffect, useRef } from "react";
 import { useWebPubSub } from "./useWebPubSub";
 
 const GROUPS = ["orders"];
+// "orders" prefixes every order-history query (["orders", customerId]).
+const INVALIDATED_KEYS = [["shoppingCart"], ["orders"]];
 
 /**
  * Subscribes to Web PubSub and invalidates React Query caches when
@@ -22,7 +24,9 @@ export function useRealTimeUpdates() {
       running = true;
       dirty = false;
       try {
-        await qc.invalidateQueries({ queryKey: ["shoppingCart"] }, { cancelRefetch: false });
+        await Promise.all(
+          INVALIDATED_KEYS.map(queryKey => qc.invalidateQueries({ queryKey }, { cancelRefetch: false })),
+        );
       } finally {
         running = false;
         if (active && dirty) schedule();
@@ -39,10 +43,10 @@ export function useRealTimeUpdates() {
       if (timer !== undefined) clearTimeout(timer);
     };
   }, [qc]);
-  const refreshCart = () => scheduleRefresh.current();
+  const refresh = () => scheduleRefresh.current();
   useWebPubSub(GROUPS, (group) => {
     if (group === "orders") {
-      refreshCart();
+      refresh();
     }
-  }, refreshCart);
+  }, refresh);
 }

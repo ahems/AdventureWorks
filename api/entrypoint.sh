@@ -71,37 +71,66 @@ wait_for_mi_token() {
 
 wait_for_mi_token
 
-# Wait for database schema to be ready (seed job may still be running)
-wait_for_database_schema() {
-  DB_INITIAL_DELAY="${DB_INITIAL_DELAY_SECONDS:-0}"
-  DB_PERIOD="${DB_PERIOD_SECONDS:-10}"
-  DB_MAX_RETRIES="${DB_FAILURE_THRESHOLD:-50}"
-  
-  if [ "${DB_INITIAL_DELAY}" -gt 0 ]; then
-    log "Database wait initial delay: ${DB_INITIAL_DELAY}s"
-    sleep "${DB_INITIAL_DELAY}"
-  fi
+DB_INITIAL_DELAY="${DB_INITIAL_DELAY_SECONDS:-0}"
+DB_RETRY_INITIAL="${DB_RETRY_INITIAL_SECONDS:-5}"
+DB_RETRY_MAX="${DB_RETRY_MAX_SECONDS:-40}"
+DB_START_DEADLINE="${DB_START_DEADLINE_SECONDS:-150}"
 
-  # Simple approach: Add a configurable delay to allow seed job to complete
-  # Container Apps will restart if DAB crashes, creating an effective retry loop
-  # Once the seed job has created the schema, a later restart starts DAB successfully
-  if [ "${DB_PERIOD}" -gt 0 ]; then
-    log "Waiting ${DB_PERIOD}s before starting DAB to allow database seeding to complete..."
-    sleep "${DB_PERIOD}"
-  fi
-  
-  log "Database wait complete. Starting DAB (Container Apps will restart if schema not ready)."
-}
-
-wait_for_database_schema
-
-# Start Data API Builder
-# Ensure we run from /App where dab-config.json resides
-cd /App
-if [ -f "/App/Microsoft.DataApiBuilder.dll" ]; then
-  log "Starting Data API Builder via dotnet runtime"
-  exec dotnet /App/Microsoft.DataApiBuilder.dll start --config /App/dab-config.json
-else
-  log "Microsoft.DataApiBuilder.dll not found; attempting 'dab start' (may fail if CLI isn't installed)"
-  exec dab start --config /App/dab-config.json
+if [ "${DB_INITIAL_DELAY}" -gt 0 ]; then
+  log "Database wait initial delay: ${DB_INITIAL_DELAY}s"
+  sleep "${DB_INITIAL_DELAY}"
 fi
+
+# Run from the directory where dab-config.json resides
+APP_DIR="${DAB_APP_DIR:-/App}"
+cd "$APP_DIR"
+if [ -f "$APP_DIR/Microsoft.DataApiBuilder.dll" ]; then
+  set -- dotnet "$APP_DIR/Microsoft.DataApiBuilder.dll" start --config "$APP_DIR/dab-config.json"
+else
+  log "Microsoft.DataApiBuilder.dll not found; using 'dab start' (may fail if CLI isn't installed)"
+  set -- dab start --config "$APP_DIR/dab-config.json"
+fi
+
+child=""
+forward_signal() {
+  if [ -n "$child" ]; then
+    kill -TERM "$child" 2>/dev/null || true
+    wait "$child" 2>/dev/null || true
+  fi
+  exit 143
+}
+trap forward_signal TERM INT
+
+# DAB exits at startup while the database is paused or the seed job has not created the
+# schema yet. Retry with bounded exponential backoff inside the startup window, then exit
+# non-zero so Container Apps restarts the replica.
+started_at=$(date +%s)
+delay="$DB_RETRY_INITIAL"
+attempt=1
+while :; do
+  log "Starting Data API Builder (attempt $attempt)"
+  "$@" &
+  child=$!
+  set +e
+  wait "$child"
+  status=$?
+  set -e
+  child=""
+
+  elapsed=$(( $(date +%s) - started_at ))
+  if [ "$status" -eq 0 ]; then
+    log "Data API Builder exited cleanly."
+    exit 0
+  fi
+  if [ $((elapsed + delay)) -ge "$DB_START_DEADLINE" ]; then
+    log "Data API Builder exited with status $status after ${elapsed}s; not retrying (deadline ${DB_START_DEADLINE}s)."
+    exit "$status"
+  fi
+  log "Data API Builder exited with status $status (database may not be ready); retrying in ${delay}s..."
+  sleep "$delay"
+  delay=$((delay * 2))
+  if [ "$delay" -gt "$DB_RETRY_MAX" ]; then
+    delay="$DB_RETRY_MAX"
+  fi
+  attempt=$((attempt + 1))
+done

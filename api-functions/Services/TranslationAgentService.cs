@@ -103,22 +103,6 @@ public class TranslationAgentService
     }
 
     /// <summary>
-    /// Translates a batch of product descriptions into multiple target cultures.
-    /// </summary>
-    public async Task<List<TranslatedDescription>> TranslateDescriptionsAsync(
-        List<TranslationRequest> requests,
-        List<CultureInfo> targetCultures)
-    {
-        var translations = new List<TranslatedDescription>();
-        foreach (var request in requests)
-        {
-            var productTranslations = await TranslateProductAsync(request, targetCultures);
-            translations.AddRange(productTranslations);
-        }
-        return translations;
-    }
-
-    /// <summary>
     /// Translates a short text (e.g. a promotion description) into multiple target cultures.
     /// </summary>
     public async Task<List<TextTranslation>> TranslateTextAsync(

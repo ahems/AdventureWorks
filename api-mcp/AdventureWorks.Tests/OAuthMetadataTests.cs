@@ -85,6 +85,10 @@ public class OAuthMetadataTests : IClassFixture<OAuthTestFactory>
         var scopes = doc.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString());
         Assert.Contains("mcp.access", scopes);
         Assert.Contains("realtime.connect", scopes);
+
+        Assert.Equal(
+            AdventureWorks.Auth.AuthorizationServerOptions.DefaultResourceDocumentationUrl,
+            doc.GetProperty("resource_documentation").GetString());
     }
 
     [Fact]

@@ -35,6 +35,8 @@ import { useUpdateProductPrice } from "@/hooks/useAdminProducts";
 import ClearancePromotionDialog, {
   type ClearanceProduct,
 } from "@/components/ClearancePromotionDialog";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -157,6 +159,8 @@ const SlowMoversPage: React.FC = () => {
   const [threshold, setThreshold] = useState<number>(10);
   const [channel, setChannel] = useState<SalesChannel>("all");
   const { data, isLoading, isError } = useSlowMoversData(threshold, channel);
+  // Price, promotion and retire actions write catalogue data through DAB (admin.write roles).
+  const canWrite = useCan(Scopes.AdminWrite);
   const { mutateAsync: updatePrice, isPending: isPriceSaving } =
     useUpdateProductPrice();
 
@@ -625,6 +629,7 @@ const SlowMoversPage: React.FC = () => {
                                 ) : (
                                   <button
                                     onClick={() => startEdit(row)}
+                                    disabled={!canWrite}
                                     className="flex items-center gap-1 text-doodle-text hover:text-doodle-accent group"
                                   >
                                     {fmt(row.currentListPrice)}
@@ -670,6 +675,7 @@ const SlowMoversPage: React.FC = () => {
                                   {!isEditing && (
                                     <button
                                       onClick={() => startEdit(row)}
+                                      disabled={!canWrite}
                                       className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
                                     >
                                       <Edit2 className="w-3 h-3" />
@@ -684,6 +690,7 @@ const SlowMoversPage: React.FC = () => {
                                       });
                                       setClearanceDialogOpen(true);
                                     }}
+                                    disabled={!canWrite}
                                     className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
                                     title="Add clearance promotion"
                                   >

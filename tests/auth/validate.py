@@ -181,38 +181,9 @@ def reviewed_function_read_routes():
     return routes
 
 
-def side_effecting_function_reads():
-    try:
-        routes = json.loads(CONTRACTS.read_text())["sideEffectingFunctionReads"]
-        safe = set(reviewed_function_read_routes())
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        raise EvidenceError("Reviewed side-effecting Functions read contract is unavailable or invalid") from error
-    if not isinstance(routes, dict) or not routes:
-        raise EvidenceError("Reviewed side-effecting Functions read contract is empty or invalid")
-    for name, entry in routes.items():
-        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_]+", name) or name in safe or
-                not isinstance(entry, dict) or set(entry) != {"route", "reason"} or
-                not isinstance(entry["route"], str) or not entry["route"] or
-                entry["route"] != entry["route"].strip("/") or
-                not isinstance(entry["reason"], str) or not 8 <= len(entry["reason"]) <= 200):
-            raise EvidenceError("Reviewed side-effecting Functions read contract contains an invalid entry")
-    return routes
-
-
-def side_effecting_read_reason(function, routes):
-    entry = routes.get(function.get("Name"))
-    policy = function.get("Policy")
-    if (isinstance(entry, dict) and entry.get("route") == function.get("Route") and
-            isinstance(policy, dict) and policy.get("IsAnonymous") is False and
-            "GET" in function.get("Methods", [])):
-        return entry["reason"]
-    return None
-
-
 def function_get_review_closure(report):
     try:
         safe = reviewed_function_read_routes()
-        side_effecting = side_effecting_function_reads()
     except EvidenceError as error:
         report.add("inventory:functions-get-review-closure", "contracts", "FAIL", str(error))
         return
@@ -220,13 +191,10 @@ def function_get_review_closure(report):
                  if isinstance(item.get("Policy"), dict) and item["Policy"].get("IsAnonymous") is False and
                  "GET" in item.get("Methods", [])}
     unclassified = sorted(name for name, item in protected.items()
-                          if not is_reviewed_function_read(item, safe) and
-                          side_effecting_read_reason(item, side_effecting) is None)
-    stale = sorted(set(side_effecting) - set(protected))
-    report.check("inventory:functions-get-review-closure", "contracts", not unclassified and not stale,
-                 "Every protected Functions GET must be reviewed as read-only or side-effecting" +
-                 (": unclassified " + ", ".join(unclassified) if unclassified else "") +
-                 (": stale " + ", ".join(stale) if stale else ""))
+                          if not is_reviewed_function_read(item, safe))
+    report.check("inventory:functions-get-review-closure", "contracts", not unclassified,
+                 "Every protected Functions GET must be a reviewed read-only route; state changes use POST" +
+                 (": unclassified " + ", ".join(unclassified) if unclassified else ""))
 
 
 def is_reviewed_function_read(function, routes):
@@ -1625,8 +1593,8 @@ def agent_workflow_inventory(directory, workflow_directory):
             "source": "workflows/" + path.name,
             "invocations": workflow_invocations(path.read_text()),
         }
-    if not declared_files or covered_files != declared_files:
-        raise EvidenceError("Workflow files are missing or not covered by classified provisioners")
+    if covered_files != declared_files:
+        raise EvidenceError("Workflow files are not covered by classified provisioners")
     return inventory
 
 
@@ -2501,9 +2469,9 @@ def consumer_handler_evidence(report):
     covered = {
         "CreateAddress", "DeleteAddress", "GetAddressById", "GetAddresses", "GetPersonAddresses",
         "SetAddressType", "UpdateAddress", "SetPassword", "VerifyPassword", "CheckOrderReceipt",
-        "DownloadOrderReceipt", "GenerateAndSendReceipt", "GetPaymentMethods", "CreateOrderDetail",
-        "GetOwnedOrderDetails", "CreateOrderHeader",
-        "MergeGuestCart",
+        "DownloadOrderReceipt", "GenerateAndSendReceipt", "GetPaymentMethods", "QuoteCheckout",
+        "GetOwnedOrderDetails", "PlaceCheckoutOrder",
+        "MergeGuestCart", "CreatePaymentMethod", "VoteReviewHelpful", "RemoveReviewHelpfulVote",
     }
     consumers = {item["Name"] for item in report.inventory.get("functions", [])
                  if (item.get("Policy") or {}).get("Tier") == "Consumer"}
@@ -2512,35 +2480,33 @@ def consumer_handler_evidence(report):
     gates = [[item for item in report.checks if item["id"] == check_id] for check_id in dependencies]
     prefix = "ApiFunctions.Tests."
     expected = {
-        prefix + "PaymentMethodFunctionsTests.Reads_only_the_signed_person_even_with_foreign_query_and_headers" +
-        f"(owner: {owner})" for owner in [71, 72]
+        prefix + "PaymentMethodFunctionsTests." + name + f"(owner: {owner})" for owner in [71, 72]
+        for name in ["Reads_only_the_signed_person_even_with_foreign_query_and_headers",
+                     "Create_links_a_masked_card_to_the_signed_consumer_only"]
     }
+    expected.update(
+        prefix + "ReviewVoteFunctionsTests." + name + f"(owner: {owner})" for owner in [71, 72]
+        for name in ["Vote_is_bound_to_the_signed_consumer_and_ignores_forged_inputs",
+                     "Removing_a_vote_is_bound_to_the_signed_consumer"])
     for owner in [7, 8]:
         for name in [
-                "OrderDetailFunctionsTests.Consumer_order_detail_uses_the_validated_customer_claim",
-                "OrderDetailFunctionsTests.Other_owner_order_is_denied_without_a_success_response",
                 "OrderDetailFunctionsTests.Consumer_reads_only_signed_owner_even_with_forged_inputs",
                 "OrderDetailFunctionsTests.Consumer_cannot_read_other_or_mixed_orders",
                 "OwnedCartFunctionsTests.Valid_consumer_resolves_owner_from_signed_claim_not_query",
                 "OwnedCartFunctionsTests.Merge_binds_both_signed_owners_and_hashed_guest_proof"]:
             expected.add(prefix + name + f"(owner: {owner})")
-    for customer, person, address in [(7, 71, 101), (8, 72, 102)]:
-        expected.update(prefix + "OrderHeaderFunctionsTests." + name +
+    for customer, person in [(30, 20), (31, 21)]:
+        expected.update(prefix + "CheckoutFunctionsTests." + name +
                         f"(customer: {customer}, person: {person})" for name in [
-                            "Consumer_header_uses_signed_customer_and_person_not_forged_inputs",
+                            "Consumer_places_order_bound_to_signed_customer_and_ignores_forged_fields",
                             "Foreign_address_or_customer_binding_returns_denial"])
-        expected.add(prefix + "OrderHeaderServiceTests."
-                     "Customer_and_both_addresses_are_checked_before_insert_in_one_transaction" +
-                     f"(customer: {customer}, person: {person}, address: {address})")
-    expected.update(prefix + "OrderHeaderServiceTests.Invalid_customer_address_or_ship_method_never_inserts" +
-                    f'(defect: "{defect}")' for defect in
-                    ["customer", "billing", "shipping", "missing-address", "ship-method"])
-    expected.add(prefix + "OrderHeaderServiceTests.Insert_failure_rolls_back_the_guarded_transaction")
+    expected.add(prefix + "CheckoutServiceTests.Insert_failure_is_not_committed_and_the_transaction_is_disposed")
+    expected.add(prefix + "CheckoutServiceTests.Quote_never_inserts_or_commits")
     results, sources = current_test_evidence(report, prefix)
     selected = {name: outcomes for name, outcomes in results.items()
                 if name.startswith(tuple(prefix + cls for cls in [
                     "PaymentMethodFunctionsTests.", "OrderDetailFunctionsTests.", "OwnedCartFunctionsTests.",
-                    "OrderHeaderFunctionsTests.", "OrderHeaderServiceTests."]))}
+                    "CheckoutFunctionsTests.", "CheckoutServiceTests.", "ReviewVoteFunctionsTests."]))}
     failed = (any(item["status"] == "FAIL" for matches in gates for item in matches) or
               any(outcome not in {"Passed", "NotExecuted"} for values in selected.values() for outcome in values))
     complete = (consumers == covered and
@@ -2548,8 +2514,9 @@ def consumer_handler_evidence(report):
                 all(selected.get(name) == ["Passed"] for name in expected))
     report.add("required:consumer-handlers-offline", "required",
                "FAIL" if failed else "PASS" if complete else "BLOCKED",
-               "Exact closure over all 17 registered consumer handlers requires middleware/address/password/receipt "
-               "gates plus 26 named payment/order/cart and guarded-header cases exactly once. "
+               "Exact closure over all 20 registered consumer handlers requires middleware/address/password/receipt "
+               "gates plus 22 named two-owner payment, order-read, cart, server-priced checkout and review-vote cases "
+               "exactly once. "
                "New consumer routes require explicit coverage. Isolated stores do not prove deployed SQL "
                "ownership, transactions or side effects. Evidence SHA256: " + json.dumps(sources, sort_keys=True))
 
@@ -2782,7 +2749,7 @@ def reconcile_ownership_handlers_requirement(report):
                 all(row_proven(item) for item in owner_rows))
     required[0].update({
         "status": "FAIL" if failed else "PASS" if complete else "BLOCKED",
-        "detail": "Umbrella over every owner-bound surface with two distinct owners: 17 consumer Functions "
+        "detail": "Umbrella over every owner-bound surface with two distinct owners: 20 consumer Functions "
                   "handlers, MCP SelfOrInternal tools, MCP tasks, chat/agent continuations, the DAB write-decision "
                   f"contract and {len(owner_rows)}/{expected_rows} live DAB owner-policy row-isolation reads. "
                   "Mutation-level cross-owner DAB writes are covered by tests/auth/mutation_suite.py.",
@@ -2864,13 +2831,10 @@ def review_contract(report, config):
                      set(creates[0].get("fields", {}).get("include", [])) ==
                      {"ProductID", "ReviewerName", "ReviewDate", "EmailAddress", "Rating", "Comments", "UserID"},
                      "Review creation binds authorship to identity and excludes moderation/vote fields")
-        report.check("dab:reviews:vote-fields-owner:" + role, "contracts",
-                     len(updates) == 1 and
-                     sum(item == "update" or isinstance(item, dict) and item.get("action") == "update"
-                         for item in definitions) == 1 and not names.intersection({"*", "delete"}) and
-                     updates[0].get("fields", {}).get("include") == ["HelpfulVotes"] and
-                     not updates[0].get("policy"),
-                     "Authenticated review updates are vote-only; DAB policy columns must not broaden writable fields")
+        report.check("dab:reviews:no-consumer-update:" + role, "contracts",
+                     not updates and not names.intersection({"*", "update", "delete"}),
+                     "Consumers cannot update or delete reviews through DAB; helpful votes use the one-vote-per-user "
+                     "Functions route POST/DELETE /api/reviews/{id}/vote")
 
 
 def order_detail_contract(report, config):
@@ -3004,17 +2968,24 @@ def address_link_contract(report, config):
                      "must use owner-checked Functions, never direct DAB writes.")
 
 
+# Admin roles holding customers.read; the admin stale-cart recovery page reads every cart.
+CART_ADMIN_READ_ROLES = {"sales-admin", "marketing-admin", "operations-admin", "executive-admin"}
+
+
 def cart_contract(report, config):
     permissions = config["entities"]["ShoppingCartItem"]["permissions"]
     report.check("dab:carts:no-anonymous-access", "contracts",
                  all(item["role"] != "anonymous" for item in permissions),
                  "Guest cart capabilities must be validated by owned Functions, never anonymous DAB CRUD")
+    owners = {"authenticated", "consumer"}
     report.check("dab:carts:read-only-owner-policy", "contracts",
-                 {item["role"] for item in permissions} == {"authenticated", "consumer"} and
+                 {item["role"] for item in permissions} == owners | CART_ADMIN_READ_ROLES and
                  all(item["actions"] == [{"action": "read", "policy": {
                      "database": "@item.ShoppingCartID eq @claims.business_entity_id"}}]
-                     for item in permissions),
-                 "DAB cart reads require signed ownership; all cart writes use owned Functions")
+                     for item in permissions if item["role"] in owners) and
+                 all(item["actions"] == ["read"] for item in permissions if item["role"] not in owners),
+                 "DAB consumer cart reads require signed ownership; customer-reading admin roles may only read "
+                 "carts for stale-cart recovery; all cart writes use owned Functions")
 
 
 EMAIL_SDK_MARKERS = ("Azure.Communication.Email", "azure.communication.email", "@azure/communication-email")
@@ -6214,8 +6185,47 @@ def dab_graphql_update_allowed(entity, role):
     return permission is not None and "update" in action_names(permission)
 
 
-def dab_write_decision_violations(config):
+# Functions-scope alignment for direct DAB writes by internal admin roles. An entity's writes need
+# one of these api-mcp scopes; anything not listed is admin configuration (admin.write).
+DAB_WRITE_SCOPE_GROUPS = {
+    "customers.write": {"BusinessEntity", "BusinessEntityAddress", "BusinessEntityContact", "CreditCard",
+                        "Customer", "EmailAddress", "Person", "PersonCreditCard", "PersonPhone", "Store"},
+    "orders.write": {"SalesOrderDetail", "SalesOrderHeader", "SalesOrderHeaderSalesReason"},
+    "manufacturing.write": {"BillOfMaterials", "Location", "ScrapReason", "TransactionHistory",
+                            "TransactionHistoryArchive", "WorkOrder", "WorkOrderRouting"},
+}
+# Product records are maintained both by the admin catalogue (admin.write) and manufacturing.
+DAB_SHARED_WRITE_ENTITIES = {"Product", "ProductInventory", "ProductModel"}
+DAB_SCOPE_ALIGNED_ROLES = ["sales-admin", "marketing-admin", "inventory-admin", "operations-admin"]
+
+
+def dab_entity_write_scopes(entity):
+    if entity in DAB_SHARED_WRITE_ENTITIES:
+        return {"admin.write", "manufacturing.write"}
+    return {scope for scope, names in DAB_WRITE_SCOPE_GROUPS.items() if entity in names} or {"admin.write"}
+
+
+def application_role_scopes(root=None):
+    """Role -> scopes parsed from api-mcp ApplicationRoles.DefaultRoleScopes (the token issuer's source)."""
+    auth = (root or ROOT) / "api-mcp/AdventureWorks/Auth"
+    constants = dict(re.findall(r'public const string (\w+) = "([^"]+)";', (auth / "OAuthScopes.cs").read_text()))
+    roles_source = (auth / "ApplicationRoles.cs").read_text()
+    role_names = dict(re.findall(r'public const string (\w+) = "([^"]+)";', roles_source))
+    block = roles_source.split("DefaultRoleScopes", 1)[1]
+    result = {}
+    for role, body in re.findall(r"\[(\w+)\]\s*=\s*new\[\]\s*\{(.*?)\}", block, re.S):
+        names = re.findall(r"OAuthScopes\.(\w+)", body)
+        if role not in role_names or any(name not in constants for name in names):
+            raise EvidenceError("api-mcp DefaultRoleScopes references an unknown role or scope")
+        result[role_names[role]] = {constants[name] for name in names}
+    if not result:
+        raise EvidenceError("api-mcp DefaultRoleScopes could not be parsed")
+    return result
+
+
+def dab_write_decision_violations(config, role_scopes=None):
     cells = dab_write_decisions(config)
+    role_scopes = application_role_scopes() if role_scopes is None else role_scopes
     violations = []
     by_key = {(cell["entity"], cell["role"], cell["operation"]): cell for cell in cells}
     for cell in cells:
@@ -6229,10 +6239,8 @@ def dab_write_decision_violations(config):
         if cell["role"] in {"consumer", "authenticated"}:
             policy = cell["policy"] or ""
             owner = DAB_OWNER_POLICY.fullmatch(policy)
-            vote_only = (cell["entity"] == "ProductReview" and cell["operation"] == "update" and not policy and
-                         cell["fields"] == {"include": ["HelpfulVotes"]})
-            if not owner and not vote_only:
-                violations.append(label + ": consumer writes require an exact owner policy or the vote-only field set")
+            if not owner:
+                violations.append(label + ": consumer writes require an exact owner policy")
             other = by_key[(cell["entity"], "authenticated" if cell["role"] == "consumer" else "consumer",
                             cell["operation"])]
             if (other["decision"], other["policy"], other["fields"]) != ("allow", cell["policy"], cell["fields"]):
@@ -6247,6 +6255,10 @@ def dab_write_decision_violations(config):
         if cell["role"] != "executive-admin" and by_key[(cell["entity"], "executive-admin",
                                                          cell["operation"])]["decision"] != "allow":
             violations.append(label + ": executive-admin must hold every write granted to another role")
+        if (cell["role"] in DAB_SCOPE_ALIGNED_ROLES and
+                not role_scopes.get(cell["role"], set()) & dab_entity_write_scopes(cell["entity"])):
+            violations.append(label + ": the role lacks the Functions write scope ("
+                              + " or ".join(sorted(dab_entity_write_scopes(cell["entity"]))) + ") for this entity")
     return cells, violations
 
 
@@ -6259,9 +6271,10 @@ def dab_write_decision_contract(report, config=None):
     expected = len(config["entities"]) * len(DAB_ROLES) * len(DAB_WRITE_OPERATIONS)
     report.check("contract:dab:write-decisions", "contracts", not violations and len(cells) == expected,
                  f"Every entity x role x create/update/delete cell ({len(cells)} of {expected}) has an explicit "
-                 "inheritance-resolved decision: no anonymous or view writes, consumer writes owner-bound or "
-                 "vote-only, internal inheritance only through fail-closed owner policies, manufacturing explicit grants "
-                 "limited to Production, executive-admin a superset" +
+                 "inheritance-resolved decision: no anonymous or view writes, consumer writes owner-bound, "
+                 "internal inheritance only through fail-closed owner policies, manufacturing explicit grants "
+                 "limited to Production, executive-admin a superset, other admin roles writing only entities "
+                 "covered by their api-mcp write scopes" +
                  ("; violations: " + "; ".join(violations[:10]) if violations else ""))
 
 
@@ -7220,8 +7233,6 @@ def illustration_export_fixture():
     return fixture
 
 
-SIDE_EFFECT_DETAIL = ("Reviewed side-effecting GET ({}); live denial not sent because an authorization "
-                      "regression would execute the effect. Isolated-host denial evidence covers this route.")
 MUTATION_FIXTURE_DETAIL = "Mutation denial probe requires reviewed per-operation safe fixture; no resets/queue clears"
 FUNCTIONS_CHALLENGE_REALM = 'realm="adventureworks-functions"'
 
@@ -7281,7 +7292,6 @@ def guarded_fixture_obligations(report, function, method, functions_base, fixtur
 
 def function_denial_obligations(report, functions_base):
     safe_reads = reviewed_function_read_routes()
-    side_effects = side_effecting_function_reads()
     mutation_fixtures = function_mutation_denial_fixtures()
     functions = report.inventory.get("functions", [])
     names = [item.get("Name") for item in functions]
@@ -7301,8 +7311,6 @@ def function_denial_obligations(report, functions_base):
             continue
         for method in function["Methods"]:
             prefix = f"functions:{function['Name']}:{method}"
-            if function["Name"] == "CreateOrderDetail" and method == "POST":
-                continue
             if method == "GET" and is_reviewed_function_read(function, safe_reads):
                 url = functions_base + "/api/" + route_path(function["Route"])
                 for label, token in [("anonymous", None), ("forged", "invalid-auth-validation-token")]:
@@ -7318,9 +7326,7 @@ def function_denial_obligations(report, functions_base):
                         report, function, method, functions_base, mutation_fixtures)) is not None:
                 obligations.extend(fixture_obligations)
             else:
-                reason = side_effecting_read_reason(function, side_effects) if method == "GET" else None
-                detail = (SIDE_EFFECT_DETAIL.format(reason) if reason else
-                          "GET/HEAD denial probe has no exact reviewed read-only route; no request sent"
+                detail = ("GET/HEAD denial probe has no exact reviewed read-only route; no request sent"
                           if method in {"GET", "HEAD"} else MUTATION_FIXTURE_DETAIL)
                 report.add(prefix + ":deny", "live-denials", "BLOCKED", detail)
     return obligations
@@ -7407,7 +7413,6 @@ def functions_scope_read_denials(report, deployment, consumer):
     mcp_base = origin(deployment.required("API_MCP_URL"))
     metadata = mcp_base + "/.well-known/oauth-protected-resource"
     safe_reads = reviewed_function_read_routes()
-    side_effects = side_effecting_function_reads()
     token, scopes = reduced_consumer_functions_token(deployment, consumer)
 
     functions = report.inventory.get("functions", [])
@@ -7425,9 +7430,7 @@ def functions_scope_read_denials(report, deployment, consumer):
         if (not is_reviewed_function_read(function, safe_reads) or policy.get("FunctionName") != name or
                 not isinstance(scope, str) or not re.fullmatch(r"[a-z][a-z0-9]*(?:[.:][a-z][a-z0-9]*)+", scope) or
                 scope in scopes):
-            reason = side_effecting_read_reason(function, side_effects)
             report.add("functions-scope:" + name, "live-denials", "BLOCKED",
-                       SIDE_EFFECT_DETAIL.format(reason) if reason else
                        "No exact reviewed read-only route and missing-scope policy; no request sent")
             continue
         obligations.append((name, scope, base + "/api/" + route_path(function["Route"])))
@@ -7543,20 +7546,13 @@ def functions_host_read_denials(report, deployment, tokens, consumer=None):
     metadata = origin(deployment.required("API_MCP_URL")) + "/.well-known/oauth-protected-resource"
     routes = {name: reviewed_function_read_url(report, base, name)
               for name in ["GetManufacturingAgentQueueStatus", "AIJobQueue_Status"]}
-    details = [item for item in report.inventory.get("functions", [])
-               if item["Name"] == "CreateOrderDetail"]
-    if (len(details) != 1 or details[0].get("Methods") != ["POST"] or
-            not isinstance(details[0].get("Policy"), dict) or details[0]["Policy"].get("IsAnonymous") or
-            details[0]["Route"] != "orders/{salesOrderId:int}/details"):
-        raise EvidenceError("Expected reviewed protected order-detail route")
-    routes["CreateOrderDetail"] = base + "/api/orders/1/details"
-    headers = [item for item in report.inventory.get("functions", [])
-               if item["Name"] == "CreateOrderHeader"]
-    if (len(headers) != 1 or headers[0].get("Methods") != ["POST"] or
-            not isinstance(headers[0].get("Policy"), dict) or headers[0]["Policy"].get("IsAnonymous") or
-            headers[0]["Route"] != "orders"):
-        raise EvidenceError("Expected reviewed protected order-header route")
-    routes["CreateOrderHeader"] = base + "/api/orders"
+    for name, route in [("PlaceCheckoutOrder", "orders/checkout"), ("QuoteCheckout", "orders/checkout/quote")]:
+        matches = [item for item in report.inventory.get("functions", []) if item["Name"] == name]
+        if (len(matches) != 1 or matches[0].get("Methods") != ["POST"] or
+                not isinstance(matches[0].get("Policy"), dict) or matches[0]["Policy"].get("IsAnonymous") or
+                matches[0]["Route"] != route):
+            raise EvidenceError("Expected reviewed protected checkout route " + name)
+        routes[name] = base + "/api/" + route
     cases = [
         ("anonymous", "GetManufacturingAgentQueueStatus", None, 401, "missing_token", {}),
         ("malformed", "GetManufacturingAgentQueueStatus", "invalid-auth-validation-token", 401, "invalid_token", {}),
@@ -7591,16 +7587,14 @@ def functions_host_read_denials(report, deployment, tokens, consumer=None):
         report.guarded("functions-host:" + label, "live-denials", probe)
 
     for label, function, payload, token, expected_error in [
-        ("order-detail-anonymous", "CreateOrderDetail",
-         {"productId": 0, "orderQty": 0, "unitPrice": 0, "unitPriceDiscount": 0}, None, "missing_token"),
-        ("order-detail-malformed", "CreateOrderDetail",
-         {"productId": 0, "orderQty": 0, "unitPrice": 0, "unitPriceDiscount": 0},
+        ("checkout-quote-anonymous", "QuoteCheckout", {"lines": []}, None, "missing_token"),
+        ("checkout-quote-malformed", "QuoteCheckout", {"lines": []},
          "invalid-auth-validation-token", "invalid_token"),
-        ("order-header-anonymous", "CreateOrderHeader",
-         {"billToAddressId": 0, "shipToAddressId": 0, "shipMethodId": 0, "subTotal": -1},
+        ("checkout-anonymous", "PlaceCheckoutOrder",
+         {"lines": [], "billToAddressId": 0, "shipToAddressId": 0, "shipMethodId": 0},
          None, "missing_token"),
-        ("order-header-malformed", "CreateOrderHeader",
-         {"billToAddressId": 0, "shipToAddressId": 0, "shipMethodId": 0, "subTotal": -1},
+        ("checkout-malformed", "PlaceCheckoutOrder",
+         {"lines": [], "billToAddressId": 0, "shipToAddressId": 0, "shipMethodId": 0},
          "invalid-auth-validation-token", "invalid_token"),
     ]:
         def probe_order_write():

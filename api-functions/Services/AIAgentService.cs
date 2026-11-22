@@ -42,16 +42,11 @@ public class AIAgentService
         _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
-        var workflowAgentId = configuration["AI_AGENT_WORKFLOW_CHAT_ID"];
-        var chatAgentId     = configuration["AI_AGENT_CHAT_ID"];
+        var chatAgentId = configuration["AI_AGENT_CHAT_ID"];
 
         _agentId = !string.IsNullOrWhiteSpace(chatAgentId)
             ? chatAgentId
             : throw new InvalidOperationException("AI_AGENT_CHAT_ID environment variable is not set");
-        if (!string.IsNullOrWhiteSpace(workflowAgentId))
-            _logger.LogWarning(
-                "AI_AGENT_WORKFLOW_CHAT_ID is configured but not used: FoundryAgentClient supports prompt agents only. Using {AgentId}.",
-                _agentId);
 
         // Admin chat agent — falls back to the customer chat agent if not configured
         var adminAgentId = configuration["AI_AGENT_ADMIN_CHAT_ID"];

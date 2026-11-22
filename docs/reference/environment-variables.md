@@ -112,7 +112,7 @@ azd saves every `output` of `infra/main.bicep` into the environment.
 | azd value | Set by | Purpose |
 |---|---|---|
 | `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` | `postprovision.sh` | Storefront build-time endpoints |
-| `AI_AGENT_*_ID` (18 values) | agent scripts called by `create-foundry-agents.sh` | Foundry agent IDs: `CHAT`, `ADMIN_CHAT`, `ORDER`, `PROMOTION`, `CART_RECOVERY`, `REVIEW`, `CUSTOMER`, `PRODUCT_CONTENT`, `MANUFACTURING_CONTENT`, `TRANSLATION`, `REVIEW_BATCH`, `REVIEW_ANALYSIS`, `EMAIL_CONTENT`, `CATALOG_SUGGESTION`, `HELP_ME_CHOOSE`, `WORKFLOW_CHAT`, `WORKFLOW_PROMOTION`, `WORKFLOW_ORDER` |
+| `AI_AGENT_*_ID` (15 values) | agent scripts called by `create-foundry-agents.sh` | Foundry agent IDs: `CHAT`, `ADMIN_CHAT`, `ORDER`, `PROMOTION`, `CART_RECOVERY`, `REVIEW`, `CUSTOMER`, `PRODUCT_CONTENT`, `MANUFACTURING_CONTENT`, `TRANSLATION`, `REVIEW_BATCH`, `REVIEW_ANALYSIS`, `EMAIL_CONTENT`, `CATALOG_SUGGESTION`, `HELP_ME_CHOOSE` |
 | `AI_AGENT_*_MEMORY_STORE` | agent scripts | Foundry memory store names for agents that use memory |
 | `FOUNDRY_AGENT_CONFIG_HASH` | `postprovision.sh`, `postdeploy.sh` | Fingerprint of the agent definitions; `postdeploy` recreates agents only when it changes |
 | `AGENT_MANUFACTURING_AGENT_RESPONSES_ENDPOINT` | azd (`azure.ai.agent` service) | Responses endpoint of the hosted Manufacturing agent |
@@ -139,8 +139,8 @@ Set in [`infra/modules/aca-api.bicep`](../../infra/modules/aca-api.bicep).
 | `AZURE_CLIENT_ID`, `TENANT_ID` | Runtime managed identity |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Telemetry |
 | `ASPNETCORE_URLS` | Listen address |
+| `DB_RETRY_INITIAL_SECONDS`, `DB_RETRY_MAX_SECONDS`, `DB_START_DEADLINE_SECONDS` | Image defaults (5, 40, 150) for `entrypoint.sh`'s DAB start backoff |
 | `Logging__LogLevel__Default`, `Logging__LogLevel__Microsoft`, `Logging__LogLevel__Azure` | Log levels |
-| `APP_URL` | Storefront URL, set by `api-postdeploy.sh`; DAB CORS comes from `dab-config.json` |
 
 See [DAB API](../services/dab-api.md).
 
@@ -158,19 +158,24 @@ Set in [`infra/modules/flex-api-functions.bicep`](../../infra/modules/flex-api-f
 | `AZURE_CLIENT_ID` | Runtime managed identity; also the expected SQL principal in `Sql.SessionPrincipal` telemetry |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Telemetry |
 | `AI_FOUNDRY_PROJECT_ENDPOINT`, `AZURE_OPENAI_ENDPOINT`, `chatGptDeploymentName`, `EMBEDDING_GENERATION_ENDPOINT` | Foundry project, model endpoint and deployments |
+| `AI_IMAGE_DEPLOYMENT_NAME` | Image deployment name from the `aiservices.bicep` `imageDeploymentName` output (`gpt-image-2`); empty when no image model was deployed, in which case image jobs are skipped |
+| `AI_RATE_LIMIT_WINDOW_SECONDS`, `AI_RATE_LIMIT_HELPME_PER_WINDOW`, `AI_RATE_LIMIT_SEARCH_PER_WINDOW` | Per-client fixed window for the anonymous AI routes (defaults 300 s, 20 Help Me Choose and 60 search calls) |
+| `AI_RATE_LIMIT_HELPME_DAILY_BUDGET`, `AI_RATE_LIMIT_SEARCH_DAILY_BUDGET` | Global daily budgets for those routes (defaults 1000 and 5000, reset at 00:00 UTC) |
+| `AI_RATE_LIMIT_HASH_SALT` | Per-deployment key for the HMAC that pseudonymises client IPs in the `aiRateLimits` table |
 | `AI_AGENT_*_ID` | Agent IDs. Bicep sets 10 of them; `api-functions-postdeploy.sh` writes all 19 |
 | `MCP_SERVICE_URL` | api-mcp `/mcp` endpoint (`api-functions-postdeploy.sh`) |
+| `APP_URL` | Storefront origin used for `sitemap.xml` URLs (falls back to the request origin) and password-reset email links (no email is sent without it) (`api-functions-postdeploy.sh`) |
 | `MANUFACTURING_AGENT_ENDPOINT` | Hosted Manufacturing agent endpoint (`api-functions-postdeploy.sh`) |
 | `WEB_PUBSUB_HOST_NAME` | Web PubSub host for negotiation and publishing |
 | `COMMUNICATION_SERVICE_ENDPOINT`, `EMAIL_SENDER_DOMAIN` | Email sending |
 | `SIMULATION_TIME_SCALE_FACTOR`, `SIMULATION_SCRAP_RATE`, `MATERIALS_RETRY_DELAY_SECONDS` | Production simulation tuning |
 | `ORDER_NOTIFICATIONS_EMAIL_ENABLED` | Not set by the template. Set it to `true` to send Shipped and Delivered emails; otherwise the email content is logged |
 
-For local runs, start from [`api-functions/local.settings.example.json`](../../api-functions/local.settings.example.json) and never commit a populated copy. See [Azure Functions](../services/functions.md).
+These settings are applied by Bicep and the deployment hooks; the app does not run locally. See [Azure Functions](../services/functions.md).
 
 ### OAuth and MCP server (`api-mcp`)
 
-Set in [`infra/modules/aca-api-mcp.bicep`](../../infra/modules/aca-api-mcp.bicep) and updated by `postdeploy.sh`.
+Set in [`infra/modules/aca-api-mcp.bicep`](../../infra/modules/aca-api-mcp.bicep) and updated by `postdeploy.sh`. `appsettings.json` holds no endpoints or connection strings; these come only from the container environment.
 
 | Setting | Purpose |
 |---|---|
@@ -184,6 +189,7 @@ Set in [`infra/modules/aca-api-mcp.bicep`](../../infra/modules/aca-api-mcp.bicep
 | `AZURE_OPENAI_ENDPOINT` | Model endpoint used by AI-backed tools |
 | `AzureWebJobsStorage__accountName` | Storage account for the MCP task store (`awMcpTasks` table) |
 | `AZURE_CLIENT_ID`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `ASPNETCORE_URLS` | Identity, telemetry and listen address |
+| `MCP_RESOURCE_DOCUMENTATION_URL` | Optional HTTPS URL advertised as `resource_documentation`; defaults to the public [OAuth server](../features/mcp-oauth/README.md) docs on GitHub |
 
 See [OAuth and MCP server](../services/api-mcp.md).
 
@@ -199,7 +205,6 @@ Set in [`infra/modules/aca-seed-job.bicep`](../../infra/modules/aca-seed-job.bic
 | `AZURE_RESOURCE_GROUP`, `TENANT_ID` | Context |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Seed telemetry |
 | `SEED_SKIP_EXISTING` | Set to `true` by `postprovision.sh` so tables that already have data are skipped |
-| `MCP_DEMO_PASSWORD` | Optional override for the demo sign-in password |
 
 See [Seed job](../services/seed-job.md).
 
@@ -222,6 +227,6 @@ Each frontend reads endpoints at runtime from a generated `config.js`, so one bu
 | `ODATA_BASE`, `MANUFACTURING_BASE` | — | — | yes (derived: DAB REST `/api` and Functions `/api`) |
 | Generated by | [`app/scripts/generate-config.sh`](../../app/scripts/generate-config.sh) at build time | [`app-admin/docker-entrypoint.sh`](../../app-admin/docker-entrypoint.sh) at container start | [`app-manufacturing/docker-entrypoint.sh`](../../app-manufacturing/docker-entrypoint.sh) at container start |
 
-The storefront build also uses `VITE_API_URL`, `VITE_API_FUNCTIONS_URL`, `VITE_API_MCP_URL` and `VITE_APPINSIGHTS_CONNECTIONSTRING`. `predeploy.sh` writes them to `app/.env.production`. For local runs, put overrides in `app/.env`; Vite does not read azd values. The Static Web App also has app settings (`API_URL`, `API_FUNCTIONS_URL`, `API_MCP_URL`, `APPINSIGHTS_CONNECTIONSTRING`, `WEB_PUBSUB_HOST_NAME`) from [`infra/modules/swa-app.bicep`](../../infra/modules/swa-app.bicep).
+The storefront build also uses `VITE_API_URL`, `VITE_API_FUNCTIONS_URL`, `VITE_API_MCP_URL` and `VITE_APPINSIGHTS_CONNECTIONSTRING`. `predeploy.sh` writes them to `app/.env.production`. The Static Web App also has app settings (`API_URL`, `API_FUNCTIONS_URL`, `API_MCP_URL`, `APPINSIGHTS_CONNECTIONSTRING`, `WEB_PUBSUB_HOST_NAME`) from [`infra/modules/swa-app.bicep`](../../infra/modules/swa-app.bicep).
 
 Admin and manufacturing receive their values as container environment variables from [`aca-app-admin.bicep`](../../infra/modules/aca-app-admin.bicep) and [`aca-app-manufacturing.bicep`](../../infra/modules/aca-app-manufacturing.bicep).

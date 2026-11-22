@@ -23,49 +23,6 @@ public sealed class OrderDetailFunctions
         _orderDetailService = orderDetailService;
     }
 
-    [Function("CreateOrderDetail")]
-    public async Task<HttpResponseData> CreateOrderDetail(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "orders/{salesOrderId:int}/details")]
-        HttpRequestData req,
-        int salesOrderId,
-        FunctionContext executionContext)
-    {
-        var user = FunctionUser.Current(executionContext);
-        if (!TryResolveOwner(user, out var ownerCustomerId, out var error))
-            return await ErrorAsync(req, HttpStatusCode.Forbidden, error);
-
-        if (salesOrderId <= 0)
-        {
-            return await ErrorAsync(req, HttpStatusCode.BadRequest, "A valid sales order id is required.");
-        }
-
-        CreateOrderDetailRequest? detail;
-        try
-        {
-            detail = await JsonSerializer.DeserializeAsync<CreateOrderDetailRequest>(req.Body, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return await ErrorAsync(req, HttpStatusCode.BadRequest, "The order detail payload is invalid.");
-        }
-
-        if (detail is null || detail.ProductId <= 0 || detail.OrderQty <= 0 ||
-            detail.UnitPrice < 0 || detail.UnitPriceDiscount is < 0 or > 1)
-        {
-            return await ErrorAsync(req, HttpStatusCode.BadRequest, "The order detail payload is invalid.");
-        }
-
-        if (!await _orderDetailService.CreateAsync(salesOrderId, ownerCustomerId, detail))
-        {
-            return await ErrorAsync(req, HttpStatusCode.Forbidden, "Order access is not allowed.");
-        }
-
-        _logger.LogInformation("Created order detail for SalesOrderID={SalesOrderId}", salesOrderId);
-        var response = req.CreateResponse(HttpStatusCode.Created);
-        await response.WriteAsJsonAsync(new { success = true });
-        return response;
-    }
-
     [Function("GetOwnedOrderDetails")]
     public async Task<HttpResponseData> GetOwnedOrderDetails(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "orders/details")] HttpRequestData req,

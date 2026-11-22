@@ -124,7 +124,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
     >
       {/* Sale Badge */}
       {currentProduct.DiscountPct && (
-        <div className="absolute top-4 right-4 z-10 bg-doodle-accent text-white font-doodle text-sm font-bold px-3 py-1.5 border-2 border-doodle-text rotate-3 shadow-doodle">
+        <div className="absolute top-4 end-4 z-10 bg-doodle-accent text-white font-doodle text-sm font-bold px-3 py-1.5 border-2 border-doodle-text rotate-3 shadow-doodle">
           {t("saleProductCard.save", {
             percent: Math.round((currentProduct.DiscountPct || 0) * 100),
           })}
@@ -152,7 +152,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
 
         {/* Multiple Variants Badge - only show if more than 1 variant */}
         {productGroup.variants.length > 1 && (
-          <div className="absolute bottom-2 right-2 z-10 bg-doodle-green text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
+          <div className="absolute bottom-2 end-2 z-10 bg-doodle-green text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
             {productGroup.variants.length}{" "}
             {t("productCard.variants", { count: productGroup.variants.length })}
           </div>

@@ -154,7 +154,7 @@ if [[ -n "$api_url" ]]; then
   api_base_url="${api_base_url%/}"
   color_cyan "API exploration:"
   echo "  GraphQL endpoint: $api_url"
-  echo "  REST API browser: $api_base_url/swagger/index.html"
+  echo "  REST OpenAPI document: $api_base_url/api/openapi"
   if [[ -n "$api_functions_url" ]]; then
     echo "  Functions API browser: ${api_functions_url%/}/api/swagger/ui"
   fi

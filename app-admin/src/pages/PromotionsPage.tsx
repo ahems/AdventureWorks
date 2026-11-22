@@ -19,6 +19,8 @@ import {
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   SpecialOffer,
   getOfferStatus,
@@ -71,6 +73,10 @@ import {
 
 const PromotionsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  // AI promotion generation and translation are Functions routes requiring admin.write.
+  const canUseAi = useCan(Scopes.AdminWrite);
+  // Promotion create/edit/delete writes through DAB, granted to admin.write roles.
+  const canManagePromotions = useCan(Scopes.AdminWrite);
   const { data: apiPromotions = [], isLoading: promotionsLoading } =
     useAdminSpecialOffers();
   const { data: apiOfferProducts = [] } = useAdminSpecialOfferProducts();
@@ -221,7 +227,7 @@ const PromotionsPage: React.FC = () => {
           });
           resetForm();
           // Fire-and-forget translation to all other cultures
-          translatePromotion(translationPayload).catch(() => {
+          if (canUseAi) translatePromotion(translationPayload).catch(() => {
             toast({
               title: "Translation Warning",
               description:
@@ -269,7 +275,7 @@ const PromotionsPage: React.FC = () => {
           });
           setSelectedPromotion(null);
           // Fire-and-forget translation to all other cultures
-          translatePromotion(translationPayload).catch(() => {
+          if (canUseAi) translatePromotion(translationPayload).catch(() => {
             toast({
               title: "Translation Warning",
               description:
@@ -424,9 +430,12 @@ const PromotionsPage: React.FC = () => {
               <Bot className="w-4 h-4" />
               Automate with AI
             </RouterLink>
-            <GeneratePromotionWizardDialog existingOffers={apiPromotions} />
+            {canUseAi && (
+              <GeneratePromotionWizardDialog existingOffers={apiPromotions} />
+            )}
             <Button
               onClick={openCreateDialog}
+              disabled={!canManagePromotions}
               className="doodle-button doodle-button-primary flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
@@ -666,6 +675,7 @@ const PromotionsPage: React.FC = () => {
                       </span>
                       <button
                         onClick={() => openProductDialog(promo)}
+                        disabled={!canManagePromotions}
                         className="font-doodle text-sm text-doodle-blue hover:underline flex items-center gap-1"
                       >
                         <Link className="w-3 h-3" />
@@ -727,6 +737,7 @@ const PromotionsPage: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => openProductDialog(promo)}
+                      disabled={!canManagePromotions}
                       className="flex-1 font-doodle text-doodle-blue hover:bg-doodle-blue/10"
                     >
                       <Package className="w-4 h-4 mr-1" />
@@ -736,7 +747,7 @@ const PromotionsPage: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => openEditDialog(promo)}
-                      disabled={promo.SpecialOfferID === 1}
+                      disabled={promo.SpecialOfferID === 1 || !canManagePromotions}
                       className="flex-1 font-doodle text-doodle-text hover:bg-doodle-text/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Edit2 className="w-4 h-4 mr-1" />
@@ -746,7 +757,7 @@ const PromotionsPage: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => openDeleteDialog(promo)}
-                      disabled={promo.SpecialOfferID === 1}
+                      disabled={promo.SpecialOfferID === 1 || !canManagePromotions}
                       className="flex-1 font-doodle text-doodle-accent hover:bg-doodle-accent/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="w-4 h-4 mr-1" />

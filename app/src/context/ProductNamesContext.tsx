@@ -2,6 +2,7 @@ import React, { createContext, useContext, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { GET_PRODUCT_NAMES_BY_CULTURE } from "@/lib/graphql-queries";
+import { fetchAllPages, type Connection } from "@/lib/graphql-pagination";
 import { useLanguage } from "@/context/LanguageContext";
 
 interface ProductNameItem {
@@ -32,10 +33,16 @@ export const ProductNamesProvider: React.FC<{ children: React.ReactNode }> = ({
           selectedLanguage.length >= 6
             ? selectedLanguage.slice(0, 6)
             : selectedLanguage.padEnd(6, " ");
-        const result = await graphqlClient.request<{
-          productNames: { items: ProductNameItem[] };
-        }>(GET_PRODUCT_NAMES_BY_CULTURE, { cultureId: cultureIdPadded });
-        return result.productNames.items;
+        return await fetchAllPages(
+          (page) =>
+            graphqlClient.request<{
+              productNames: Connection<ProductNameItem>;
+            }>(GET_PRODUCT_NAMES_BY_CULTURE, {
+              cultureId: cultureIdPadded,
+              ...page,
+            }),
+          (result) => result.productNames,
+        );
       } catch {
         // If the ProductName query fails, fall back to English names
         return [];

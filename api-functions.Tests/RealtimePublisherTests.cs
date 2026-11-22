@@ -216,13 +216,13 @@ public class RealtimePublisherTests
     {
         var publisher = new Publisher();
         var notifications = new UtilityLifecycleNotifications(publisher);
-        var metadata = new OrchestrationMetadata("GenerateProductEmbeddings_Orchestrator", "instance-id")
+        var metadata = new OrchestrationMetadata("GenerateProductNameEmbeddings_Orchestrator", "instance-id")
         {
             RuntimeStatus = OrchestrationRuntimeStatus.Running,
             LastUpdatedAt = DateTimeOffset.UtcNow
         };
         UtilityLifecycleNotifications.Notification? next = null;
-        await notifications.NotifyAndContinueAsync(new("instance-id", "product-embeddings"), metadata,
+        await notifications.NotifyAndContinueAsync(new("instance-id", "product-name-embeddings"), metadata,
             item => { next = item; return Task.CompletedTask; });
         Assert.Single(publisher.Events);
         await notifications.NotifyAndContinueAsync(next!, metadata, _ => Task.CompletedTask);

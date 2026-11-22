@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Retire four legacy runtime grants only after their IaC replacements exist."""
+"""Report legacy runtime grants that current Bicep no longer creates (report-only).
+
+The conditioned azd deployer may delete only the roles in
+infra/azd-role-assignment-allowlist.json, which excludes these legacy roles. Demo
+environments that still carry them are recreated, not repaired in place.
+"""
 
 import argparse
 import json
 from pathlib import Path
 import subprocess
-import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRIBUTOR = "b24988ac-6180-42a0-ab88-20f7382dd24c"
@@ -81,7 +85,6 @@ def retirement_plan(assignments, definitions, principal, group, acr, communicati
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--environment")
-    parser.add_argument("--apply", action="store_true", help="Delete only verified legacy runtime role bindings")
     args = parser.parse_args()
     env_args = ["azd", "env", "get-values", "--output", "json", "--no-prompt"]
     if args.environment:
@@ -107,42 +110,14 @@ def main():
     assignments = az("role", "assignment", "list", "--all")
     definitions = az("role", "definition", "list")
     targets = retirement_plan(assignments, definitions, identity["principalId"], group, registry["id"], communication)
-    ledger = {"principalId": identity["principalId"], "apply": args.apply, "targets": [
-        {"id": item["id"], "scope": item["scope"], "role": item["roleDefinitionName"], "removed": False}
-        for item in targets]}
-    output = ROOT / ".auth-results" / ("runtime-rbac-migration-" + str(uuid.uuid4()))
-    output.mkdir(parents=True)
-    path = output / "ledger.json"
-
-    def save():
-        path.write_text(json.dumps(ledger, indent=2) + "\n")
-
-    save()
-    if args.apply:
-        for entry in ledger["targets"]:
-            current = az("rest", "--method", "get", "--url",
-                         "https://management.azure.com" + entry["id"] + "?api-version=2022-04-01")
-            properties = current["properties"]
-            original = next(item for item in targets if item["id"] == entry["id"])
-            if (properties["principalId"].lower() != identity["principalId"].lower() or
-                    properties["roleDefinitionId"].lower() != original["roleDefinitionId"].lower() or
-                    properties["scope"].lower() != original["scope"].lower()):
-                raise ReconciliationError("Binding changed after planning; refusing deletion")
-            az("role", "assignment", "delete", "--ids", entry["id"])
-            entry["removed"] = True
-            save()
-        after = az("role", "assignment", "list", "--all")
-        removed = {entry["id"].lower() for entry in ledger["targets"]}
-        before_ids = {item["id"].lower() for item in assignments}
-        after_ids = {item["id"].lower() for item in after}
-        if removed & after_ids or not (before_ids - removed).issubset(after_ids):
-            raise ReconciliationError("Exact retirement or preservation of unrelated assignments was not confirmed")
-        if retirement_plan(after, definitions, identity["principalId"], group, registry["id"], communication):
-            raise ReconciliationError("Legacy runtime grants remain")
-        ledger["unrelatedAssignmentsPreserved"] = True
-        save()
-    print(("Retired" if args.apply else "Planned") + f" {len(targets)} exact legacy runtime bindings.")
-    print("Evidence: " + str(path.relative_to(ROOT)))
+    if not targets:
+        print("Runtime RBAC matches source: no legacy runtime role bindings found.")
+        return 0
+    print(f"WARNING: {len(targets)} legacy runtime role binding(s) that current Bicep no longer grants:")
+    for item in targets:
+        print(f"  - {item.get('roleDefinitionName') or item.get('roleDefinitionId', '')} at {item.get('scope', '')}")
+    print("This environment predates the current RBAC model. Recreate the demo environment "
+          "rather than removing these bindings in place.")
     return 0
 
 

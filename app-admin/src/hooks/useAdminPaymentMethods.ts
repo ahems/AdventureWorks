@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
 import { gql } from "graphql-request";
+import { dabFetch } from "@/services/dabFetch";
 
 export interface AdminPaymentMethod {
   id: string;
@@ -109,7 +110,7 @@ export const useAdminPaymentMethods = (businessEntityId: number | null) => {
       if (!businessEntityId) return;
 
       const restUrl = getRestApiUrl();
-      const response = await fetch(
+      const response = await dabFetch(
         `${restUrl}/PersonCreditCard/BusinessEntityID/${businessEntityId}/CreditCardID/${creditCardId}`,
         { method: "DELETE" },
       );

@@ -196,6 +196,7 @@ review-output/
 app/staticwebapp.config.json
 app/.env.production
 app/public/config.js
+app/public/robots.txt
 app-admin/.env.production
 app-admin/public/config.js
 app-manufacturing/public/config.js

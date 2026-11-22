@@ -51,7 +51,6 @@ public class FinancialReportingFunction
     {
         try
         {
-            await _bank.InitializeAsync();
             var summary = await _bank.GetFinancialSummaryAsync();
 
             var resp = req.CreateResponse(HttpStatusCode.OK);
@@ -119,7 +118,6 @@ public class FinancialReportingFunction
 
         try
         {
-            await _bank.InitializeAsync();
             var txns = await _bank.GetTransactionsByPrefixAsync("PO-", maxCount);
 
             var resp = req.CreateResponse(HttpStatusCode.OK);
@@ -168,7 +166,6 @@ public class FinancialReportingFunction
 
         try
         {
-            await _bank.InitializeAsync();
 
             IReadOnlyList<BankTransaction> txns;
             if (type == "payroll")

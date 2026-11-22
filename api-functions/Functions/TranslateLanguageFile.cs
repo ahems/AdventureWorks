@@ -230,7 +230,7 @@ public class TranslateLanguageFile
     /// </summary>
     [Function("TranslateLanguageFile_Terminate")]
     public async Task<HttpResponseData> Terminate(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", "get")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [DurableClient] DurableTaskClient client)
     {
         var queryString = req.Url.Query ?? "";

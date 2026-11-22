@@ -5,6 +5,8 @@ import { ProductModelGroup } from "@/types/product";
 import { useAdminProductPhotoBatch } from "@/hooks/useAdminProducts";
 import { getAppUrl } from "@/lib/utils";
 import DeleteProductDialog from "@/components/DeleteProductDialog";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 interface AdminProductModelGroupCardProps {
   group: ProductModelGroup;
@@ -26,6 +28,7 @@ const AdminProductModelGroupCard: React.FC<AdminProductModelGroupCardProps> = ({
   const appUrl = getAppUrl();
   const variantCount = group.variants.length;
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const canDelete = useCan(Scopes.AdminWrite);
 
   // Fetch thumbnails for all variants
   const variantIds = group.variants.map((v) => v.ProductID);
@@ -55,6 +58,7 @@ const AdminProductModelGroupCard: React.FC<AdminProductModelGroupCardProps> = ({
         </div>
 
         {/* Delete button (top-right) */}
+        {canDelete && (
         <div className="absolute top-2 right-2 z-10">
           <button
             onClick={() => setDeleteOpen(true)}
@@ -64,6 +68,7 @@ const AdminProductModelGroupCard: React.FC<AdminProductModelGroupCardProps> = ({
             <Trash2 className="w-3 h-3" />
           </button>
         </div>
+        )}
 
         {/* Product image */}
         <div className="aspect-square bg-doodle-text/5 flex items-center justify-center overflow-hidden">

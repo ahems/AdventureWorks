@@ -9,18 +9,10 @@ services:
         docker:
             path: dockerfile
             remoteBuild: true
-        hooks:
-            postdeploy:
-                shell: sh
-                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-postdeploy.sh"
     api-functions:
         project: ./api-functions
         host: function
         language: csharp
-        hooks:
-            postdeploy:
-                shell: sh
-                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-functions-postdeploy.sh"
     api-mcp:
         project: ./api-mcp
         host: containerapp

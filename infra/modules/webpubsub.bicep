@@ -30,7 +30,9 @@ resource webPubSubRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-0
   name: guid(webPubSub.id, identity.id, '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
   scope: webPubSub
   properties: {
-    // Built-in Service Owner grants all Web PubSub data actions at this resource.
+    // Built-in Service Owner (WebPubSub/*) at this resource only. The runtime needs group/send and
+    // clientConnection/generateToken; Service Reader grants neither and a custom role would need
+    // roleDefinitions/write, which the ABAC-conditioned deployer lacks (see infra/README.md).
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'

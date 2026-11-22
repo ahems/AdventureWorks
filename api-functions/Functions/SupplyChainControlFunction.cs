@@ -39,7 +39,6 @@ public class SupplyChainControlFunction
     public async Task<HttpResponseData> GetVendors(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/vendors")] HttpRequestData req)
     {
-        await _svc.InitializeAsync();
         var result = await _svc.GetVendorSummariesAsync();
         return await OkAsync(req, result);
     }
@@ -49,7 +48,6 @@ public class SupplyChainControlFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/vendors/{vendorId}")] HttpRequestData req,
         string vendorId)
     {
-        await _svc.InitializeAsync();
         var vendors = await _svc.GetVendorSummariesAsync();
         var vendor  = vendors.FirstOrDefault(v => v.Vendor.VendorId == vendorId);
         if (vendor == null)
@@ -67,7 +65,6 @@ public class SupplyChainControlFunction
     public async Task<HttpResponseData> GetCatalog(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/catalog")] HttpRequestData req)
     {
-        await _svc.InitializeAsync();
         var catalog = await _svc.GetCatalogAsync();
         return await OkAsync(req, catalog);
     }
@@ -77,7 +74,6 @@ public class SupplyChainControlFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/catalog/{productId:int}")] HttpRequestData req,
         int productId)
     {
-        await _svc.InitializeAsync();
         var catalog = await _svc.GetCatalogAsync(productId);
         if (!catalog.Any())
             return await NotFoundAsync(req, $"No vendor offers found for ProductID {productId}.");
@@ -90,7 +86,6 @@ public class SupplyChainControlFunction
     public async Task<HttpResponseData> GetQuote(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/quote")] HttpRequestData req)
     {
-        await _svc.InitializeAsync();
 
         var qs        = req.Url?.Query ?? "";
         var qparsed   = System.Web.HttpUtility.ParseQueryString(qs);

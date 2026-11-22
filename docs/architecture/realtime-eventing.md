@@ -24,7 +24,7 @@ are subscribers. The complete list of event names and payloads is in the
 flowchart LR
   subgraph producers["Producers (Azure Functions)"]
     explicit["Explicit sends<br/>SendToGroupAsync"]
-    notify["NotifyingTableClient<br/>state-changed (13 tables)"]
+    notify["NotifyingTableClient<br/>state-changed (11 tables)"]
     outbox["DatabaseChanges SQL trigger<br/>database-changed (22 tables)"]
     orderTrg["OrderPlacedSqlTrigger<br/>new orders"]
     util["Utility lifecycle observer<br/>utility-status-changed"]
@@ -40,7 +40,7 @@ flowchart LR
   end
 
   subgraph consumers["Consumers"]
-    sf["Storefront<br/>orders → cart refresh"]
+    sf["Storefront<br/>orders → cart + order history refresh"]
     ad["Admin portal<br/>6 groups, 250 ms batch"]
     mf["Manufacturing portal<br/>7 groups, 2 s batch"]
   end
@@ -96,7 +96,7 @@ sequenceDiagram
 | `orders` | `orders.read`, `manufacturing.read` | No | Storefront, admin, manufacturing |
 | `manufacturing-ops` | `manufacturing.read` | Yes | Manufacturing |
 | `manufacturing-agent` | `manufacturing.read` | Yes | Manufacturing |
-| `warehouse` | `inventory.read` | Yes | Admin, manufacturing |
+| `warehouse` | `inventory.read`, `manufacturing.read` | Yes | Admin, manufacturing |
 | `supply-chain` | `inventory.read`, `manufacturing.read` | Yes | Manufacturing |
 | `finance` | `sales.read`, `manufacturing.read` | Yes | Manufacturing |
 | `shopping-simulator` | `admin.read`, `manufacturing.read` | Yes | Admin, manufacturing |
@@ -211,7 +211,7 @@ Each app mounts a `useRealTimeUpdates` dispatcher at its root, built on a shared
 
 | App | Groups | Behaviour |
 | --- | ------ | --------- |
-| Storefront | `orders` | Any event (and every connect) triggers one batched invalidation of the `["shoppingCart"]` query after 250 ms |
+| Storefront | `orders` | Any event (and every connect) triggers one batched invalidation of the `["shoppingCart"]` and `["orders"]` (prefix, covers order history) queries after 250 ms. The socket re-negotiates after storefront sign-in and sign-out so the server re-selects groups for the new token |
 | Admin portal | `orders`, `warehouse`, `shopping-simulator`, `reviews`, `promotions`, `utilities` | Invalidates the mapped React Query keys and dispatches a `webpubsub` DOM event; status pages use `useLiveUpdates` |
 | Manufacturing portal | `manufacturing-agent`, `manufacturing-ops`, `warehouse`, `supply-chain`, `orders`, `shopping-simulator`, `finance` | Collects events for a fixed 2-second window, then invalidates the mapped query keys once |
 

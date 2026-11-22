@@ -1,0 +1,52 @@
+{
+  "title": "Help me kiezen",
+  "intro": {
+    "title": "Laten we jouw perfecte uitrusting vinden!",
+    "description": "Beantwoord 5 korte vragen en onze AI doorzoekt de catalogus naar producten die perfect bij je passen.",
+    "cta": "Laten we beginnen",
+    "hint": "Mogelijk gemaakt door AI · Duurt ongeveer 1 minuut"
+  },
+  "loading": {
+    "questions": "Persoonlijke vragen worden gegenereerd…",
+    "recommendations": "De catalogus wordt doorzocht en je aanbevelingen worden opgesteld…"
+  },
+  "progress": {
+    "question": "Vraag {{current}} van {{total}}"
+  },
+  "nav": {
+    "back": "Terug",
+    "next": "Volgende",
+    "findProducts": "Mijn producten vinden"
+  },
+  "results": {
+    "title": "Jouw persoonlijke selectie",
+    "viewProduct": "Product bekijken",
+    "noResults": "We konden nu geen exacte overeenkomsten vinden. Blader door onze categorieën of gebruik de zoekbalk.",
+    "startAgain": "Opnieuw beginnen"
+  },
+  "profile": {
+    "title": "Iets over jou",
+    "subtitle": "Helpt ons producten te vinden die echt bij je passen.",
+    "gender": {
+      "label": "Geslacht (optioneel)",
+      "male": "Man",
+      "female": "Vrouw",
+      "preferNotToSay": "Zeg ik liever niet"
+    },
+    "height": {
+      "label": "Je lengte",
+      "placeholder": "Selecteer je lengte…"
+    },
+    "colors": {
+      "label": "Favoriete kleuren",
+      "hint": "Laat leeg als je geen voorkeur hebt."
+    },
+    "continue": "Doorgaan"
+  },
+  "error": {
+    "loadQuestions": "Er ging iets mis bij het genereren van je vragen. Probeer het opnieuw.",
+    "loadRecommendations": "Er ging iets mis bij het zoeken naar aanbevelingen. Probeer het opnieuw.",
+    "rateLimited": "We hebben veel AI-verzoeken van je ontvangen. Probeer het over {{minutes}} min. opnieuw.",
+    "tryAgain": "Opnieuw proberen"
+  }
+}

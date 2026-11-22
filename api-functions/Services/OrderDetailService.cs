@@ -1,15 +1,8 @@
-using System.Data;
 using System.Data.Common;
 using Dapper;
 using Microsoft.Data.SqlClient;
 
 namespace api_functions.Services;
-
-public sealed record CreateOrderDetailRequest(
-    int ProductId,
-    short OrderQty,
-    decimal UnitPrice,
-    decimal UnitPriceDiscount);
 
 public sealed record OrderDetailRead(
     int SalesOrderId,
@@ -22,7 +15,6 @@ public sealed record OrderDetailRead(
 
 public interface IOrderDetailService
 {
-    Task<bool> CreateAsync(int salesOrderId, int? ownerCustomerId, CreateOrderDetailRequest request);
     Task<IReadOnlyList<OrderDetailRead>?> ReadAsync(IReadOnlyCollection<int> salesOrderIds, int? ownerCustomerId);
 }
 
@@ -81,50 +73,6 @@ public class OrderDetailService : IOrderDetailService
             details.Add(new(row.SalesOrderId, productId, quantity, unitPrice, discount, lineTotal, productName));
         }
         return details;
-    }
-
-    public async Task<bool> CreateAsync(
-        int salesOrderId,
-        int? ownerCustomerId,
-        CreateOrderDetailRequest request)
-    {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync();
-        using var transaction = connection.BeginTransaction(IsolationLevel.Serializable);
-
-        var ownedOrderExists = await connection.ExecuteScalarAsync<bool>(@"
-            SELECT CONVERT(bit, CASE WHEN EXISTS (
-                SELECT 1
-                FROM Sales.SalesOrderHeader WITH (UPDLOCK, HOLDLOCK)
-                WHERE SalesOrderID = @SalesOrderId
-                  AND (@OwnerCustomerId IS NULL OR CustomerID = @OwnerCustomerId)
-            ) THEN 1 ELSE 0 END)",
-            new { SalesOrderId = salesOrderId, OwnerCustomerId = ownerCustomerId },
-            transaction);
-
-        if (!ownedOrderExists)
-        {
-            transaction.Rollback();
-            return false;
-        }
-
-        await connection.ExecuteAsync(@"
-            INSERT INTO Sales.SalesOrderDetail
-                (SalesOrderID, SpecialOfferID, OrderQty, ProductID, UnitPrice, UnitPriceDiscount, ModifiedDate)
-            VALUES
-                (@SalesOrderId, 1, @OrderQty, @ProductId, @UnitPrice, @UnitPriceDiscount, GETDATE())",
-            new
-            {
-                SalesOrderId = salesOrderId,
-                request.OrderQty,
-                request.ProductId,
-                request.UnitPrice,
-                request.UnitPriceDiscount
-            },
-            transaction);
-
-        transaction.Commit();
-        return true;
     }
 
     private sealed class OrderDetailRow

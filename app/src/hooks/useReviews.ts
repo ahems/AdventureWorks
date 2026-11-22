@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Review, ProductReview } from "@/types/review";
 import { graphqlClient } from "@/lib/graphql-client";
-import { GET_PRODUCT_REVIEWS, GET_ALL_REVIEWS, UPDATE_REVIEW_VOTES } from "@/lib/graphql-queries";
-import { getRestApiUrl } from "@/lib/utils";
+import { GET_PRODUCT_REVIEWS, GET_ALL_REVIEWS } from "@/lib/graphql-queries";
+import { fetchAllPages, type Connection } from "@/lib/graphql-pagination";
+import { getFunctionsApiUrl, getRestApiUrl } from "@/lib/utils";
 import { dabFetch } from "@/lib/dabFetch";
+import { functionsFetch } from "@/services/functionsAuth";
 import { trackError } from "@/lib/appInsights";
 import { useAuth } from "@/context/AuthContext";
 
@@ -236,7 +238,7 @@ export const useReviews = (productId: number) => {
 
     if (!review) return false;
 
-    // DAB restricts writes to HelpfulVotes; prevent self-voting in the UI.
+    // The vote route rejects self-votes; skip the round trip in the UI.
     if (review.userID != null && review.userID === user.businessEntityId) return false;
 
     // Load user votes from localStorage
@@ -246,20 +248,28 @@ export const useReviews = (productId: number) => {
       : {};
     const markedUsefulBy = voteData[reviewId] || [];
 
-    // Check if user already voted
+    // A repeat click removes this user's vote; the server keeps one vote per user.
     const hasVoted = markedUsefulBy.includes(userId);
-    const newHelpfulCount = hasVoted
-      ? Math.max(0, review.helpful - 1)
-      : review.helpful + 1;
 
     try {
-      const response = await graphqlClient.request<{
-        updateProductReview: { ProductReviewID: number; HelpfulVotes: number } | null;
-      }>(UPDATE_REVIEW_VOTES, { id: productReviewId, votes: newHelpfulCount });
-      if (response.updateProductReview?.ProductReviewID !== productReviewId ||
-          response.updateProductReview.HelpfulVotes !== newHelpfulCount) {
+      const response = await functionsFetch(
+        `${getFunctionsApiUrl()}/api/reviews/${productReviewId}/vote`,
+        { method: hasVoted ? "DELETE" : "POST" },
+      );
+      if (!response.ok) {
+        throw new Error(`Review vote failed with HTTP ${response.status}.`);
+      }
+      const result = (await response.json()) as {
+        productReviewId?: unknown;
+        helpfulVotes?: unknown;
+        voted?: unknown;
+      };
+      if (result.productReviewId !== productReviewId ||
+          typeof result.helpfulVotes !== "number" ||
+          result.voted !== !hasVoted) {
         throw new Error("The review service did not confirm the requested vote.");
       }
+      const newHelpfulCount = result.helpfulVotes;
 
       // Update localStorage vote tracking
       if (hasVoted) {
@@ -333,10 +343,13 @@ export const useAllReviews = () => {
   return useQuery({
     queryKey: ["allReviews"],
     queryFn: async () => {
-      const data = await graphqlClient.request<{
-        productReviews: { items: ProductReview[] };
-      }>(GET_ALL_REVIEWS);
-      return data.productReviews.items;
+      return fetchAllPages(
+        (page) =>
+          graphqlClient.request<{
+            productReviews: Connection<ProductReview>;
+          }>(GET_ALL_REVIEWS, page),
+        (data) => data.productReviews,
+      );
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

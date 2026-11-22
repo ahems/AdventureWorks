@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "Sử dụng embeddings AI để hiểu các truy vấn ngôn ngữ tự nhiên. Thử: \"xe đạp đỏ\", \"đồ chống nước cho chuyến đi bộ dưới mưa\", hoặc \"thiết bị nhẹ cho người đi xe đạp\"",
     "matchCounts": "Tìm thấy {{descriptionMatches}} kết quả khớp mô tả, {{reviewMatches}} kết quả khớp đánh giá, và {{nameMatches}} kết quả khớp tên",
     "semanticUnavailable": "Dịch vụ tìm kiếm ngữ nghĩa không khả dụng. Vui lòng kiểm tra xem dịch vụ AI có đang chạy và các embeddings đã được lập chỉ mục chưa.",
+    "aiRateLimited": "Tìm kiếm AI hiện đang bận. Vui lòng thử lại sau {{minutes}} phút.",
     "noMatchingProducts": "Không tìm thấy sản phẩm phù hợp nào",
     "enterSearchQuery": "Nhập từ khóa tìm kiếm để tìm sản phẩm",
     "noResultsForQuery": "Tìm kiếm sử dụng AI của chúng tôi không tìm thấy sản phẩm phù hợp với \"{{query}}\". Vui lòng thử các từ khóa hoặc cụm từ khác.",
@@ -267,7 +268,11 @@
       "lastName": "Doe",
       "email": "john@example.vn",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "Chỉ có thể lưu số thẻ thử nghiệm công khai (ví dụ 4242 4242 4242 4242). Chỉ loại thẻ, bốn chữ số cuối và ngày hết hạn được lưu trữ.",
+    "errorSavePayment": "Không thể lưu phương thức thanh toán. Vui lòng thử lại.",
+    "addCard": "Thêm thẻ",
+    "invalidTestCard": "Không thể lưu thẻ này. Hãy dùng số thẻ thử nghiệm công khai hợp lệ và chưa hết hạn."
   },
   "checkout": {
     "backToCart": "Quay lại Giỏ hàng",

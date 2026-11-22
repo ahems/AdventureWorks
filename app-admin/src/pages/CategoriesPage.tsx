@@ -17,6 +17,8 @@ import Footer from "@/components/Footer";
 import { TableSkeleton } from "@/components/LoadingSkeletons";
 import GenerateProductsWizardDialog from "@/components/GenerateProductsWizardDialog";
 import { useAuth } from "@/context/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import {
   useAdminCategories,
   useAdminAllSubcategories,
@@ -504,6 +506,8 @@ const CreateSubcategoryDialog: React.FC<CreateSubcategoryDialogProps> = ({
 
 const CategoriesPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  // Category create/delete/AI routes require admin.write.
+  const canManage = useCan(Scopes.AdminWrite);
   const queryClient = useQueryClient();
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(
     new Set(),
@@ -614,7 +618,7 @@ const CategoriesPage: React.FC = () => {
               Manage product categories and subcategories
             </p>
           </div>
-          <CreateCategoryDialog onCreated={invalidate} />
+          {canManage && <CreateCategoryDialog onCreated={invalidate} />}
         </div>
 
         {/* Table */}
@@ -695,6 +699,7 @@ const CategoriesPage: React.FC = () => {
                           </Link>
                         </td>
                         <td className="px-4 py-3 text-right">
+                          {canManage && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -717,6 +722,7 @@ const CategoriesPage: React.FC = () => {
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
+                          )}
                         </td>
                       </tr>
 
@@ -748,6 +754,7 @@ const CategoriesPage: React.FC = () => {
                                   </Link>
                                 </td>
                                 <td className="px-4 py-2 text-right">
+                                  {canManage && (
                                   <div className="flex items-center justify-end gap-2">
                                     <GenerateProductsWizardDialog
                                       defaultCategoryId={cat.ProductCategoryID}
@@ -775,11 +782,13 @@ const CategoriesPage: React.FC = () => {
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
+                                  )}
                                 </td>
                               </tr>
                             );
                           })}
                           {/* Add subcategory row */}
+                          {canManage && (
                           <tr className="border-b border-doodle-text/10 bg-doodle-text/[0.02]">
                             <td className="px-4 py-2 pl-10" colSpan={4}>
                               <div className="flex items-center gap-2">
@@ -808,6 +817,7 @@ const CategoriesPage: React.FC = () => {
                               </div>
                             </td>
                           </tr>
+                          )}
                         </>
                       )}
                     </React.Fragment>

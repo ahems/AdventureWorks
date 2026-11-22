@@ -1,6 +1,6 @@
 ---
 title: Azure Functions route and trigger reference
-summary: Complete catalog of the 245 Azure Functions in api-functions, with trigger, HTTP method and route, authorization tier, OAuth scope, Web PubSub push events and side-effect notes, grouped by feature area.
+summary: Complete catalog of the 238 Azure Functions in api-functions, with trigger, HTTP method and route, authorization tier, OAuth scope, Web PubSub push events and behaviour notes, grouped by feature area.
 audience: [developer, operator, security-reviewer, ai-agent]
 components: [api-functions]
 related:
@@ -10,7 +10,7 @@ related:
   - docs/reference/storage-resources.md
 ---
 
-# Azure Functions route and trigger reference (all 245 functions)
+# Azure Functions route and trigger reference (all 238 functions)
 
 This page lists every function in the `api-functions` Flex Consumption app: what triggers it, the HTTP route or trigger source, the OAuth tier and scope enforced by the Functions middleware, and the Web PubSub events it pushes.
 
@@ -27,20 +27,20 @@ If you add, rename or re-route a function, update this page and the route matrix
 
 | Trigger type | Count |
 |---|---|
-| HTTP | 200 |
-| Durable activity | 17 |
-| Queue | 15 |
-| Timer | 6 |
-| Durable orchestrator | 5 |
+| HTTP | 205 |
+| Durable activity | 6 |
+| Queue | 16 |
+| Timer | 7 |
+| Durable orchestrator | 2 |
 | SQL trigger | 2 |
-| **Total** | **245** |
+| **Total** | **238** |
 
 | HTTP authorization tier | Count | Meaning |
 |---|---|---|
 | Public | 20 | No token required: guest cart, sign-up, password reset, semantic search and Help Me Choose, AI chat entry points, health, OpenAPI, sitemap and seed status. Some of these routes apply their own checks when a token is present. |
 | Authenticated | 1 | Any valid Functions-audience token (`/api/webpubsub/negotiate`, which also requires `realtime.connect`). |
-| Consumer | 17 | Signed-in shopper; the registry adds an ownership check on the customer or business-entity identifier. |
-| Internal | 162 | Employee or manufacturing category plus the listed scope. |
+| Consumer | 20 | Signed-in shopper; the registry adds an ownership check on the customer or business-entity identifier. |
+| Internal | 164 | Employee or manufacturing category plus the listed scope. |
 
 | Scope (HTTP functions) | Count |
 |---|---|
@@ -50,9 +50,9 @@ If you add, rename or re-route a function, update this page and the route matrix
 | `sales.read` | 23 |
 | `admin.read` | 19 |
 | `orders.write` | 9 |
-| `orders.read` | 6 |
+| `orders.read` | 7 |
 | `customers.read` | 5 |
-| `customers.write` | 5 |
+| `customers.write` | 9 |
 | `realtime.connect` | 1 |
 
 Non-HTTP triggers have no tier or scope: they run inside the Functions host with the runtime managed identity. 40 of the internal HTTP routes are also reached by api-mcp tools through its Functions proxy (see [api-mcp](../services/api-mcp.md)).
@@ -61,18 +61,18 @@ Non-HTTP triggers have no tier or scope: they run inside the Functions host with
 
 - **Method and route / source**: for HTTP, the method(s) and the full path including the `/api` prefix. Routes shown as `/api/<FunctionName>` use the default route (no `Route` set). For other triggers: queue name, timer CRON (six-field, seconds first, UTC), SQL table, or the Durable function type.
 - **Web PubSub push**: `group:event`. Every event in the `orders` group is sent on the wire as `{"event":"orders-changed"}` and every event in the `finance` group as `{"event":"finance-changed"}`; the original event name is shown for traceability. `*` marks a conditional push. `state-changed` events come from `NotifyingTableClient` and are coalesced in a 5-second window. See [Web PubSub events](webpubsub-events.md).
-- **Notes**: ownership checks, default routes, GET routes with side effects, and Durable code that current code paths do not schedule.
+- **Notes**: ownership checks, default routes and other behaviour worth knowing. Every HTTP `GET` is a pure read; see [GET routes are read-only](../services/functions.md#get-routes-are-read-only).
 
 ## Functions by feature area
 
 ### Orders and checkout
 
-Source files: `OrderHeaderFunctions.cs`, `OrderDetailFunctions.cs`, `StoreOrderFunctions.cs`, `GenerateOrderWithAIFunction.cs`, `GenerateOrdersBulkFunction.cs`. 13 functions.
+Source files: `CheckoutFunctions.cs`, `OrderDetailFunctions.cs`, `StoreOrderFunctions.cs`, `GenerateOrderWithAIFunction.cs`, `GenerateOrdersBulkFunction.cs`. 13 functions.
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
-| `CreateOrderHeader` | HTTP | POST `/api/orders` | Consumer | `orders.write` | — | Ownership: customerId + businessEntityId (signed consumer) |
-| `CreateOrderDetail` | HTTP | POST `/api/orders/{salesOrderId:int}/details` | Consumer | `orders.write` | — | Ownership: salesOrderId(owner CustomerID) |
+| `PlaceCheckoutOrder` | HTTP | POST `/api/orders/checkout` | Consumer | `orders.write` | — | Ownership: customerId + businessEntityId (signed consumer); both addresses linked to the person. Server-priced; header and lines in one SQL transaction. `OrderPlacedSqlTrigger` sends the order events. |
+| `QuoteCheckout` | HTTP | POST `/api/orders/checkout/quote` | Consumer | `orders.read` | — | Same ownership checks; read-only server price and discount-code check |
 | `GetOwnedOrderDetails` | HTTP | GET `/api/orders/details` | Consumer | `orders.read` | — | Ownership: orderIds(owner CustomerID) |
 | `GetStores` | HTTP | GET `/api/stores` | Internal | `admin.read` | — | — |
 | `GetStoreById` | HTTP | GET `/api/stores/{storeId:int}` | Internal | `admin.read` | — | — |
@@ -87,21 +87,22 @@ Source files: `OrderHeaderFunctions.cs`, `OrderDetailFunctions.cs`, `StoreOrderF
 
 ### Order pipeline, status processing and delivery
 
-Source files: `OrderPlacedSqlTrigger.cs`, `ProcessSalesOrderStatus.cs`, `OrderStatusFunctions.cs`, `OrderPipelineControlFunction.cs`, `OrderDeliveryTimerFunction.cs`. 11 functions.
+Source files: `OrderPlacedSqlTrigger.cs`, `ProcessSalesOrderStatus.cs`, `OrderStatusFunctions.cs`, `OrderPipelineControlFunction.cs`, `OrderDeliveryTimerFunction.cs`, `OrderCancelFunctions.cs`. 12 functions.
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
-| `OrderPlacedSqlTrigger` | SQL trigger | `[Sales].[SalesOrderHeader]` | — | — | orders:database-changed; orders:order-placed*; manufacturing-agent:run-created*; manufacturing-agent:state-changed (run table)*; promotions:state-changed (counter) | — |
+| `OrderPlacedSqlTrigger` | SQL trigger | `[Sales].[SalesOrderHeader]` | — | — | orders:database-changed; orders:order-placed; manufacturing-agent:run-created*; manufacturing-agent:state-changed (run table)*; promotions:state-changed (counter) | — |
 | `ProcessSalesOrderStatus_QueueTrigger` | Queue | `sales-order-status` | — | — | orders:order-status-changed; finance:transaction (bank credit on ship) | — |
 | `BeginProcessingOrder` | HTTP | POST `/api/orders/begin-processing-order` | Internal | `orders.write` | — | — |
 | `ShipOrder` | HTTP | POST `/api/orders/{salesOrderId:int}/ship` | Internal | `orders.write` | — | — |
+| `CancelOrder` | HTTP | POST `/api/orders/{salesOrderId:int}/cancel` | Internal | `orders.write` | orders:order-status-changed | Only Status 1, 2 or 3; 409 otherwise |
 | `OrderPipeline_GetConfig` | HTTP | GET `/api/orders/pipeline/config` | Internal | `orders.read` | — | — |
 | `OrderPipeline_PutConfig` | HTTP | PUT `/api/orders/pipeline/config` | Internal | `orders.write` | orders:state-changed (sanitized) | — |
 | `OrderPipeline_GetStatus` | HTTP | GET `/api/orders/pipeline/status` | Internal | `orders.read` | — | — |
 | `OrderPipeline_PromotePending` | HTTP | POST `/api/orders/pipeline/promote-pending` | Internal | `orders.write` | — | — |
 | `OrderPipeline_PromoteApproved` | HTTP | POST `/api/orders/pipeline/promote-approved` | Internal | `orders.write` | — | — |
 | `OrderDelivery_Timer` | Timer | `0 0 * * * *` | — | — | — | — |
-| `OrderDelivery_HttpTrigger` | HTTP | GET `/api/orders/delivery/trigger` | Internal | `orders.write` | orders:orders-delivered | GET side effect: promotes Status 5→7, sends delivered emails (flag-gated), pushes orders event |
+| `OrderDelivery_HttpTrigger` | HTTP | POST `/api/orders/delivery/trigger` | Internal | `orders.write` | orders:orders-delivered | Promotes Status 5→7, sends delivered emails (flag-gated), pushes orders event |
 
 ### Carts and cart recovery
 
@@ -118,7 +119,7 @@ Source files: `OwnedCartFunctions.cs`, `CartRecoveryAnalysisFunction.cs`. 6 func
 
 ### Customers, addresses, passwords and payment methods
 
-Source files: `AddressFunctions.cs`, `PasswordFunctions.cs`, `PasswordResetFunctions.cs`, `PaymentMethodFunctions.cs`, `GenerateCustomerWithAIFunction.cs`. 15 functions.
+Source files: `AddressFunctions.cs`, `PasswordFunctions.cs`, `PasswordResetFunctions.cs`, `PaymentMethodFunctions.cs`, `GenerateCustomerWithAIFunction.cs`. 16 functions.
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
@@ -133,9 +134,11 @@ Source files: `AddressFunctions.cs`, `PasswordFunctions.cs`, `PasswordResetFunct
 | `SetPassword` | HTTP | POST `/api/password` | Consumer | `customers.write` | — | Ownership: businessEntityID(self; internal → customers only) |
 | `VerifyPassword` | HTTP | POST `/api/password/verify` | Consumer | `customers.read` | — | Ownership: businessEntityID(self only) |
 | `RequestPasswordReset` | HTTP | POST `/api/password/reset/request` | Public | — | — | — |
+| `AdminRequestPasswordReset` | HTTP | POST `/api/password/reset/admin-request` | Internal | `customers.write` | — | Staff reset email; reports not-eligible (409) instead of the generic anonymous 202 |
 | `ValidateResetToken` | HTTP | POST `/api/password/reset/validate` | Public | — | — | — |
 | `ResetPassword` | HTTP | POST `/api/password/reset/complete` | Public | — | — | — |
 | `GetPaymentMethods` | HTTP | GET `/api/payment-methods` | Consumer | `customers.read` | — | Ownership: business_entity_id(self) |
+| `CreatePaymentMethod` | HTTP | POST `/api/payment-methods` | Consumer | `customers.write` | — | Ownership: business_entity_id(self); masked test cards only |
 | `GenerateCustomerWithAI` | HTTP | POST `/api/customers/generate-with-ai` | Internal | `admin.write` | — | — |
 
 ### Receipts and email
@@ -157,22 +160,25 @@ Source files: `ReceiptCheckFunction.cs`, `GenerateAndSendReceiptFunction.cs`, `G
 
 ### Product reviews
 
-Source files: `GenerateProductReviewsUsingAI.cs`, `GenerateReviewsWithRepliesFunction.cs`, `GenerateVerifiedReviewsFunction.cs`, `ReviewAnalysisFunction.cs`, `ReviewModerationQueueFunction.cs`, `ReviewJobWatchdog.cs`. 12 functions.
+Source files: `GenerateProductReviewsUsingAI.cs`, `GenerateReviewsWithRepliesFunction.cs`, `GenerateVerifiedReviewsFunction.cs`, `ReviewAnalysisFunction.cs`, `ReviewModerationQueueFunction.cs`, `ReviewJobWatchdog.cs`, `ReviewVoteFunctions.cs`. 14 functions.
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
 | `GenerateProductReviewsUsingAI_HttpStart` | HTTP | POST `/api/GenerateProductReviewsUsingAI_HttpStart` | Internal | `admin.write` | — | Default route (function name) |
 | `GenerateReviewsWithReplies` | HTTP | POST `/api/products/{productId}/generate-reviews-with-replies` | Internal | `admin.write` | — | — |
 | `GetVerifiedReviewsSummary` | HTTP | GET `/api/generate-verified-reviews/summary` | Internal | `admin.read` | — | — |
-| `StartBatchVerifiedReviews` | HTTP | POST `/api/generate-verified-reviews/start` | Internal | `admin.write` | reviews:generation-state-changed (svc); reviews:generation-progress (background) | — |
-| `GetVerifiedReviewsStatus` | HTTP | GET `/api/generate-verified-reviews/status` | Internal | `admin.read` | reviews:generation-state-changed (only on stale reset) | GET side effect: resets stale (>10 min idle) IsRunning flag and saves job state |
+| `StartBatchVerifiedReviews` | HTTP | POST `/api/generate-verified-reviews/start` | Internal | `admin.write` | reviews:generation-state-changed (svc) | Enqueues one `verified-reviews-queue` message per product; may replace a stale job |
+| `GetVerifiedReviewsStatus` | HTTP | GET `/api/generate-verified-reviews/status` | Internal | `admin.read` | — | Pure read; reports computed `isStale` (>10 min idle) |
 | `GetCustomersWithDeliveredOrders` | HTTP | GET `/api/products/{productId}/customers-with-delivered-orders` | Internal | `admin.read` | — | — |
 | `GetProductEligibleReviewerCount` | HTTP | GET `/api/products/{productId}/eligible-reviewer-count` | Internal | `admin.read` | reviews:generation-progress | — |
 | `AnalyzeReviewsBatch` | HTTP | POST `/api/reviews/analyze-batch` | Internal | `admin.write` | — | — |
 | `ReviewModeration_StartAnalyzeApproveAll` | HTTP | POST `/api/reviews/moderation/start-analyze-approve-all` | Internal | `admin.write` | reviews:moderation-state-changed (svc) | — |
 | `ReviewModeration_Status` | HTTP | GET `/api/reviews/moderation/status` | Internal | `admin.read` | — | — |
+| `VerifiedReviews_QueueTrigger` | Queue | `verified-reviews-queue` | — | — | reviews:generation-progress; reviews:generation-state-changed (svc) | Idempotent per job and product |
 | `ReviewModeration_QueueTrigger` | Queue | `review-moderation-queue` | — | — | reviews:moderation-progress; reviews:moderation-state-changed (svc) | — |
 | `ExpireAbandonedReviewJobs` | Timer | `0 * * * * *` | — | — | reviews:<terminal event> (svc) | — |
+| `VoteReviewHelpful` | HTTP | POST `/api/reviews/{productReviewId:int}/vote` | Consumer | `customers.write` | reviews:review-votes-changed (only when the count changed) | Voter is the signed business_entity_id; one `Production.ProductReviewVote` row per voter and review; count change in the same SQL transaction; repeat votes return 200 unchanged; own review 403 |
+| `RemoveReviewHelpfulVote` | HTTP | DELETE `/api/reviews/{productReviewId:int}/vote` | Consumer | `customers.write` | reviews:review-votes-changed (only when the count changed) | Removes only the signed voter's vote row and decrements the count in the same transaction |
 
 ### Search, embeddings and AI job queues
 
@@ -183,20 +189,12 @@ Source files: `SemanticSearchFunction.cs`, `SearchSuggestionsFunction.cs`, `Gene
 | `SemanticSearch` | HTTP | POST `/api/search/semantic` | Public | — | — | — |
 | `GetSearchSuggestions` | HTTP | GET `/api/search/suggestions` | Public | — | — | — |
 | `GenerateProductEmbeddings_HttpStart` | HTTP | POST `/api/GenerateProductEmbeddings_HttpStart` | Internal | `admin.write` | — | Default route (function name) |
-| `GenerateProductEmbeddings_Orchestrator` | Durable orchestrator | — | — | — | utilities:utility-status-changed via RegisterUtilityLifecycle (push-v1 only) | Not scheduled by current code (AI work runs through the AI job queues) |
-| `FetchProductDescriptionsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `GenerateEmbeddingsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `SaveEmbeddingsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
 | `GenerateProductNameEmbeddings_HttpStart` | HTTP | POST `/api/GenerateProductNameEmbeddings` | Internal | `admin.write` | — | — |
 | `GenerateProductNameEmbeddings_Orchestrator` | Durable orchestrator | — | — | — | utilities:utility-status-changed via RegisterUtilityLifecycle (push-v1 only) | — |
 | `FetchProductNamesActivity` | Durable activity | — | — | — | — | — |
 | `GenerateNameEmbeddingsActivity` | Durable activity | — | — | — | — | — |
 | `SaveNameEmbeddingsActivity` | Durable activity | — | — | — | — | — |
 | `GenerateProductReviewEmbeddings_HttpStart` | HTTP | POST `/api/GenerateProductReviewEmbeddings_HttpStart` | Internal | `admin.write` | — | Default route (function name) |
-| `GenerateProductReviewEmbeddings_Orchestrator` | Durable orchestrator | — | — | — | utilities:utility-status-changed via RegisterUtilityLifecycle (push-v1 only) | Not scheduled by current code (AI work runs through the AI job queues) |
-| `FetchProductReviewsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `GenerateReviewEmbeddingsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `SaveReviewEmbeddingsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
 | `AIJobProcessor_Image_QueueTrigger` | Queue | `ai-job-image-queue` | — | — | — | — |
 | `AIJobProcessor_Embeddings_QueueTrigger` | Queue | `ai-job-embeddings-queue` | — | — | — | — |
 | `AIJobProcessor_Chat_QueueTrigger` | Queue | `ai-job-chat-queue` | — | — | — | — |
@@ -220,15 +218,9 @@ Source files: `GenerateProductContentFunction.cs`, `GenerateProductImages.cs`, `
 | `DeleteSubcategory` | HTTP | POST `/api/DeleteSubcategory` | Internal | `admin.write` | — | Default route (function name) |
 | `GenerateCategoryWithAI` | HTTP | POST `/api/GenerateCategoryWithAI` | Internal | `admin.write` | — | Default route (function name) |
 | `TranslateProductDescriptions_HttpStart` | HTTP | POST `/api/TranslateProductDescriptions_HttpStart` | Internal | `admin.write` | — | Default route (function name) |
-| `TranslateProductDescriptions_Orchestrator` | Durable orchestrator | — | — | — | utilities:utility-status-changed via RegisterUtilityLifecycle (push-v1 only) | Not scheduled by current code (AI work runs through the AI job queues) |
-| `FetchRecentlyEnhancedProductsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `GetSupportedCulturesActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `TranslateSingleProductActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `TranslateDescriptionsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
-| `SaveTranslationsActivity` | Durable activity | — | — | — | — | Not scheduled by current code (AI work runs through the AI job queues) |
 | `TranslateLanguageFile_HttpStart` | HTTP | POST `/api/TranslateLanguageFile_HttpStart` | Internal | `admin.write` | — | Default route (function name) |
 | `TranslateLanguageFile_Status` | HTTP | GET `/api/TranslateLanguageFile_Status` | Internal | `admin.read` | — | Default route (function name) |
-| `TranslateLanguageFile_Terminate` | HTTP | POST,GET `/api/TranslateLanguageFile_Terminate` | Internal | `admin.write` | — | GET side effect: GET verb accepted; terminates a Durable instance; Default route (function name) |
+| `TranslateLanguageFile_Terminate` | HTTP | POST `/api/TranslateLanguageFile_Terminate` | Internal | `admin.write` | — | Terminates a Durable instance (`?instanceId=`); Default route (function name) |
 | `TranslateLanguageFile_Orchestrator` | Durable orchestrator | — | — | — | utilities:utility-status-changed via RegisterUtilityLifecycle (push-v1 only) | — |
 | `TranslateSectionActivity` | Durable activity | — | — | — | — | — |
 | `SaveTranslationResultActivity` | Durable activity | — | — | — | — | — |
@@ -274,9 +266,9 @@ Source files: `ReportingFunctions.cs`, `FinancialReportingFunction.cs`, `Custome
 | `ReportSlowMovers` | HTTP | GET `/api/reporting/slow-movers` | Internal | `sales.read` | — | — |
 | `ReportSalesTrends` | HTTP | GET `/api/reporting/sales-trends` | Internal | `sales.read` | — | — |
 | `ReportProductPriceHistory` | HTTP | GET `/api/reporting/product-price-history` | Internal | `sales.read` | — | — |
-| `FinancialSummary` | HTTP | GET `/api/financials/summary` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
-| `FinancialProcurement` | HTTP | GET `/api/financials/procurement` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
-| `FinancialManufacturing` | HTTP | GET `/api/financials/manufacturing` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
+| `FinancialSummary` | HTTP | GET `/api/financials/summary` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `FinancialProcurement` | HTTP | GET `/api/financials/procurement` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `FinancialManufacturing` | HTTP | GET `/api/financials/manufacturing` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `GetCustomerStats` | HTTP | GET `/api/customer-stats` | Internal | `sales.read` | — | — |
 | `GetCustomerCountryBreakdown` | HTTP | GET `/api/customer-country-breakdown` | Internal | `sales.read` | — | — |
 | `GetCustomerRegionBreakdown` | HTTP | GET `/api/customer-region-breakdown` | Internal | `sales.read` | — | — |
@@ -300,7 +292,7 @@ Source files: `ShoppingSimulatorControlFunction.cs`, `ShoppingSimulatorTimerFunc
 
 ### Manufacturing simulation and planning
 
-Source files: `ManufacturingControlFunction.cs`, `ManufacturingPlanningFunction.cs`, `WorkOrderOperationProcessorFunction.cs`. 22 functions.
+Source files: `ManufacturingControlFunction.cs`, `ManufacturingPlanningFunction.cs`, `WorkOrderOperationProcessorFunction.cs`, `SimulationMaintenanceFunction.cs`. 23 functions.
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
@@ -311,21 +303,22 @@ Source files: `ManufacturingControlFunction.cs`, `ManufacturingPlanningFunction.
 | `PutScrapConfig` | HTTP | PUT `/api/manufacturing/scrap-config/{locationId:int}` | Internal | `manufacturing.write` | manufacturing-ops:config-changed | Also called by api-mcp (MCP tool proxy) |
 | `GetLocationConfig` | HTTP | GET `/api/manufacturing/location-config` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `PutLocationConfig` | HTTP | PUT `/api/manufacturing/location-config/{locationId:int}` | Internal | `manufacturing.write` | manufacturing-ops:config-changed | Also called by api-mcp (MCP tool proxy) |
-| `ManufacturingWorkforce` | HTTP | GET `/api/manufacturing/workforce` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (workforce table) |
-| `ManufacturingWorkforceDetail` | HTTP | GET `/api/manufacturing/workforce/detail` | Internal | `manufacturing.read` | — | GET side effect: Lazy seed on first call (workforce table) |
+| `ManufacturingWorkforce` | HTTP | GET `/api/manufacturing/workforce` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `ManufacturingWorkforceDetail` | HTTP | GET `/api/manufacturing/workforce/detail` | Internal | `manufacturing.read` | — | Read-only; seeded by `SimulationMaintenance_Timer` |
 | `ManufacturingGetScrapEvents` | HTTP | GET `/api/manufacturing/scrap-events` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `ManufacturingGetVendorQuality` | HTTP | GET `/api/manufacturing/vendor-quality` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `ManufacturingGetVendorQualityById` | HTTP | GET `/api/manufacturing/vendor-quality/{vendorId:int}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
-| `PlanFeasibility` | HTTP | GET `/api/plan/feasibility/{productId:int}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
-| `PlanFeasibilityAll` | HTTP | GET `/api/plan/feasibility` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
+| `PlanFeasibility` | HTTP | GET `/api/plan/feasibility/{productId:int}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `PlanFeasibilityAll` | HTTP | GET `/api/plan/feasibility` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `PlanCostAnalysis` | HTTP | GET `/api/plan/cost/{productId:int}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `PlanCurrentManufacturingCost` | HTTP | GET `/api/plan/cost/{productId:int}/current` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `PlanCatalog` | HTTP | GET `/api/plan/catalog` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `PlanOverstock` | HTTP | GET `/api/plan/overstock` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `PlanThinMargin` | HTTP | GET `/api/plan/thin-margin` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `PlanShortageForeceast` | HTTP | GET `/api/plan/shortage-forecast` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
-| `PlanReorderRecommendations` | HTTP | GET `/api/plan/reorder-recommendations` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
+| `PlanReorderRecommendations` | HTTP | GET `/api/plan/reorder-recommendations` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `WorkOrderOperationProcessor` | Queue | `production-wo-queue` | — | — | manufacturing-ops:shortage-updated; manufacturing-ops:routing-updated; manufacturing-ops:scrap-event; manufacturing-ops:wo-completed; warehouse:inventory-updated; manufacturing-ops:state-changed (table) | — |
+| `SimulationMaintenance_Timer` | Timer | `0 * * * * *` (also on startup) | — | — | manufacturing-agent, manufacturing-ops, warehouse, supply-chain, finance (table writes) | Idempotently seeds bank, warehouse, workforce and supply-chain state; persists the agent auto-shutoff; rejects expired or over-cap proposals; prunes shortages for deleted work orders. Keeps those GET routes read-only |
 
 ### Manufacturing agent and proposals
 
@@ -333,7 +326,7 @@ Source files: `ManufacturingAgentConfigFunctions.cs`, `ManufacturingAgentRunFunc
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
-| `GetManufacturingAgentConfig` | HTTP | GET `/api/manufacturing/agent-config` | Internal | `manufacturing.read` | — | GET side effect: auto-shutoff writes Mode=Off when AutoShutoffAt has passed |
+| `GetManufacturingAgentConfig` | HTTP | GET `/api/manufacturing/agent-config` | Internal | `manufacturing.read` | — | Read-only: reports Mode=Off once AutoShutoffAt has passed; `SimulationMaintenance_Timer` persists it |
 | `PutManufacturingAgentConfig` | HTTP | PUT `/api/manufacturing/agent-config` | Internal | `manufacturing.write` | manufacturing-agent:config-changed; manufacturing-agent:state-changed (table) | — |
 | `GetManufacturingAgentRuns` | HTTP | GET `/api/manufacturing/agent-runs` | Internal | `manufacturing.read` | — | — |
 | `PostManufacturingAgentStep` | HTTP | POST `/api/manufacturing/agent-runs/{id}/step` | Internal | `manufacturing.write` | manufacturing-agent:step-updated; manufacturing-agent:state-changed (run table) | — |
@@ -368,17 +361,17 @@ Source files: `WarehouseFunction.cs`, `WarehouseOperationProcessorFunction.cs`. 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
 | `WarehouseInitialize` | HTTP | POST `/api/warehouse/initialize` | Internal | `manufacturing.write` | — | — |
-| `WarehouseStatus` | HTTP | GET `/api/warehouse/status` | Internal | `manufacturing.read` | — | GET side effect: Lazy seed on first call (warehouse config/workforce tables) |
+| `WarehouseStatus` | HTTP | GET `/api/warehouse/status` | Internal | `manufacturing.read` | — | Read-only; seeded by `SimulationMaintenance_Timer` |
 | `WarehouseActiveOperations` | HTTP | GET `/api/warehouse/active` | Internal | `manufacturing.read` | — | — |
-| `WarehouseWorkforce` | HTTP | GET `/api/warehouse/workforce` | Internal | `manufacturing.read` | — | GET side effect: Lazy seed on first call (warehouse config/workforce tables) |
+| `WarehouseWorkforce` | HTTP | GET `/api/warehouse/workforce` | Internal | `manufacturing.read` | — | Read-only; seeded by `SimulationMaintenance_Timer` |
 | `WarehouseWorkforceDetail` | HTTP | GET `/api/warehouse/workforce/detail` | Internal | `manufacturing.read` | — | — |
 | `WarehouseMetrics` | HTTP | GET `/api/warehouse/metrics` | Internal | `manufacturing.read` | — | — |
 | `WarehouseDamageEvents` | HTTP | GET `/api/warehouse/damage-events` | Internal | `manufacturing.read` | — | — |
-| `WarehouseGetSubcategoryConfig` | HTTP | GET `/api/warehouse/subcategory-config` | Internal | `manufacturing.read` | — | GET side effect: Lazy seed on first call (warehouse config/workforce tables) |
+| `WarehouseGetSubcategoryConfig` | HTTP | GET `/api/warehouse/subcategory-config` | Internal | `manufacturing.read` | — | Read-only; seeded by `SimulationMaintenance_Timer` |
 | `WarehouseUpdateSubcategoryConfig` | HTTP | PUT `/api/warehouse/subcategory-config/{id}` | Internal | `manufacturing.write` | warehouse:config-changed | — |
-| `WarehouseGetSupplierReceiveConfig` | HTTP | GET `/api/warehouse/supplier-receive-config` | Internal | `manufacturing.read` | — | GET side effect: Lazy seed on first call (warehouse config/workforce tables) |
+| `WarehouseGetSupplierReceiveConfig` | HTTP | GET `/api/warehouse/supplier-receive-config` | Internal | `manufacturing.read` | — | Read-only; seeded by `SimulationMaintenance_Timer` |
 | `WarehouseUpdateSupplierReceiveConfig` | HTTP | PUT `/api/warehouse/supplier-receive-config/{id}` | Internal | `manufacturing.write` | — | — |
-| `WarehouseGetDamageConfig` | HTTP | GET `/api/warehouse/damage-config` | Internal | `manufacturing.read` | — | GET side effect: Lazy seed on first call (warehouse config/workforce tables) |
+| `WarehouseGetDamageConfig` | HTTP | GET `/api/warehouse/damage-config` | Internal | `manufacturing.read` | — | Read-only; seeded by `SimulationMaintenance_Timer` |
 | `WarehouseUpdateDamageConfig` | HTTP | PUT `/api/warehouse/damage-config/{operationType}` | Internal | `manufacturing.write` | — | — |
 | `WarehouseOperationProcessor` | Queue | `warehouse-ops-queue` | — | — | warehouse:operation-completed; warehouse:state-changed (table) | — |
 
@@ -388,11 +381,11 @@ Source files: `SupplyChainControlFunction.cs`, `PurchaseOrderProcessorFunction.c
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
-| `SupplyChainGetVendors` | HTTP | GET `/api/supply/vendors` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
-| `SupplyChainGetVendor` | HTTP | GET `/api/supply/vendors/{vendorId}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
-| `SupplyChainGetCatalog` | HTTP | GET `/api/supply/catalog` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
-| `SupplyChainGetCatalogByProduct` | HTTP | GET `/api/supply/catalog/{productId:int}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
-| `SupplyChainGetQuote` | HTTP | GET `/api/supply/quote` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy init on first call (vendor stock rows, historical/pending PO processing, queue injection) |
+| `SupplyChainGetVendors` | HTTP | GET `/api/supply/vendors` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `SupplyChainGetVendor` | HTTP | GET `/api/supply/vendors/{vendorId}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `SupplyChainGetCatalog` | HTTP | GET `/api/supply/catalog` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `SupplyChainGetCatalogByProduct` | HTTP | GET `/api/supply/catalog/{productId:int}` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `SupplyChainGetQuote` | HTTP | GET `/api/supply/quote` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `SupplyChainPlaceOrder` | HTTP | POST `/api/supply/order` | Internal | `manufacturing.write` | supply-chain:po-created | Also called by api-mcp (MCP tool proxy) |
 | `SupplyChainCancelOrder` | HTTP | DELETE `/api/supply/order/{orderId}` | Internal | `manufacturing.write` | — | Also called by api-mcp (MCP tool proxy) |
 | `SupplyChainInitialize` | HTTP | POST `/api/supply/initialize` | Internal | `manufacturing.write` | — | — |
@@ -408,17 +401,17 @@ Source files: `BankControlFunction.cs`, `SimulatorControlFunction.cs`, `Transact
 
 | Function | Trigger | Method and route / source | Tier | Scope | Web PubSub push | Notes |
 |---|---|---|---|---|---|---|
-| `BankGetStatus` | HTTP | GET `/api/bank/status` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
-| `BankGetAccounts` | HTTP | GET `/api/bank/accounts` | Internal | `sales.read` | — | GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
-| `BankGetAccount` | HTTP | GET `/api/bank/accounts/{currencyCode}` | Internal | `sales.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
-| `BankGetTransactions` | HTTP | GET `/api/bank/transactions` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
-| `BankGetTransactionsByCurrency` | HTTP | GET `/api/bank/transactions/{currencyCode}` | Internal | `sales.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
+| `BankGetStatus` | HTTP | GET `/api/bank/status` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `BankGetAccounts` | HTTP | GET `/api/bank/accounts` | Internal | `sales.read` | — | Read-only; seeded by `SimulationMaintenance_Timer` |
+| `BankGetAccount` | HTTP | GET `/api/bank/accounts/{currencyCode}` | Internal | `sales.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `BankGetTransactions` | HTTP | GET `/api/bank/transactions` | Internal | `manufacturing.read` | — | Also called by api-mcp (MCP tool proxy) |
+| `BankGetTransactionsByCurrency` | HTTP | GET `/api/bank/transactions/{currencyCode}` | Internal | `sales.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `BankDeposit` | HTTP | POST `/api/bank/deposit` | Internal | `admin.write` | finance:state-changed / transaction (service) | Also called by api-mcp (MCP tool proxy) |
 | `BankWithdraw` | HTTP | POST `/api/bank/withdraw` | Internal | `admin.write` | finance:state-changed / transaction (service) | Also called by api-mcp (MCP tool proxy) |
-| `BankGetCurrencies` | HTTP | GET `/api/bank/currencies` | Internal | `sales.read` | — | Also called by api-mcp (MCP tool proxy); GET side effect: Lazy seed on first call (bank accounts from usp_GetTotalProfit) |
+| `BankGetCurrencies` | HTTP | GET `/api/bank/currencies` | Internal | `sales.read` | — | Also called by api-mcp (MCP tool proxy) |
 | `SimulatorsReset` | HTTP | POST `/api/simulators/reset` | Internal | `admin.write` | supply-chain/finance/shopping-simulator:state-changed (svc resets) | Also called by api-mcp (MCP tool proxy) |
 | `ArchiveTransactionHistoryTimer` | Timer | `0 0 2 * * 0` | — | — | — | — |
-| `ArchiveTransactionHistoryHttp` | HTTP | GET `/api/archive/trigger` | Internal | `admin.write` | — | GET side effect: INSERTs TransactionHistory >1 yr into archive and DELETEs originals |
+| `ArchiveTransactionHistoryHttp` | HTTP | POST `/api/archive/trigger` | Internal | `admin.write` | — | INSERTs TransactionHistory >1 yr into archive and DELETEs originals |
 
 ### Help Me Choose and AI chat
 

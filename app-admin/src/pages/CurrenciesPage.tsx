@@ -31,6 +31,8 @@ import {
   useRefreshExchangeRates,
 } from "@/hooks/useAdminCatalog";
 import AdminHeader from "@/components/AdminHeader";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 import Footer from "@/components/Footer";
 import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { format } from "date-fns";
@@ -64,6 +66,7 @@ const CurrenciesPage = () => {
   const [ratesHasMore, setRatesHasMore] = useState(false);
 
   const refreshRates = useRefreshExchangeRates();
+  const canRefreshRates = useCan(Scopes.AdminWrite);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -301,7 +304,7 @@ const CurrenciesPage = () => {
                   variant="outline"
                   size="sm"
                   onClick={handleRefreshRates}
-                  disabled={refreshRates.isPending}
+                  disabled={!canRefreshRates || refreshRates.isPending}
                 >
                   {refreshRates.isPending ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

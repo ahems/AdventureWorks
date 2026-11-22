@@ -42,8 +42,8 @@ lists every user-visible feature with its route, backend and documentation page.
   Engineer, Plan, Execute, Supply, Receive, Warehouse) covering bills of materials, routings, work
   orders, a live shop-floor simulation, purchase orders, inventory, costing, warehouse operations and a
   bank/finance view.
-- **AI and agents** ([docs](docs/architecture/ai-architecture.md)) — 21 Microsoft Foundry agents
-  (prompt, workflow and intent agents) plus a hosted Manufacturing agent that can observe, propose or
+- **AI and agents** ([docs](docs/architecture/ai-architecture.md)) — 15 Microsoft Foundry prompt
+  agents plus a hosted Manufacturing agent that can observe, propose or
   autonomously act on production and procurement, with human approval of proposals.
 - **MCP server** ([docs](docs/services/api-mcp.md)) — 63 MCP tools with per-tool OAuth scopes,
   ownership checks and confirmation prompts for destructive actions; explore them with the bundled
@@ -108,12 +108,12 @@ The demo deploys these Azure services (details in
   MCP Inspector on Azure Container Apps.
 - **Data API Builder (DAB)** on Container Apps — GraphQL, REST and an MCP endpoint over the
   AdventureWorks schema, with JWT role-based permissions.
-- **Azure Functions on Flex Consumption** — 245 .NET 10 isolated-worker functions (HTTP, queue, timer,
+- **Azure Functions on Flex Consumption** — 238 .NET 10 isolated-worker functions (HTTP, queue, timer,
   SQL-trigger and Durable) for business logic, AI calls and simulations. Two always-ready instances
   host the SQL change listeners.
 - **api-mcp** on Container Apps — a self-contained OpenIddict OAuth authorization server that signs
   in AdventureWorks database users and issues resource-bound tokens, plus the MCP server with 63 tools.
-- **Microsoft Foundry** — chat and embedding model deployments, 21 agents and the hosted Manufacturing
+- **Microsoft Foundry** — chat and embedding model deployments, 15 prompt agents and the hosted Manufacturing
   agent.
 - **Platform services** — Azure SQL Database (serverless, private endpoint only), Storage (queues,
   tables, blobs, file share), Web PubSub, Azure Communication Services email, Key Vault (OAuth signing
@@ -161,7 +161,6 @@ an azd service.
 | `api-functions/`, `api-functions.Tests/` | Azure Functions app and its tests |
 | `api-mcp/` | OAuth server, MCP tools and tests |
 | `manufacturing-agent/` | Hosted Manufacturing agent (Foundry `azure.ai.agent`) |
-| `workflows/` | Foundry workflow agent definitions |
 | `seed-job/` | Database seed container, SQL scripts and CSV data |
 | `infra/` | Bicep modules and the least-privilege deployer role |
 | `scripts/` | azd hooks, Foundry agent creation, utilities, data-management exports and data generators |

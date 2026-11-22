@@ -21,6 +21,8 @@ export const dbStatusToOrderStatus = (status: number): Order["Status"] => {
   switch (status) {
     case 1:
       return "Processing";
+    case 4:
+      return "Rejected";
     case 5:
       return "Shipped";
     case 6:
@@ -43,8 +45,10 @@ export const orderStatusToDbStatuses = (status: Order["Status"]): number[] => {
       return [6];
     case "Delivered":
       return [7];
+    case "Rejected":
+      return [4];
     case "Pending":
-      return [2, 3, 4]; // Approved, Backordered, Rejected
+      return [2, 3]; // Approved, Backordered
     default:
       return [];
   }
@@ -220,20 +224,20 @@ const mapOrder = (header: RawOrderHeader): Order => {
   };
 };
 
-const CANCEL_ORDER_MUTATION = gql`
-  mutation CancelOrder($id: Int!) {
-    updateSalesOrderHeader(SalesOrderID: $id, item: { Status: 6 }) {
-      SalesOrderID
-      Status
-    }
-  }
-`;
-
+// Cancellation goes through Functions so the server enforces allowed transitions
+// (only In Process, Approved or Backordered orders can be cancelled).
 export const useCancelOrder = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (salesOrderId: number) => {
-      await graphqlClient.request(CANCEL_ORDER_MUTATION, { id: salesOrderId });
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/orders/${salesOrderId}/cancel`,
+        { method: "POST" },
+      );
+      if (res.status === 409) {
+        throw new Error("This order can no longer be cancelled.");
+      }
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });

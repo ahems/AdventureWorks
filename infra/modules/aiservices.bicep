@@ -380,3 +380,5 @@ output accountPrincipalId string = azidentity.properties.principalId
 output projectPrincipalId string = azidentity.properties.principalId
 output storageConnectionId string = storageAccountConnection.id
 output storageConnectionName string = storageAccountConnection.name
+// Empty when preup found no image model quota, so callers can treat image generation as unavailable.
+output imageDeploymentName string = empty(imageDeployment) ? '' : imageModel.deploymentName

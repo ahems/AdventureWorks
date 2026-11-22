@@ -47,6 +47,8 @@ import { useUpdateProductPrice } from "@/hooks/useAdminProducts";
 import ClearancePromotionDialog, {
   type ClearanceProduct,
 } from "@/components/ClearancePromotionDialog";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -281,6 +283,8 @@ const ProductProfitabilityPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const [channel, setChannel] = useState<SalesChannel>("all");
   const { data, isLoading, isError } = useProductProfitabilityDetailData(channel);
+  // Price, promotion and retire actions write catalogue data through DAB (admin.write roles).
+  const canWrite = useCan(Scopes.AdminWrite);
   const { mutateAsync: updatePrice, isPending: isPriceSaving } =
     useUpdateProductPrice();
 
@@ -834,6 +838,7 @@ const ProductProfitabilityPage: React.FC = () => {
                                 ) : (
                                   <button
                                     onClick={() => startPriceEdit(row)}
+                                    disabled={!canWrite}
                                     className="flex items-center justify-end gap-1 w-full group"
                                     title="Edit list price"
                                   >
@@ -890,6 +895,7 @@ const ProductProfitabilityPage: React.FC = () => {
                                     row.productID && (
                                     <button
                                       onClick={() => startPriceEdit(row)}
+                                      disabled={!canWrite}
                                       className="px-2 py-0.5 border border-doodle-text/30 rounded font-doodle text-xs hover:border-doodle-accent hover:text-doodle-accent whitespace-nowrap flex items-center gap-1"
                                       title="Edit list price"
                                     >
@@ -905,6 +911,7 @@ const ProductProfitabilityPage: React.FC = () => {
                                       });
                                       setClearanceDialogOpen(true);
                                     }}
+                                    disabled={!canWrite}
                                     className="px-2 py-0.5 border border-doodle-text/30 rounded font-doodle text-xs hover:border-green-500 hover:text-green-700 whitespace-nowrap"
                                     title={`Add a promotion for ${row.productName}`}
                                   >

@@ -40,7 +40,7 @@ function isOwnedHeaderPost(node, file) {
     ts.isStringLiteral(property.initializer) && property.initializer.text === "POST");
   return post && url.head.text === "" && url.templateSpans.length === 1 &&
     url.templateSpans[0].expression.getText(file) === "getFunctionsApiUrl()" &&
-    url.templateSpans[0].literal.text === "/api/orders";
+    url.templateSpans[0].literal.text === "/api/orders/checkout";
 }
 
 async function orderDetails({ body = [fixture], status = 200 } = {}) {
@@ -147,10 +147,11 @@ test("checkout preserves protected product fields and clears the cart through it
   assert.doesNotMatch(catalog.GET_PRODUCT_INVENTORY + catalog.GET_PRODUCTS_INVENTORY, /\b(Shelf|Bin)\b/);
 });
 
-test("checkout header assertion rejects detail URLs and non-POST requests", () => {
+test("checkout assertion requires the single server-priced checkout POST", () => {
   for (const [source, expected] of [
-    ['functionsFetch(`${getFunctionsApiUrl()}/api/orders`, { method: "POST" })', true],
-    ['functionsFetch(`${getFunctionsApiUrl()}/api/orders`, { method: "GET" })', false],
+    ['functionsFetch(`${getFunctionsApiUrl()}/api/orders/checkout`, { method: "POST" })', true],
+    ['functionsFetch(`${getFunctionsApiUrl()}/api/orders/checkout`, { method: "GET" })', false],
+    ['functionsFetch(`${getFunctionsApiUrl()}/api/orders`, { method: "POST" })', false],
     ['functionsFetch(`${getFunctionsApiUrl()}/api/orders/7/details`, { method: "POST" })', false],
   ]) {
     const file = ts.createSourceFile("fixture.ts", source, ts.ScriptTarget.Latest, true);

@@ -1,6 +1,6 @@
 ---
 title: Functions route-to-scope authorization matrix
-summary: Authoritative per-route OAuth tier, required scope, access mode and ownership key for all 200 HTTP-triggered Azure Functions in api-functions.
+summary: Authoritative per-route OAuth tier, required scope, access mode and ownership key for all 205 HTTP-triggered Azure Functions in api-functions.
 audience: [developer, security-reviewer, ai-agent]
 components: [api-functions, api-mcp]
 related:
@@ -17,7 +17,7 @@ related:
 > [`TOOL_SCOPE_MATRIX.md`](../mcp-oauth/TOOL_SCOPE_MATRIX.md). It reuses the same
 > business-domain scopes ([`OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs))
 > and the same authorization server in `api-mcp`. It classifies **every** one of the
-> **200** HTTP-triggered Functions discovered in `api-functions` — no route is left
+> **205** HTTP-triggered Functions discovered in `api-functions` — no route is left
 > unclassified. Non-HTTP triggers (queue / SQL / timer) are internal and not part of
 > this matrix.
 
@@ -41,9 +41,9 @@ implements this matrix, and `FUNCTIONS_OAUTH_MODE=enforced` is provisioned.
 | ---- | ------ | ----- |
 | **P** | Anonymous | 20 |
 | **A** | Authenticated (handler-scoped) | 1 |
-| **C** | Consumer (ownership) | 17 |
-| **I** | Internal-only (40 of them also MCP-proxied) | 162 |
-| | **Total** | **200** |
+| **C** | Consumer (ownership) | 20 |
+| **I** | Internal-only (40 of them also MCP-proxied) | 164 |
+| | **Total** | **205** |
 
 ### Function policies per required scope (all protected tiers)
 
@@ -55,8 +55,8 @@ implements this matrix, and `FUNCTIONS_OAUTH_MODE=enforced` is provisioned.
 | `manufacturing.write` | 27 | yes |
 | `admin.read` | 19 | yes |
 | `orders.write` | 9 | yes |
-| `customers.write` | 5 | yes |
-| `orders.read` | 6 | yes |
+| `customers.write` | 9 | yes |
+| `orders.read` | 7 | yes |
 | `customers.read` | 5 | yes |
 | `realtime.connect` | 1 | **new — added by this work** |
 
@@ -118,7 +118,7 @@ order/customer identifiers, status, count, or entity metadata.
 | ----- | -------------------------- | -------- |
 | `manufacturing-agent` | `manufacturing.read` | Internal |
 | `manufacturing-ops` | `manufacturing.read` | Internal |
-| `warehouse` | `inventory.read` | Internal |
+| `warehouse` | `inventory.read`, `manufacturing.read` | Internal |
 | `supply-chain` | `inventory.read`, `manufacturing.read` | Internal |
 | `orders` | `orders.read`, `manufacturing.read` | Consumer or internal; payload is generic invalidation only |
 | `shopping-simulator` | `admin.read`, `manufacturing.read` | Internal |
@@ -149,10 +149,11 @@ and response contracts do not accept customer IDs or Foundry response IDs.
 | `POST /api/agent/chat` | P | — | Anonymous | — |
 | `GET /api/agent/status` | P | — | Anonymous | — |
 
-### Authentication (6)
+### Authentication (7)
 
 Sign-in itself happens at the api-mcp authorization server (`/login`), never against these
-routes. Only the pre-auth reset flow and consumer signup are anonymous.
+routes. Only the pre-auth reset flow and consumer signup are anonymous; the staff reset
+request is internal-only.
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
@@ -160,6 +161,7 @@ routes. Only the pre-auth reset flow and consumer signup are anonymous.
 | `POST /api/password/reset/complete` | P | — | Anonymous | — |
 | `POST /api/password/reset/request` | P | — | Anonymous | — |
 | `POST /api/password/reset/validate` | P | — | Anonymous | — |
+| `POST /api/password/reset/admin-request` | I | `customers.write` | Internal-only. Staff-initiated reset for a known customer; unlike the anonymous route it reports `sent` / `not-eligible` (409) / `email-not-sent` (502) / `not-configured` (503) | businessEntityID + email must match one consumer login |
 | `POST /api/password` | C | `customers.write` | Self-or-internal (ownership); staff may reset **customer** (`IN`) passwords only | businessEntityID |
 | `POST /api/password/verify` | C | `customers.read` | Self only (no password oracle) | businessEntityID |
 
@@ -180,17 +182,22 @@ address, including one used by another customer's order, returns HTTP 409;
 an unchanged address remains saveable. Direct DAB link writes are unavailable
 to consumers; owner-bound Functions manage links and types.
 
-### Saved payment methods (1)
+### Saved payment methods (2)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
 | `GET /api/payment-methods` | C | `customers.read` | Signed person's own cards only, including internal callers | business_entity_id (claim only) |
+| `POST /api/payment-methods` | C | `customers.write` | Signed consumer only; links the new card to the signed person | business_entity_id (claim only) |
 
 This route joins existing `PersonCreditCard`/`CreditCard` rows for the signed
 person and projects only card ID, brand, last four digits and expiry. SQL masks
 the number before it leaves the database. Request IDs/role headers cannot choose
 another person. Direct `CreditCard` reads are unavailable to consumer and
 authenticated DAB roles; existing owner-scoped link read/delete remains.
+`POST` accepts only `cardType`, `last4`, `expMonth` and `expYear`; any other
+property (such as a full card number) is rejected with HTTP 400. The card is
+inserted with a masked `CardNumber` (`************1234`) and linked in the same
+SQL transaction.
 
 ### Guest and consumer-owned carts (4 policies)
 
@@ -226,12 +233,12 @@ The existing `orders.read` scope for this POST is a feature exception, not evide
 that it is safe for read-only canaries. Only the reviewed all-zero validation
 payload is exercised live before the no-email safety substrate is complete.
 
-### Consumer order creation and details (3)
+### Consumer checkout and order details (3)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
-| `POST /api/orders` | C | `orders.write` | Signed consumer customer/person; both addresses must be linked to that person | customer_id + business_entity_id |
-| `POST /api/orders/{salesOrderId:int}/details` | C | `orders.write` | Self-or-internal (ownership) | salesOrderId(owner CustomerID) |
+| `POST /api/orders/checkout` | C | `orders.write` | Signed consumer customer/person; both addresses must be linked to that person. Prices, discount code, tax and freight are resolved server-side; header and lines are inserted in one transaction | customer_id + business_entity_id |
+| `POST /api/orders/checkout/quote` | C | `orders.read` | Same checks as checkout; read-only | customer_id + business_entity_id |
 | `GET /api/orders/details?orderIds=...` | C | `orders.read` | Self-or-internal; every order in a batch must belong to the caller | Each order's CustomerID |
 
 The read accepts one to 100 distinct positive IDs and fails the whole batch if
@@ -284,18 +291,19 @@ client-supplied; this ownership guard is not a pricing or inventory guarantee.
 | `GET /api/stores/{storeId:int}` | I | `admin.read` | Internal-only | — |
 | `GET /api/stores/{storeId:int}/orders` | I | `admin.read` | Internal-only | — |
 
-### Order lifecycle (8)
+### Order lifecycle (9)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
 | `POST /api/orders/begin-processing-order` | I | `orders.write` | Internal-only | — |
-| `GET /api/orders/delivery/trigger` | I | `orders.write` | Internal-only | — |
+| `POST /api/orders/delivery/trigger` | I | `orders.write` | Internal-only | — |
 | `GET /api/orders/pipeline/config` | I | `orders.read` | Internal-only | — |
 | `PUT /api/orders/pipeline/config` | I | `orders.write` | Internal-only | — |
 | `POST /api/orders/pipeline/promote-approved` | I | `orders.write` | Internal-only | — |
 | `POST /api/orders/pipeline/promote-pending` | I | `orders.write` | Internal-only | — |
 | `GET /api/orders/pipeline/status` | I | `orders.read` | Internal-only | — |
 | `POST /api/orders/{salesOrderId:int}/ship` | I | `orders.write` | Internal-only | — |
+| `POST /api/orders/{salesOrderId:int}/cancel` | I | `orders.write` | Internal-only | — |
 
 ### Promotions (3)
 
@@ -305,7 +313,7 @@ client-supplied; this ownership guard is not a pricing or inventory guarantee.
 | `PUT /api/auto-promotion/config` | I | `admin.write` | Internal-only | — |
 | `POST /api/auto-promotion/reset-counters` | I | `admin.write` | Internal-only | — |
 
-### Reviews (9)
+### Reviews (11)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
@@ -318,6 +326,8 @@ client-supplied; this ownership guard is not a pricing or inventory guarantee.
 | `POST /api/reviews/analyze-batch` | I | `admin.write` | Internal-only | — |
 | `POST /api/reviews/moderation/start-analyze-approve-all` | I | `admin.write` | Internal-only | — |
 | `GET /api/reviews/moderation/status` | I | `admin.read` | Internal-only | — |
+| `POST /api/reviews/{productReviewId:int}/vote` | C | `customers.write` | Self-or-internal (ownership); handler accepts consumers only | voter = signed `business_entity_id` |
+| `DELETE /api/reviews/{productReviewId:int}/vote` | C | `customers.write` | Self-or-internal (ownership); handler accepts consumers only | voter = signed `business_entity_id` |
 
 ### Cart recovery (1)
 
@@ -360,7 +370,7 @@ client-supplied; this ownership guard is not a pricing or inventory guarantee.
 | `POST /api/TranslateCategoryName` | I | `admin.write` | Internal-only | — |
 | `POST /api/TranslateLanguageFile_HttpStart` | I | `admin.write` | Internal-only | — |
 | `GET /api/TranslateLanguageFile_Status` | I | `admin.read` | Internal-only | — |
-| `POST/GET /api/TranslateLanguageFile_Terminate` | I | `admin.write` | Internal-only | — |
+| `POST /api/TranslateLanguageFile_Terminate` | I | `admin.write` | Internal-only | — |
 | `POST /api/TranslateProductDescriptions_HttpStart` | I | `admin.write` | Internal-only | — |
 | `POST /api/TranslatePromotion` | I | `admin.write` | Internal-only | — |
 
@@ -377,7 +387,7 @@ client-supplied; this ownership guard is not a pricing or inventory guarantee.
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
 | `GET /api/ai-job-queue/status` | I | `admin.read` | Internal-only | — |
-| `GET /api/archive/trigger` | I | `admin.write` | Internal-only | — |
+| `POST /api/archive/trigger` | I | `admin.write` | Internal-only | — |
 | `POST /api/exchange-rates/refresh` | I | `admin.write` | Internal-only | — |
 
 ### Simulators (7)

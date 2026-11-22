@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "使用 AI 嵌入技術來理解自然語言查詢。試試看：「紅色自行車」、「雨天健行用防水裝備」或「輕量級自行車裝備」",
     "matchCounts": "找到 {{descriptionMatches}} 個描述匹配，{{reviewMatches}} 個評論匹配，以及 {{nameMatches}} 個名稱匹配",
     "semanticUnavailable": "語意搜尋服務無法使用。請確認 AI 服務正在運行且嵌入向量已建立索引。",
+    "aiRateLimited": "AI 搜尋目前忙碌中。請在 {{minutes}} 分鐘後重試。",
     "noMatchingProducts": "未找到符合條件的產品",
     "enterSearchQuery": "輸入搜尋關鍵字以尋找產品",
     "noResultsForQuery": "我們的 AI 搜尋未找到符合「{{query}}」的產品。請嘗試其他關鍵字或詞組。",
@@ -267,7 +268,11 @@
       "lastName": "杜",
       "email": "john@example.tw",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "只能儲存公開的測試卡號（例如 4242 4242 4242 4242）。僅儲存卡片類型、卡號末四碼和有效期限。",
+    "errorSavePayment": "儲存付款方式失敗，請再試一次。",
+    "addCard": "新增卡片",
+    "invalidTestCard": "無法儲存此卡片。請使用有效且未過期的公開測試卡號。"
   },
   "checkout": {
     "backToCart": "返回購物車",

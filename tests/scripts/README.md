@@ -26,7 +26,7 @@ describes the assurance evidence in detail.
 
 - [Safety labels](#safety-labels)
 - [Prerequisites](#prerequisites)
-- [Side-effecting GET routes](#side-effecting-get-routes)
+- [Read-only GET routes](#read-only-get-routes)
 - [Offline tests](#offline-tests)
 - [Authentication tests](#authentication-tests)
 - [Runtime identity probes](#runtime-identity-probes)
@@ -74,27 +74,14 @@ write data, send email or call paid models.
   `manufacturing` identity (Peter) for manufacturing work and `admin` (Ken) for
   customers, orders and reporting.
 
-## Side-effecting GET routes
+## Read-only GET routes
 
-Some Functions `GET` routes change state, so they must never be used as read-only
-probes, even by an identity that holds only a read scope. The full list with
-reasons is `sideEffectingFunctionReads` in
-[`tests/auth/contracts.json`](../auth/contracts.json); reviewed safe reads are in
-`safeFunctionReadRoutes` in the same file.
-
-| Routes | Side effect |
-| --- | --- |
-| `bank/*`, `financials/summary`, `financials/manufacturing`, `financials/procurement` | Bank initialization can seed accounts and transactions |
-| `manufacturing/status` | Prunes stale shortage records |
-| `manufacturing/agent-config` | Enforces auto-shutoff by switching the agent off |
-| `manufacturing/proposals` | Auto-rejects expired or excess proposals |
-| `manufacturing/workforce`, `manufacturing/workforce/detail` | Can seed workforce rows |
-| `generate-verified-reviews/status`, `reviews/moderation/status` | Can reset and save stale job state |
-| `orders/delivery/trigger` | Promotes shipped orders to Delivered |
-| `archive/trigger` | Archives transaction history |
-| `TranslateLanguageFile_Terminate` | Terminates a translation orchestration |
-| `plan/feasibility`, `plan/feasibility/{productId}`, `plan/reorder-recommendations`, `supply/catalog*`, `supply/quote`, `supply/vendors*` | Supply-chain initialization processes purchase orders and seeds vendor stock |
-| `warehouse/status`, `warehouse/workforce`, `warehouse/*-config` | Can seed warehouse configuration and workforce rows |
+Functions `GET` routes do not change state, so any reviewed `GET` is safe as a
+read-only probe. The offline auth gate requires every protected `GET` to be listed
+in `safeFunctionReadRoutes` in [`tests/auth/contracts.json`](../auth/contracts.json).
+On-demand jobs are `POST`: `orders/delivery/trigger`, `archive/trigger` and
+`TranslateLanguageFile_Terminate`. Seeding, agent auto-shutoff, proposal expiry and
+shortage pruning run in the `SimulationMaintenance_Timer` function instead of in reads.
 
 For a harmless authenticated read, use `/api/manufacturing/scrap-events` or
 `/api/manufacturing/vendor-quality` as Peter, or `/api/ai-job-queue/status` as Ken.
@@ -130,13 +117,22 @@ Run `test-frontend-telemetry-envelopes.mjs` by name. A
 `test-frontend-telemetry.mjs`, which exits with `--output is required`.
 
 Manufacturing app Vitest suites run separately, for example
-`npm --prefix app-manufacturing test -- src/hooks/useRealTimeUpdates.test.ts src/hooks/useWebPubSub.test.ts`.
+`npm --prefix app-manufacturing test -- src/hooks/useRealTimeUpdates.test.ts src/hooks/useWebPubSub.test.ts`;
+`npm --prefix app-admin test` runs the admin suite.
+
+The Build-Checker `offline-tests` job runs `test-live-updates.mjs`,
+`test-receipt-download.mjs`, `test-internal-request-sessions.mjs`,
+`test-internal-session-races.mjs` and `test-frontend-telemetry-envelopes.mjs`, plus
+both Vitest suites. The harnesses stub only external dependencies (`dabAuth`,
+`@/lib/utils`, `graphql-request`); other `@/` imports load the real app source, so
+a stub must export every name the module under test imports.
 
 ### Python unit tests
 
 All use `unittest`. Run one module with
 `python3 -B -m unittest discover -s tests/scripts -p '<file>'`, or all of them with
-`-p 'test_*.py'`.
+`-p 'test_*.py'`. The Build-Checker `offline-tests` job runs them all with
+`python3 -B -m pytest tests/scripts` (needs `pytest`, `pyyaml` and `cryptography`).
 
 | File | Covers | In offline profile |
 | --- | --- | --- |
@@ -316,23 +312,25 @@ app runs with it `enforced`.
 | Command | Covers | Safety |
 | --- | --- | --- |
 | `FUNCTIONS_TOKEN=… TEST_BUSINESS_ENTITY_ID=… bash tests/scripts/test-password-functions.sh [functions-url]` | Password set and verify for one consumer, using that consumer's own Functions token | Mutating (overwrites the password) |
-| `FUNCTIONS_TOKEN=… TEST_BUSINESS_ENTITY_ID=… TEST_EMAIL=… bash tests/scripts/test-password-reset-flow.sh [functions-url]` | Reset-token request and reset | Mutating, Email |
+| `TEST_EMAIL=… TEST_BUSINESS_ENTITY_ID=… [RESET_TOKEN=…] bash tests/scripts/test-password-reset-flow.sh [functions-url]` | Generic 202 reset request (no token in the response), made-up token rejection and, when `RESET_TOKEN` is copied from the emailed link, completion and reuse rejection. Add `FUNCTIONS_TOKEN` and `CURRENT_PASSWORD` to check the old password works until completion. | Email; mutating with `RESET_TOKEN` |
 | `bash tests/scripts/test-ai-chat-and-mcp.sh` | Same as `validate-auth.sh --chat` | Read-only (canaries: AI cost) |
 | `node tests/scripts/test-chat-guardrails.mjs` | Storefront chat refusals and normal answers. Set `API_FUNCTIONS_URL`, `API_MCP_URL`, `CHAT_TEST_EMAIL` and `CHAT_TEST_PASSWORD` to a disposable consumer. | AI cost |
-| `API_URL=… bash tests/scripts/test-product-comparison.sh` | Anonymous DAB GraphQL product reads; set `API_URL` because the fallback host is not your deployment | Read-only |
-| `bash tests/scripts/test-search-suggestions.sh [query]` | Anonymous `/api/search/suggestions`; `API_FUNCTIONS_URL` defaults to `http://localhost:7071` | Read-only |
+| `bash tests/scripts/test-product-comparison.sh` | Anonymous DAB GraphQL product reads for the compare page; reads `API_URL` from the selected azd environment unless `API_URL` is set | Read-only |
+| `bash tests/scripts/test-search-suggestions.sh [query]` | Anonymous `/api/search/suggestions`; `API_FUNCTIONS_URL` defaults to the azd value | Read-only |
 | `bash tests/scripts/test-robots-sitemap.sh` | Anonymous robots and sitemap; writes results under `/workspaces/AdventureWorks/test-results` | Read-only |
 | `bash tests/scripts/test-product-reviews.sh [api-url]` | Anonymous DAB `ProductReview` create and update; deployed DAB grants anonymous `read` only, so the writes are denied | Mutating (local only) |
 | `bash tests/scripts/test-receipt-generation.sh [functions-url]` | Starts the receipt-generation orchestration (admin route; no token sent) | Mutating |
 | `bash tests/scripts/test-send-email.sh` | Sends a customer email (admin route; no token sent) | Email |
-| `bash tests/scripts/test-email-with-attachment.sh` | Queues an `order-email-generation` message using local `api-functions/local.settings.json` and `az storage`; the deployed storage account is private | Mutating, Email |
+| `bash tests/scripts/test-email-with-attachment.sh` | Queues an `order-email-generation` message using `STORAGE_ACCOUNT_NAME` (or the azd value) and `az storage`; the deployed storage account is private | Mutating, Email |
 | `bash tests/scripts/test-ai-and-mcp-complete.sh` | Legacy AI and MCP walkthrough without tokens; superseded by [AI and MCP testing](../../docs/testing/AI_AND_MCP_TESTING_GUIDE.md) | AI cost |
 | `bash tests/scripts/manual/test-manufacturing.sh [functions-url]` | Manufacturing runs and configuration | Mutating |
 | `bash tests/scripts/manual/test-supply-chain.sh [functions-url]` | Supply orders and planning | Mutating |
 | `bash tests/scripts/manual/test-supply-manufacturing-integration.sh [functions-url]` | Supply-to-manufacturing flow, including reset | Mutating |
 
 The password scripts need a disposable consumer's token and `BusinessEntityID`,
-not a canned internal identity. See [passwords and reset](../../docs/features/customers/passwords-and-reset.md).
+not a canned internal identity. The reset token arrives only by email, and
+reserved domains such as `@example.invalid` receive no email, so completion needs a
+consumer with a deliverable address. See [passwords and reset](../../docs/features/customers/passwords-and-reset.md).
 
 ## DAB check scripts
 
@@ -422,8 +420,8 @@ engine and contracts are in [`tests/auth`](../auth/).
    environment variables, never hard-coded hosts.
 2. Get tokens with `azure-auth.py`; never print tokens or passwords or enable
    shell tracing while they are in scope.
-3. Exit nonzero on failure and keep read-only probes off the
-   [side-effecting routes](#side-effecting-get-routes).
+3. Exit nonzero on failure and keep read-only probes on `GET` routes listed in
+   [`safeFunctionReadRoutes`](#read-only-get-routes).
 4. Clean up any fixture you create, and add a row with a safety label to this page.
 
 ## Related

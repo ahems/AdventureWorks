@@ -119,7 +119,7 @@ See [Web PubSub events](../../reference/webpubsub-events.md).
 ## Limits
 
 - Each AI promotion is a model call; auto-promotions can add AI cost during long [shopping simulator](../simulators/shopping-simulator.md) runs.
-- Storefront checkout discount codes (`SAVE10` and others) are separate demo codes; see [Cart and checkout](../commerce/cart-and-checkout.md).
+- Storefront checkout discount codes (`SAVE10` and others) are separate demo codes stored in `Sales.DiscountCode` and validated by Functions; see [Cart and checkout](../commerce/cart-and-checkout.md).
 
 ## Related code & docs
 

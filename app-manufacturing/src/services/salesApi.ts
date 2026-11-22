@@ -34,24 +34,29 @@ async function fetchAll<T>(
   return all;
 }
 
-/** Open / actionable customer demand: anything not Shipped/Cancelled/Rejected. */
+// SalesOrderHeader.Status: 1 In process, 2 Approved, 3 Backordered, 4 Rejected,
+// 5 Shipped, 6 Cancelled, 7 Delivered.
+export const OPEN_SALES_ORDER_FILTER = "Status ge 1 and Status le 3";
+export const FULFILLED_SALES_ORDER_FILTER = "(Status eq 5 or Status eq 7)";
+
+/** Open / actionable customer demand: In process, Approved or Backordered only. */
 export const fetchOpenSalesOrders = () =>
   fetchAll<SalesOrderHeader>("SalesOrderHeader", {
-    $filter: "Status lt 5",
+    $filter: OPEN_SALES_ORDER_FILTER,
     $orderby: "DueDate asc",
   });
 
-/** Most recent shipped orders for trailing-window demand metrics. */
+/** Most recent fulfilled (Shipped or Delivered) orders for trailing-window demand metrics. */
 export const fetchRecentShippedOrders = (sinceISODate: string) =>
   fetchAll<SalesOrderHeader>("SalesOrderHeader", {
-    $filter: `Status eq 5 and OrderDate ge ${sinceISODate}`,
+    $filter: `${FULFILLED_SALES_ORDER_FILTER} and OrderDate ge ${sinceISODate}`,
     $orderby: "OrderDate desc",
   });
 
-/** Latest single shipped order — used to anchor the trailing windows when the dataset is static. */
+/** Latest fulfilled (Shipped or Delivered) order — anchors the trailing windows when the dataset is static. */
 export async function fetchLatestShippedOrderDate(): Promise<string | null> {
   const res = await dabFetch(
-    `${API_BASE}/SalesOrderHeader?$filter=Status%20eq%205&$orderby=OrderDate%20desc&$first=1`,
+    `${API_BASE}/SalesOrderHeader?$filter=${encodeURIComponent(FULFILLED_SALES_ORDER_FILTER)}&$orderby=OrderDate%20desc&$first=1`,
   );
   if (!res.ok) return null;
   const json: ODataResponse<SalesOrderHeader> = await res.json();

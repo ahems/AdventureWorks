@@ -21,7 +21,7 @@ Storefront customers are AdventureWorks `Person` records. They sign up through A
 - **Sign in / sign out:** exchange email and password for OAuth tokens.
 - **Profile:** edit name, email address and phone numbers.
 - **Addresses:** add, edit, delete and label (billing, shipping and so on) addresses.
-- **Payment methods:** view and remove saved cards.
+- **Payment methods:** view, add (public test cards only; stored masked) and remove saved cards.
 - **Order history:** see orders with their status (1–7) and resend receipts. See [Order lifecycle](../commerce/order-lifecycle.md) and [Receipts](../commerce/receipts.md).
 - **Password:** change it from the account page or reset it by email; see [Passwords and reset](passwords-and-reset.md).
 
@@ -64,21 +64,21 @@ The storefront posts to `{api-mcp}/token` with:
 
 The first token targets DAB. The storefront uses the refresh token to obtain Functions and MCP tokens. Access tokens last 10 minutes and are refreshed 60 seconds before expiry; refresh tokens last 12 hours. Tokens are kept in `sessionStorage`.
 
-The grant is for consumers only: any `Person` who is not an employee (`PersonType` `EM`). Employees sign in to the admin and manufacturing apps instead; see [OAuth server](../mcp-oauth/README.md).
+The grant is for consumers only: individual customers (`PersonType` `IN`, which signup creates). Store, vendor and general contacts and sales persons (`SC`, `VC`, `GC`, `SP`) cannot sign in. Employees sign in to the admin and manufacturing apps instead; see [OAuth server](../mcp-oauth/README.md).
 
 ### Signup
 
-`POST /api/signup` with `{ email, firstName, lastName, password }` creates the person in one transaction. Validation: valid email of at most 50 characters, names of 1–50 characters, and a password of at least 8 characters.
+`POST /api/signup` with `{ email, firstName, lastName, password }` creates the person in one transaction. Validation: valid email of at most 50 characters, names of 1–50 characters, and a password of at least 8 characters. An email that already belongs to any person returns HTTP 409, including when a concurrent signup wins the race.
 
 ### Profile, phones and addresses
 
 | Data | API |
 |---|---|
 | Name | DAB GraphQL `updatePerson` |
-| Email | DAB GraphQL `updateEmailAddress` |
+| Email | DAB REST `EmailAddress` (`POST`, `PATCH`); HTTP 409 shows "That email address is already in use" |
 | Phones | DAB REST `PersonPhone` |
 | Addresses | Functions `GET` / `POST /api/addresses`, `GET` / `PUT` / `DELETE /api/addresses/{id}`, `/api/addresses/{id}/type`, `GET /api/person-addresses` |
-| Saved cards | Functions `GET /api/payment-methods`; remove with DAB REST `PersonCreditCard` |
+| Saved cards | Functions `GET`/`POST /api/payment-methods`; remove with DAB REST `PersonCreditCard` |
 
 `Person.Address` is not exposed through DAB because its `SpatialLocation` column uses the SQL `geography` type, so addresses go through Azure Functions.
 
@@ -94,8 +94,9 @@ Account pages have no dedicated push events. The storefront subscribes to the `o
 
 - DAB ownership policies compare the row's `BusinessEntityID` with the signed `business_entity_id` claim, so customers read and update only their own rows.
 - Functions address and payment routes require `customers.read` / `customers.write` and bind to the signed-in customer.
-- The `/token` endpoint is rate-limited to 20 requests per minute per IP address.
+- The credentials grant on `/token` is rate-limited to 20 requests per minute per IP address; refresh requests use a separate, higher limit.
 - Signup and password reset are public by design.
+- Email addresses are unique: the seed job adds the `UQ_EmailAddress_EmailAddress` constraint on `Person.EmailAddress(EmailAddress)`, so a customer cannot claim another person's address through DAB, signup (HTTP 409) or a profile edit (HTTP 409). As a second guard, api-mcp refuses sign-in when an email matches more than one person instead of picking one.
 
 See [identity and auth](../../architecture/identity-and-auth.md), [Functions OAuth](../functions-oauth/README.md) and [end-to-end authentication](../authentication/END_TO_END_AUTHENTICATION.md).
 

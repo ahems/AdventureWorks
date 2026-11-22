@@ -84,7 +84,11 @@ public class QualifyingProductInfo
 /// <summary>Persisted state for the verified-reviews background job (Table Storage entity).</summary>
 public class VerifiedReviewsJobState
 {
+    /// <summary>A running job with no progress for this long is reported as stale and is expired by the watchdog.</summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(10);
+
     public bool IsRunning { get; set; }
+    public string JobId { get; set; } = string.Empty;
     public int ProductId { get; set; }         // 0 for batch jobs
     public string ProductName { get; set; } = string.Empty;  // current product name or job description
     public int ProcessedCount { get; set; }    // reviews generated so far
@@ -94,7 +98,26 @@ public class VerifiedReviewsJobState
     public DateTimeOffset? StartedAt { get; set; }
     /// <summary>Updated every time the job saves progress. Used to detect stuck/orphaned jobs.</summary>
     public DateTimeOffset? LastProgressAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
     public string? LastError { get; set; }
+    /// <summary>Review requests belonging to products whose queue message has completed.</summary>
+    public int CompletedReviewCount { get; set; }
+
+    /// <summary>Computed on read; the status GET never resets the job.</summary>
+    public bool IsStale => IsRunning && (LastProgressAt ?? StartedAt) is { } lastActivity &&
+        DateTimeOffset.UtcNow - lastActivity > StaleAfter;
+}
+
+/// <summary>
+/// Queue payload for one product of a verified-review job. Carries customer IDs only;
+/// the processor re-reads eligible (still unreviewed) customers so redelivery is idempotent.
+/// </summary>
+public class VerifiedReviewsQueueMessage
+{
+    public string JobId { get; set; } = string.Empty;
+    public ProductForReviewGeneration Product { get; set; } = new();
+    public List<int> CustomerIds { get; set; } = [];
+    public DateTimeOffset EnqueuedAt { get; set; }
 }
 
 /// <summary>Snapshot review record used for queue-based auto-moderation.</summary>

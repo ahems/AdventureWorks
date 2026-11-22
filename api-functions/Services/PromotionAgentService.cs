@@ -40,10 +40,8 @@ public class PromotionAgentService
         _telemetryClient = telemetryClient;
         _productService = productService;
 
-        // Use the plain promotion agent (not the workflow orchestrator variant) because
-        // PromotionAgentService relies on structured_inputs and JSON output instructions which are
-        // configured only on admin-promotion-agent. The workflow agent is a Foundry orchestrator
-        // without tool/instruction setup and would return unstructured prose.
+        // PromotionAgentService relies on the structured_inputs and JSON output instructions
+        // configured on admin-promotion-agent.
         var agentId = configuration["AI_AGENT_PROMOTION_ID"];
         _agentId = agentId ?? throw new InvalidOperationException(
             "AI_AGENT_PROMOTION_ID environment variable is not set");

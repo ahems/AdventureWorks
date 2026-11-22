@@ -18,7 +18,7 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 # Get environment variables
-API_URL=$(azd env get-value "VITE_API_URL" 2>/dev/null || echo "")
+API_URL=$(azd env get-value API_URL --no-prompt 2>/dev/null || echo "")
 
 if [ -z "$API_URL" ]; then
     echo -e "${RED}❌ Error: Could not get API URL from azd environment${NC}"

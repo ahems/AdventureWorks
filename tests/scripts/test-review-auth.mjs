@@ -10,8 +10,8 @@ const submission = { productId: 1, userName: "Shopper", rating: 5, title: "Good"
 
 async function loadReviews({ authenticated = true, reviews = [], status = 200,
   response = { value: [{ ProductReviewID: 99 }] },
-  graphqlResponse = { updateProductReview: { ProductReviewID: 99, HelpfulVotes: 1 } },
-  graphqlError = false } = {}) {
+  voteStatus = 200, voteResponse = { productReviewId: 99, helpfulVotes: 1, voted: true, changed: true },
+  voteError = false } = {}) {
   const calls = [];
   const errors = [];
   const storage = new Map();
@@ -32,11 +32,21 @@ async function loadReviews({ authenticated = true, reviews = [], status = 200,
     "@/context/AuthContext": { useAuth: () => ({ isAuthenticated: authenticated, user: authenticated ? user : null }) },
     "@/lib/graphql-client": { graphqlClient: { request: async (query, variables) => {
       calls.push({ query, variables });
-      if (graphqlError) throw new Error("GraphQL request failed");
-      return graphqlResponse;
+      throw new Error("Unexpected GraphQL request");
     } } },
-    "@/lib/graphql-queries": { GET_PRODUCT_REVIEWS: "", GET_ALL_REVIEWS: "", UPDATE_REVIEW_VOTES: "vote" },
-    "@/lib/utils": { getRestApiUrl: () => "https://dab.example.test/api" },
+    "@/lib/graphql-queries": { GET_PRODUCT_REVIEWS: "", GET_ALL_REVIEWS: "" },
+    "@/lib/graphql-pagination": { fetchAllPages: async () => [] },
+    "@/lib/utils": {
+      getRestApiUrl: () => "https://dab.example.test/api",
+      getFunctionsApiUrl: () => "https://functions.example.test",
+    },
+    "@/services/functionsAuth": {
+      functionsFetch: async (url, options) => {
+        calls.push({ url, options, functions: true });
+        if (voteError) throw new Error("Functions request failed");
+        return new Response(JSON.stringify(voteResponse), { status: voteStatus });
+      },
+    },
     "@/lib/dabFetch": {
       dabFetch: async (url, options) => {
         calls.push({ url, options });
@@ -111,23 +121,39 @@ test("HTTP errors or missing persisted review IDs cannot become submission succe
   }
 });
 
-test("authenticated voting is limited to vote fields and refuses self-votes", async () => {
+test("authenticated voting uses the one-vote-per-user Functions route and refuses self-votes", async () => {
   const otherReview = { id: "api_99", userID: 8, helpful: 0 };
-  const { hook, calls } = await loadReviews({ reviews: [otherReview] });
+  const { hook, calls, updates } = await loadReviews({ reviews: [otherReview] });
   assert.equal(await hook.markAsUseful(otherReview.id, user.id), true);
-  assert.equal(calls[0].query, "vote");
-  assert.equal(calls[0].variables.id, 99);
-  assert.equal(calls[0].variables.votes, 1);
-  assert.deepEqual(Object.keys(calls[0].variables).sort(), ["id", "votes"]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].functions, true);
+  assert.equal(calls[0].url, "https://functions.example.test/api/reviews/99/vote");
+  assert.equal(calls[0].options.method, "POST");
+  assert.equal(calls[0].options.body, undefined);
+  assert.equal(updates.length, 1);
   const own = await loadReviews({ reviews: [{ ...otherReview, userID: user.businessEntityId }] });
   assert.equal(await own.hook.markAsUseful(otherReview.id, user.id), false);
   assert.equal(own.calls.length, 0);
 });
 
-test("failed or unconfirmed GraphQL votes do not update local state", async () => {
+test("a second click removes the user's vote through the same route", async () => {
+  const review = { id: "api_99", userID: 8, helpful: 1 };
+  const { hook, calls, storage } = await loadReviews({
+    reviews: [review],
+    voteResponse: { productReviewId: 99, helpfulVotes: 0, voted: false, changed: true },
+  });
+  storage.set("adventureworks_user_reviews_votes", JSON.stringify({ api_99: [user.id] }));
+  assert.equal(await hook.markAsUseful(review.id, user.id), true);
+  assert.equal(calls[0].options.method, "DELETE");
+  assert.deepEqual(JSON.parse(storage.get("adventureworks_user_reviews_votes")), { api_99: [] });
+});
+
+test("failed or unconfirmed votes do not update local state", async () => {
   const review = { id: "api_99", userID: 8, helpful: 0 };
-  for (const options of [{ graphqlError: true }, { graphqlResponse: { updateProductReview: null } },
-    { graphqlResponse: { updateProductReview: { ProductReviewID: 99, HelpfulVotes: 0 } } }]) {
+  for (const options of [{ voteError: true }, { voteStatus: 403 }, { voteStatus: 404 },
+    { voteResponse: { productReviewId: 100, helpfulVotes: 1, voted: true } },
+    { voteResponse: { productReviewId: 99, helpfulVotes: "1", voted: true } },
+    { voteResponse: { productReviewId: 99, helpfulVotes: 0, voted: false } }]) {
     const { hook, storage, updates, errors } = await loadReviews({ ...options, reviews: [review] });
     assert.equal(await hook.markAsUseful(review.id, user.id), false);
     assert.equal(storage.size, 0);

@@ -3,6 +3,7 @@ import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
 import { gql } from "graphql-request";
 import { Review } from "@/types/review";
+import { dabFetch } from "@/services/dabFetch";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export const useReviews = (productId: number) => {
           ? `${review.title}\n${review.comment}`
           : review.comment,
       };
-      const response = await fetch(`${restUrl}/ProductReview`, {
+      const response = await dabFetch(`${restUrl}/ProductReview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -120,7 +121,7 @@ export const useReviews = (productId: number) => {
       const review = reviews.find((r) => r.id === reviewId);
       if (!review) return false;
       const restUrl = getRestApiUrl();
-      const response = await fetch(
+      const response = await dabFetch(
         `${restUrl}/ProductReview/ProductReviewID/${reviewId}`,
         {
           method: "PATCH",

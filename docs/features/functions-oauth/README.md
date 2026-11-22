@@ -1,6 +1,6 @@
 ---
 title: Functions API OAuth resource server
-summary: How the api-functions worker middleware validates api-mcp-issued, Functions-audience JWTs and applies per-route tier, scope, category and ownership policy to all 200 HTTP functions, with FUNCTIONS_OAUTH_MODE=enforced.
+summary: How the api-functions worker middleware validates api-mcp-issued, Functions-audience JWTs and applies per-route tier, scope, category and ownership policy to all 205 HTTP functions, with FUNCTIONS_OAUTH_MODE=enforced.
 audience: [developer, security-reviewer, ai-agent]
 components: [api-functions, api-mcp, app, app-admin, app-manufacturing, infra]
 related: [../authentication/END_TO_END_AUTHENTICATION.md, ../../architecture/identity-and-auth.md, ROUTE_SCOPE_MATRIX.md, ../mcp-oauth/README.md, ../../testing/AZURE_AUTHENTICATED_SCRIPTS.md]
@@ -75,7 +75,7 @@ BLOCKED obligation for a complete real host/route-binding and mutation-side-effe
 matrix and for SQL-backed ownership. The middleware challenge trims the issuer's
 trailing slash before advertising `/.well-known/oauth-protected-resource`.
 
-Run locally with existing restored dependencies:
+Run the offline middleware tests with existing restored dependencies:
 
 ```bash
 dotnet test api-functions.Tests/api-functions.Tests.csproj --no-restore \
@@ -93,7 +93,7 @@ valid-token ownership and side effects.
 
 `api-functions` is the .NET-isolated Azure Functions app (running on Flex Consumption) that
 provides custom business logic for the e-shop, admin, and manufacturing frontends, plus AI
-agent hosting and simulators. Every one of its **200 HTTP-triggered Functions is declared
+agent hosting and simulators. Every one of its **205 HTTP-triggered Functions is declared
 `AuthorizationLevel.Anonymous`** at the platform level; authorization is applied by the OAuth
 middleware instead. Each route is either explicitly public or an OAuth-protected resource with
 a scope and access mode, using the same authorization server, scope catalog and validation
@@ -106,11 +106,11 @@ reachable; their Azure dependency identities still require separate assurance.
 
 | Trigger kind | Count | In scope for OAuth? |
 | ------------ | ----- | ------------------- |
-| HTTP (`HttpTrigger`) | 200 | **Yes** — classified in the matrix |
-| Queue (`QueueTrigger`) | 15 | No — internal |
+| HTTP (`HttpTrigger`) | 205 | **Yes** — classified in the matrix |
+| Queue (`QueueTrigger`) | 16 | No — internal |
 | SQL (`SqlTrigger`) | 2 | No — internal |
-| Timer (`TimerTrigger`) | 6 | No — internal |
-| Durable activity / orchestration | 17 / 5 | No — internal |
+| Timer (`TimerTrigger`) | 7 | No — internal |
+| Durable activity / orchestration | 6 / 2 | No — internal |
 
 `Program.cs` uses `ConfigureFunctionsWebApplication()` (ASP.NET Core integration), so a
 JWT-validation **middleware** (`IFunctionsWorkerMiddleware`,
@@ -142,7 +142,7 @@ flowchart LR
     MFG[app-manufacturing<br/>manufacturing staff only]
   end
   MCP[api-mcp<br/>MCP tools]
-  FUNC[api-functions<br/>200 HTTP Functions]
+  FUNC[api-functions<br/>205 HTTP Functions]
 
   ESHOP -->|catalog, addresses, receipts,<br/>agent/chat, pre-auth| FUNC
   ADMIN -->|reporting, simulators, reviews,<br/>B2B store, AI generation| FUNC
@@ -169,9 +169,9 @@ Every route is assigned exactly one tier (full list in
 | ---- | ---- | ------- | ----- |
 | **P** | Anonymous | No token. Public catalog, discovery, health, password-reset pre-auth, consumer signup, and bounded cart capability handlers. | 20 |
 | **A** | Authenticated (group-scoped) | Valid Functions token + `realtime.connect`; group grants also require the mapped domain scope/category. | 1 |
-| **C** | Consumer (ownership) | Valid token + business scope; consumers are restricted to their **own** records. Some handlers also constrain internal callers. | 17 |
-| **I** | Internal-only | Valid token + business scope + **non-consumer category** (defense-in-depth). Includes the 40 MCP-proxied routes. | 162 |
-| | | **Total** | **200** |
+| **C** | Consumer (ownership) | Valid token + business scope; consumers are restricted to their **own** records. Some handlers also constrain internal callers. | 20 |
+| **I** | Internal-only | Valid token + business scope + **non-consumer category** (defense-in-depth). Includes the 40 MCP-proxied routes. | 164 |
+| | | **Total** | **205** |
 
 ## MCP-proxied routes — api-mcp service token
 
@@ -294,7 +294,7 @@ read-only host requests.
 
 ## Route-to-scope matrix
 
-The complete, authoritative source classification of all 200 HTTP Functions is in
+The complete, authoritative source classification of all 205 HTTP Functions is in
 **[`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md)** — grouped by functional area, with method,
 route, tier, required scope, access mode, and ownership key for every endpoint. It is the source of
 truth the resource server enforces. Completeness is checked by a reflection test
@@ -309,7 +309,7 @@ The resource server reads `FUNCTIONS_OAUTH_MODE`
 only possible when the issuer, audience, and OIDC metadata address are all resolved from
 configuration. Explicit `enforced` or `audit` with incomplete configuration fails
 startup; invalid mode strings also fail instead of silently disabling protection.
-An unset mode defaults to `disabled` for local development.
+An unset mode defaults to `disabled`; deployments set `enforced`.
 
 | Mode | Token absent | Token present | Blocks? | Purpose |
 | ---- | ------------ | ------------- | ------- | ------- |
@@ -372,7 +372,7 @@ inside its handler; it is not an anonymous business endpoint.
 
 | Path | Role |
 | ---- | ---- |
-| [`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md) | Complete source route → tier/scope/mode/ownership matrix (all 200 HTTP Functions) |
+| [`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md) | Complete source route → tier/scope/mode/ownership matrix (all 205 HTTP Functions) |
 | [`api-mcp/AdventureWorks/Auth/OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs) | Shared business-domain scope catalog (reused) |
 | [`api-mcp/AdventureWorks/Auth/ApplicationRoles.cs`](../../../api-mcp/AdventureWorks/Auth/ApplicationRoles.cs) | Role → scope mapping (reused) |
 | [`api-mcp/AdventureWorks/Auth/AuthorizationServerOptions.cs`](../../../api-mcp/AdventureWorks/Auth/AuthorizationServerOptions.cs) | Resource identifiers / `AllowedResources()` (includes `functions`) |

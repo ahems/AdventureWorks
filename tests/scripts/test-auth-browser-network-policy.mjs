@@ -30,7 +30,7 @@ test("DAB browser guard admits only reviewed read operations", () => {
   assert.throws(() => dabBrowserReadPolicy(unreviewed), /reviewed table\/view/);
 });
 
-test("Functions browser guard denies side-effecting or unreviewed reads", () => {
+test("Functions browser guard denies unreviewed reads and former state-changing GET routes", () => {
   assert.equal(functionsBrowserRequest(request("GET", "/api/webpubsub/negotiate")), true);
   for (const path of ["/api/manufacturing/status", "/api/archive/trigger",
     "/api/orders/delivery/trigger", "/api/unknown"]) {

@@ -39,7 +39,7 @@ Product pages show customer reviews with ratings, helpful votes and store replie
     --identity admin --resource functions --path /api/reviews/moderation/status
   ```
 
-- **Script:** [`scripts/generators/generate-reviews-with-embeddings.sh`](../../../scripts/generators/generate-reviews-with-embeddings.sh) starts review generation and then embeddings. Both routes need an `admin.write` token.
+- **Script:** [`scripts/generators/generate-reviews-with-embeddings.sh`](../../../scripts/generators/generate-reviews-with-embeddings.sh) queues review generation with an `admin.write` token from `azure-auth.py`; embeddings are queued automatically when generation finishes.
 
 ## How it works
 
@@ -51,7 +51,8 @@ flowchart TD
   Batch --> SQL[("Production.ProductReview")]
   Batch -->|"last batch"| EmbQ["Queue ai-job-embeddings-queue"]
   EmbQ --> Emb["Write CommentsEmbedding"]
-  Admin -->|"generate-verified-reviews/start"| Ver["Background verified-review job"]
+  Admin -->|"generate-verified-reviews/start"| VerQ["Queue verified-reviews-queue"]
+  VerQ --> Ver["Verified-review queue trigger"]
   Ver --> SQL
   Ver --> Replies[("Production.ProductReviewReply")]
   Ver --> Job[("Table verifiedReviewsJob")]
@@ -67,7 +68,7 @@ flowchart TD
 
 - Reviews are read with DAB GraphQL `productReviews`.
 - A signed-in customer creates a review with DAB REST `POST /api/ProductReview`. The storefront sends the customer's `UserID`, and DAB's database policy rejects the request unless it matches the `business_entity_id` claim in the signed token.
-- Helpful votes update `HelpfulVotes` with GraphQL `updateProductReview`; the browser remembers your votes in `localStorage`.
+- A signed-in customer votes a review helpful with Functions `POST /api/reviews/{id}/vote` and removes the vote with `DELETE` on the same route. The server stores one `Production.ProductReviewVote` row per customer and review, changes `HelpfulVotes` in the same transaction and returns the new count. A repeated vote returns the current count without counting twice, and customers cannot vote for their own review (HTTP 403). The browser remembers your votes in `localStorage` to choose between voting and removing a vote.
 
 ### Random AI reviews
 
@@ -79,12 +80,12 @@ flowchart TD
 |---|---|
 | `GET /api/generate-verified-reviews/summary` | Products that qualify and the maximum eligible customers per product |
 | `POST /api/generate-verified-reviews/start` | `{ productCount, reviewsPerProduct }` (`productCount: 0` = all) |
-| `GET /api/generate-verified-reviews/status` | Progress (`processedCount`, `totalCount`) |
+| `GET /api/generate-verified-reviews/status` | Read-only progress (`jobId`, `processedCount`, `totalCount`, computed `isStale`) |
 | `GET /api/products/{id}/eligible-reviewer-count` | Product-page gate |
 | `GET /api/products/{id}/customers-with-delivered-orders` | Diagnostic list |
 | `POST /api/products/{id}/generate-reviews-with-replies` | Reviews and replies for one product |
 
-The job runs in the background and stores its state in the `verifiedReviewsJob` table. `ReviewJobWatchdog` runs every minute and ends jobs with no activity for 10 minutes.
+`start` saves the job (with a new `jobId`) in the `verifiedReviewsJob` table and enqueues one message per product on `verified-reviews-queue`, so the work survives scale-in and host recycles. `VerifiedReviews_QueueTrigger` re-reads eligible customers, generates the missing reviews and replies, and updates progress with optimistic concurrency. A per-job product marker makes redelivered messages count once; messages for an older or finished job are ignored. Failures are retried by the runtime and then moved to `verified-reviews-queue-poison`. The status route never changes state: `isStale` is `true` when a running job has had no activity for 10 minutes. `ReviewJobWatchdog` runs every minute and ends such jobs, and `start` may replace a stale job immediately.
 
 ### Moderation
 
@@ -95,9 +96,10 @@ The job runs in the background and stores its state in the `verifiedReviewsJob` 
 | Data | Store |
 |---|---|
 | Reviews | `Production.ProductReview` (including `HelpfulVotes`, `IsModerated` and `CommentsEmbedding VECTOR(1536)`) |
+| Helpful votes | `Production.ProductReviewVote` (one row per customer and review; created by the seed job) |
 | Store replies | `Production.ProductReviewReply` |
 | Job state | Tables `verifiedReviewsJob`, `reviewModerationJob` |
-| Queues | `ai-job-chat-queue`, `ai-job-embeddings-queue`, `review-moderation-queue` |
+| Queues | `ai-job-chat-queue`, `ai-job-embeddings-queue`, `review-moderation-queue`, `verified-reviews-queue` |
 
 ## Events (Web PubSub)
 
@@ -105,9 +107,10 @@ Group `reviews`:
 
 | Event | Meaning |
 |---|---|
-| `generation-progress`, `generation-state-changed` | Verified-review job progress and state |
+| `generation-progress`, `generation-state-changed` | Verified-review job progress and state (`jobId` and counts only; the admin wizard re-reads status) |
 | `moderation-progress`, `moderation-state-changed` | Moderation progress and state |
 | Terminal events (`changeType: "terminal"`) | A job finished, failed or expired |
+| `review-votes-changed` | A customer added or removed a helpful vote (`productReviewId`, `productId` only) |
 | `database-changed` | `ProductReview` or `ProductReviewReply` changed |
 
 See [Web PubSub events](../../reference/webpubsub-events.md).
@@ -115,7 +118,8 @@ See [Web PubSub events](../../reference/webpubsub-events.md).
 ## Security
 
 - Anonymous users can read reviews; DAB hides the reviewer `EmailAddress` from anonymous reads.
-- Customers can create reviews and change helpful votes through DAB role policies.
+- Customers can create reviews through DAB; the create policy binds `UserID` to the signed `business_entity_id`. Customers cannot update or delete reviews through DAB.
+- Helpful votes require a consumer Functions token with `customers.write`; the voter is always the signed `business_entity_id`, never a request value.
 - Admin generation, moderation and embedding routes require `admin.write`; status and summary routes require `admin.read`. The `reviews` Web PubSub group is internal only.
 
 See [DAB entities](../../reference/dab-entities.md) and [Functions route scopes](../functions-oauth/ROUTE_SCOPE_MATRIX.md).

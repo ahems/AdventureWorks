@@ -306,7 +306,7 @@ fi
 # PART 3: TEST ALL MCP SERVER TOOLS
 # ==============================================================================
 
-print_test_header "PART 3: Testing MCP Server Tools (via SSE)"
+print_test_header "PART 3: Testing MCP Server Tools (via Streamable HTTP)"
 
 # Helper function to test MCP tool via JSON-RPC 2.0
 test_mcp_tool() {
@@ -333,7 +333,7 @@ EOF
     echo "Tool: $tool_name"
     echo "Params: $params"
     
-    # Call MCP server endpoint (returns SSE format with event: and data: lines)
+    # Call the Streamable HTTP MCP endpoint (responses use event-stream framing with event: and data: lines)
     # Note: MCP_SERVICE_URL already includes /mcp endpoint
     local full_response=$(curl -s -w "\n%{http_code}" -X POST "${MCP_SERVICE_URL}" \
         -H "Content-Type: application/json" \

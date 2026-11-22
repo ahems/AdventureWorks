@@ -155,31 +155,24 @@ fi
 
 echo ""
 
-# Test 4: Update helpful votes (PATCH)
+# Test 4: Direct helpful-vote writes are denied by DAB
+# Helpful votes are recorded only by POST/DELETE /api/reviews/{id}/vote on the Functions API
+# (one vote per signed-in customer); DAB grants no consumer or anonymous review updates.
 if [ -n "$NEW_REVIEW_ID" ]; then
-    echo -e "${BLUE}Test 4: Updating helpful votes count${NC}"
+    echo -e "${BLUE}Test 4: Direct helpful-vote PATCH must be denied${NC}"
     echo "-------------------------------------------"
-    echo "Request: PATCH ${REST_API_URL}/api/ProductReview/${NEW_REVIEW_ID}"
+    echo "Request: PATCH ${REST_API_URL}/api/ProductReview/ProductReviewID/${NEW_REVIEW_ID}"
     
-    PATCH_DATA='{"HelpfulVotes": 5}'
-    
-    PATCH_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X PATCH \
-      "${REST_API_URL}/api/ProductReview/${NEW_REVIEW_ID}" \
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+      "${REST_API_URL}/api/ProductReview/ProductReviewID/${NEW_REVIEW_ID}" \
       -H "Content-Type: application/json" \
-      -d "$PATCH_DATA")
-    
-    HTTP_CODE=$(echo "$PATCH_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
-    RESPONSE_BODY=$(echo "$PATCH_RESPONSE" | sed '/HTTP_CODE:/d')
+      -d '{"HelpfulVotes": 5}')
     
     echo "HTTP Status: $HTTP_CODE"
-    echo "Response: $RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
-    echo ""
-    
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-        echo -e "${GREEN}✓ Successfully updated helpful votes${NC}"
+    if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+        echo -e "${GREEN}✓ Direct vote-count write denied${NC}"
     else
-        echo -e "${RED}✗ Failed to update helpful votes${NC}"
-        echo -e "${YELLOW}Note: PATCH may require authentication or special permissions${NC}"
+        echo -e "${RED}✗ Direct vote-count write was not denied${NC}"
     fi
     echo ""
 fi

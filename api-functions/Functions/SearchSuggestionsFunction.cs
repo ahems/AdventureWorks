@@ -14,17 +14,20 @@ public class SearchSuggestionsFunction
     private readonly AIService _aiService;
     private readonly ProductService _productService;
     private readonly ReviewService _reviewService;
+    private readonly AiRateLimitService _rateLimiter;
 
     public SearchSuggestionsFunction(
         ILogger<SearchSuggestionsFunction> logger,
         AIService aiService,
         ProductService productService,
-        ReviewService reviewService)
+        ReviewService reviewService,
+        AiRateLimitService rateLimiter)
     {
         _logger = logger;
         _aiService = aiService;
         _productService = productService;
         _reviewService = reviewService;
+        _rateLimiter = rateLimiter;
     }
 
     /// <summary>
@@ -62,6 +65,14 @@ public class SearchSuggestionsFunction
                 });
                 return response;
             }
+
+            if (query.Length > AiRequestGuard.MaxSuggestionQueryLength)
+                return await AiRequestGuard.BadRequestAsync(req,
+                    $"Query parameter 'q' must be at most {AiRequestGuard.MaxSuggestionQueryLength} characters");
+
+            var limit = await _rateLimiter.CheckAsync(req, AiRateLimitBucket.Search);
+            if (!limit.Allowed)
+                return await AiRequestGuard.TooManyRequestsAsync(req, limit);
 
             _logger.LogInformation("Generating search suggestions for: {Query}", query);
 

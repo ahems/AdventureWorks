@@ -43,8 +43,8 @@ public class ManufacturingProposalFunctions
     }
 
     // ── GET /api/manufacturing/proposals ─────────────────────────────────────
-    // Returns the most recent pending proposals (default 10), auto-rejecting any
-    // that are older than the TTL or beyond the display cap.
+    // Returns the most recent pending proposals (default 10) within the TTL. Read-only:
+    // SimulationMaintenance_Timer rejects expired and over-cap proposals.
 
     [Function(nameof(GetManufacturingProposals))]
     public async Task<HttpResponseData> GetManufacturingProposals(
@@ -52,8 +52,8 @@ public class ManufacturingProposalFunctions
         HttpRequestData req)
     {
         var ttlStr    = req.Query["ttlMinutes"];
-        var ttl       = int.TryParse(ttlStr, out var t) ? t : 5;
-        var proposals = await _proposalService.ListPendingWithLimitAsync(limit: 10, ttlMinutes: ttl);
+        var ttl       = int.TryParse(ttlStr, out var t) ? t : ManufacturingProposalService.DefaultTtlMinutes;
+        var proposals = await _proposalService.ListVisiblePendingAsync(ManufacturingProposalService.DefaultDisplayLimit, ttl);
         var response  = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(proposals.Select(p => new
         {

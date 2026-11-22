@@ -1,0 +1,52 @@
+{
+  "title": "Giúp tôi chọn",
+  "intro": {
+    "title": "Hãy cùng tìm trang bị hoàn hảo cho bạn!",
+    "description": "Trả lời 5 câu hỏi nhanh và AI của chúng tôi sẽ duyệt danh mục để tìm sản phẩm phù hợp nhất với bạn.",
+    "cta": "Bắt đầu nào",
+    "hint": "Được hỗ trợ bởi AI · Mất khoảng 1 phút"
+  },
+  "loading": {
+    "questions": "Đang tạo câu hỏi dành riêng cho bạn…",
+    "recommendations": "Đang tìm trong danh mục và chuẩn bị gợi ý cho bạn…"
+  },
+  "progress": {
+    "question": "Câu hỏi {{current}} / {{total}}"
+  },
+  "nav": {
+    "back": "Quay lại",
+    "next": "Tiếp",
+    "findProducts": "Tìm sản phẩm của tôi"
+  },
+  "results": {
+    "title": "Lựa chọn dành riêng cho bạn",
+    "viewProduct": "Xem sản phẩm",
+    "noResults": "Hiện chưa tìm thấy kết quả khớp chính xác. Hãy duyệt các danh mục hoặc dùng thanh tìm kiếm.",
+    "startAgain": "Bắt đầu lại"
+  },
+  "profile": {
+    "title": "Đôi chút về bạn",
+    "subtitle": "Giúp chúng tôi tìm sản phẩm thật sự phù hợp.",
+    "gender": {
+      "label": "Giới tính (không bắt buộc)",
+      "male": "Nam",
+      "female": "Nữ",
+      "preferNotToSay": "Không muốn trả lời"
+    },
+    "height": {
+      "label": "Chiều cao của bạn",
+      "placeholder": "Chọn chiều cao…"
+    },
+    "colors": {
+      "label": "Màu yêu thích",
+      "hint": "Để trống nếu không có ưu tiên."
+    },
+    "continue": "Tiếp tục"
+  },
+  "error": {
+    "loadQuestions": "Đã xảy ra sự cố khi tạo câu hỏi. Vui lòng thử lại.",
+    "loadRecommendations": "Đã xảy ra sự cố khi tìm gợi ý. Vui lòng thử lại.",
+    "rateLimited": "Chúng tôi đã nhận được nhiều yêu cầu AI từ bạn. Vui lòng thử lại sau {{minutes}} phút.",
+    "tryAgain": "Thử lại"
+  }
+}

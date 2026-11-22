@@ -84,17 +84,20 @@ flowchart LR
 | Login cookie | 30 minutes |
 
 Tokens are signed with RS256 using the `mcp-signing` certificate from Key Vault, which
-api-mcp reads with its managed identity. `/token` is rate-limited to 20 requests per minute
-per IP for all grants, and `/login` to 10.
+api-mcp reads with its managed identity. The `/token` credentials grant is limited to 20
+requests per minute per IP (code, refresh and managed-identity grants to 300), and `/login`
+to 10.
 
 ## Users, roles and scopes
 
-A user's **role** comes from the database, never from the user name. Any person who is
-not an employee is a `consumer`. Employees get a role from their current department.
+A user's **role** comes from the database, never from the user name. An individual
+customer (`PersonType` `IN`) is a `consumer`; employees (`EM`) get a role from their current
+department. Other person types (store, vendor and general contacts, sales persons) cannot
+sign in.
 
 | Role | Department(s) | Scopes besides `mcp.access`, `realtime.connect`, `products.read` |
 | ---- | ------------- | ----------------------------------------------------------------- |
-| `consumer` | Not an employee | `orders.read`, `orders.write`, `customers.read`, `customers.write` |
+| `consumer` | Individual customer (`IN`) | `orders.read`, `orders.write`, `customers.read`, `customers.write` |
 | `sales-admin` | Sales (3) | `sales.read`, `customers.read`, `customers.write`, `orders.read`, `admin.read` |
 | `marketing-admin` | Marketing (4) | `sales.read`, `customers.read`, `customers.write`, `admin.read`, `admin.write` |
 | `inventory-admin` | Purchasing (5), Shipping and Receiving (15) | `inventory.read`, `manufacturing.read`, `admin.read` |
@@ -137,9 +140,9 @@ flowchart TB
 - **DAB** — role permissions on each of the 69 entities, with row filters such as
   `@item.CustomerID eq @claims.customer_id`. Without a token the caller is `anonymous`
   (read-only catalog). See the [DAB entity reference](../reference/dab-entities.md).
-- **Functions** — all 200 HTTP functions are anonymous at the platform level; the worker
+- **Functions** — all 205 HTTP functions are anonymous at the platform level; the worker
   middleware applies the per-route policy from `FunctionAuthorizationRegistry`: Public 20,
-  Authenticated group-scoped 1 (Web PubSub negotiate), Consumer 17, Internal 162.
+  Authenticated group-scoped 1 (Web PubSub negotiate), Consumer 20, Internal 164.
   Unclassified functions are denied. See
   [ROUTE_SCOPE_MATRIX.md](../features/functions-oauth/ROUTE_SCOPE_MATRIX.md).
 - **MCP** — each of the 63 tools has a required scope and access mode (Public 7,

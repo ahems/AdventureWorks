@@ -32,6 +32,8 @@ import {
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { translateProductContent } from "@/services/utilityService";
+import { useCan } from "@/hooks/useCan";
+import { Scopes } from "@/lib/permissions";
 
 const STYLE_LABEL: Record<string, string> = Object.fromEntries(
   PRODUCT_STYLES.map((s) => [s.value, s.label]),
@@ -84,6 +86,7 @@ const CreateVariationsDialog: React.FC<CreateVariationsDialogProps> = ({
   const [isSaving, setIsSaving] = useState(false);
 
   const createBatch = useCreateProductBatch();
+  const canUseAi = useCan(Scopes.AdminWrite);
 
   // Build the set of already-taken Color|Style|Size combinations from siblings
   const takenSet = useMemo(() => {
@@ -182,12 +185,12 @@ const CreateVariationsDialog: React.FC<CreateVariationsDialogProps> = ({
 
       toast({
         title: "Variations Created",
-        description: `Created ${newVariationRows.length} new variation(s) for "${product.Name}". AI images and translations are generating in the background.`,
+        description: `Created ${newVariationRows.length} new variation(s) for "${product.Name}".${canUseAi ? " AI images and translations are generating in the background." : ""}`,
       });
 
       // Trigger translations for the shared model
       const modelId = batchResult.sharedModelId ?? product.ProductModelID;
-      if (modelId) {
+      if (canUseAi && modelId) {
         translateProductContent([modelId]).catch(() => {});
       }
 
@@ -196,7 +199,7 @@ const CreateVariationsDialog: React.FC<CreateVariationsDialogProps> = ({
       for (const p of batchResult.results) {
         const styleVal = (p as { Style?: string | null }).Style ?? "none";
         const visualKey = `${(p as { Color?: string | null }).Color ?? "none"}:${styleVal}`;
-        if (!seenVisualKeys.has(visualKey)) {
+        if (canUseAi && !seenVisualKeys.has(visualKey)) {
           seenVisualKeys.add(visualKey);
           fetch(
             `${getFunctionsApiUrl()}/api/products/${p.ProductID}/generate-images`,

@@ -1,0 +1,52 @@
+{
+  "title": "Bantu saya memilih",
+  "intro": {
+    "title": "Ayo temukan perlengkapan yang sempurna untukmu!",
+    "description": "Jawab 5 pertanyaan singkat dan AI kami akan menjelajahi katalog untuk menemukan produk yang paling cocok untukmu.",
+    "cta": "Ayo mulai",
+    "hint": "Didukung AI · Sekitar 1 menit"
+  },
+  "loading": {
+    "questions": "Membuat pertanyaan yang dipersonalisasi…",
+    "recommendations": "Mencari di katalog dan menyiapkan rekomendasimu…"
+  },
+  "progress": {
+    "question": "Pertanyaan {{current}} dari {{total}}"
+  },
+  "nav": {
+    "back": "Kembali",
+    "next": "Berikutnya",
+    "findProducts": "Temukan produk saya"
+  },
+  "results": {
+    "title": "Pilihan khusus untukmu",
+    "viewProduct": "Lihat produk",
+    "noResults": "Kami belum menemukan produk yang benar-benar cocok. Coba jelajahi kategori kami atau gunakan bilah pencarian.",
+    "startAgain": "Mulai lagi"
+  },
+  "profile": {
+    "title": "Sedikit tentang kamu",
+    "subtitle": "Membantu kami menemukan produk yang benar-benar pas.",
+    "gender": {
+      "label": "Jenis kelamin (opsional)",
+      "male": "Pria",
+      "female": "Wanita",
+      "preferNotToSay": "Memilih tidak menyebutkan"
+    },
+    "height": {
+      "label": "Tinggi badanmu",
+      "placeholder": "Pilih tinggi badanmu…"
+    },
+    "colors": {
+      "label": "Warna favorit",
+      "hint": "Kosongkan jika tidak ada preferensi."
+    },
+    "continue": "Lanjutkan"
+  },
+  "error": {
+    "loadQuestions": "Terjadi masalah saat membuat pertanyaan. Silakan coba lagi.",
+    "loadRecommendations": "Terjadi masalah saat mencari rekomendasi. Silakan coba lagi.",
+    "rateLimited": "Kami menerima banyak permintaan AI dari Anda. Silakan coba lagi dalam {{minutes}} menit.",
+    "tryAgain": "Coba lagi"
+  }
+}

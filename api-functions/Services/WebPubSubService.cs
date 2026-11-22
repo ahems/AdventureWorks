@@ -24,7 +24,8 @@ public class WebPubSubService
     {
         ["manufacturing-agent"] = new([FunctionScopes.ManufacturingRead], InternalOnly: true),
         ["manufacturing-ops"] = new([FunctionScopes.ManufacturingRead], InternalOnly: true),
-        ["warehouse"] = new([FunctionScopes.InventoryRead], InternalOnly: true),
+        // Admin inventory views read with inventory.read; /api/warehouse/* routes require manufacturing.read.
+        ["warehouse"] = new([FunctionScopes.InventoryRead, FunctionScopes.ManufacturingRead], InternalOnly: true),
         ["supply-chain"] = new([FunctionScopes.InventoryRead, FunctionScopes.ManufacturingRead], InternalOnly: true),
         ["orders"] = new([FunctionScopes.OrdersRead, FunctionScopes.ManufacturingRead], InternalOnly: false),
         ["shopping-simulator"] = new([FunctionScopes.AdminRead, FunctionScopes.ManufacturingRead], InternalOnly: true),

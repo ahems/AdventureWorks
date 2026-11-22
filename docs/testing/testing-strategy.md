@@ -33,8 +33,9 @@ These suites need no Azure access. The last column shows whether the
 | --- | --- | --- | --- |
 | [`api-functions.Tests`](../../api-functions.Tests/) (xUnit) | Functions services, OAuth middleware, route policies and ownership handlers | `dotnet test api-functions.Tests/api-functions.Tests.csproj` | Yes |
 | [`api-mcp/AdventureWorks.Tests`](../../api-mcp/AdventureWorks.Tests/) (xUnit) | OAuth server, MCP tool dispatch and task ownership, SQL principal telemetry | `dotnet test api-mcp/AdventureWorks.Tests/AdventureWorks.Tests.csproj` | Yes |
-| `app-manufacturing` (Vitest) | Manufacturing UI components, hooks and API client | `npm --prefix app-manufacturing test` | Three files (Web PubSub hook, DAB fetch, shortages panel) |
-| Storefront scripts (`node --test`) | Health page checks and sale product card | `cd app && node --test scripts/health-checks.test.mjs scripts/sale-product-model-card.test.mjs` | No |
+| `app-manufacturing` (Vitest) | Manufacturing UI components, pages (including loading skeletons), hooks and API client | `npm --prefix app-manufacturing test` | Three files (Web PubSub hook, DAB fetch, shortages panel) |
+| `app-admin` (Vitest) | Authenticated DAB fetch, DAB REST hooks and scope-based UI gating | `npm --prefix app-admin test` | No |
+| Storefront scripts (`node --test`) | Health page checks, sale product card, AI rate-limit messages, email-address API, i18n/RTL/SEO and telemetry privacy | `cd app && node --test scripts/*.test.mjs` | No |
 | `mcp-inspector` gateway (`node --test`) | Hosted Inspector gateway sign-in and proxy rules | `npm --prefix mcp-inspector test` | Yes |
 | Frontend auth and live-update regressions (`node --test`) | Route guards, carts, reviews, chat tokens, Web PubSub batching and the no-polling rule | `node --experimental-vm-modules --test tests/scripts/test-<name>.mjs` | Yes |
 | Frontend telemetry envelopes, receipt download (`node --test`) | Telemetry payload parsing; admin receipt download handling | `node --test tests/scripts/test-frontend-telemetry-envelopes.mjs`; `node --experimental-vm-modules --test tests/scripts/test-receipt-download.mjs` | No |
@@ -47,7 +48,7 @@ These suites need no Azure access. The last column shows whether the
 
 `dotnet test AdventureWorks.sln` runs both .NET suites. `seed-job/tests/test_foundry_dependencies.py` needs the Bicep CLI at `~/.azure/bin/bicep`; `az bicep install` puts it there. [`tests/scripts/README.md`](../../tests/scripts/README.md#offline-tests) lists every offline file.
 
-All three frontends have an `npm run lint` script. `app-admin` has lint only and no unit tests, and no app has a separate type-check script. Run `npm run build`, which type-checks through Vite and TypeScript, when you change TypeScript types.
+All three frontends have `npm run lint` and `npm run typecheck` scripts. `typecheck` runs `tsc --noEmit` against `tsconfig.app.json` and `tsconfig.node.json`; the root `tsconfig.json` only holds project references, so `tsc -p .` checks nothing. `vite build` does not type-check. `app-admin` and `app-manufacturing` also have Vitest suites.
 
 ## Offline authentication assurance
 
@@ -78,7 +79,7 @@ This checks fixed-window event batching, in-flight follow-ups, reconnect and foc
 
 These checks run against the selected azd environment. Protected endpoints need tokens from [`azure-auth.py`](AZURE_AUTHENTICATED_SCRIPTS.md). Prefer `--identity manufacturing` (Peter) for manufacturing and inventory work, and `--identity admin` (Ken) for customers, orders and reporting.
 
-Some Functions `GET` routes change state, for example `bank/*`, `manufacturing/status`, `manufacturing/agent-config`, `generate-verified-reviews/status`, `orders/delivery/trigger`, `archive/trigger` and `TranslateLanguageFile_Terminate`. Never use them as read-only probes; the [full list](../../tests/scripts/README.md#side-effecting-get-routes) is in the scripts catalog.
+Functions `GET` routes are read-only; on-demand jobs such as `orders/delivery/trigger`, `archive/trigger` and `TranslateLanguageFile_Terminate` are `POST`. The reviewed read routes are `safeFunctionReadRoutes` in [`tests/auth/contracts.json`](../../tests/auth/contracts.json).
 
 | Check | Command | Side effects |
 | --- | --- | --- |
@@ -111,9 +112,9 @@ AI canaries make potentially billable Foundry calls and are always explicit flag
 
 ## What CI covers
 
-The [Build-Checker workflow](../operations/ci-cd.md#build-check) runs manually and weekly. Its offline authentication assurance job runs the `--offline` profile, so it covers every suite marked "Yes" in the [unit suites](#unit-suites) table. It also builds the containers, publishes Functions and builds the storefront. It does **not** run:
+The [Build-Checker workflow](../operations/ci-cd.md#build-check) runs manually and weekly. Its offline authentication assurance job runs the `--offline` profile, so it covers every suite marked "Yes" in the [unit suites](#unit-suites) table. Its `offline-tests` job runs the three frontend typechecks, both Vitest suites, the storefront and `mcp-inspector` `node --test` suites, the offline frontend harnesses in `tests/scripts`, `pytest tests/scripts`, the seed-job Python tests and a `manufacturing-agent` build. It also builds every container, publishes Functions and builds the storefront. It does **not** run:
 
-- the remaining Vitest files, storefront, seed PowerShell, docs link checker or other `tests/scripts` Python tests
+- the seed PowerShell tests, docs link checker or preup model-selection script
 - the linters
 - any deployed check
 

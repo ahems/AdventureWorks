@@ -1,6 +1,8 @@
 #!/bin/bash
-# Post-deployment script for API Functions (Flex Consumption)
-# Injects Foundry agent IDs created by create-foundry-agents.sh into the Function App
+# Applies Foundry agent IDs (from create-foundry-agents.sh), MCP_SERVICE_URL and the
+# hosted Manufacturing agent endpoint to the Function App settings. Called once per
+# azd deploy by the root postdeploy.sh, after every service (including the hosted
+# agent) has deployed and any changed agent definitions have been re-applied.
 
 set -euo pipefail
 
@@ -29,24 +31,11 @@ get_azd_value() {
 
 color_cyan "Injecting Foundry agent IDs into API Functions (Flex Consumption)..."
 
-# Keep the public Help-Me-Choose tool boundary in sync with its server code on
-# targeted Functions deployments, not only during full provisioning.
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-help_me_choose_script="$script_dir/../utilities/agents/eshop-help-me-choose-agent.sh"
-if ! bash "$help_me_choose_script"; then
-  color_red "✗ Failed to apply the Help-Me-Choose agent's managed-identity tool policy."
-  exit 1
-fi
-
 # ── Read agent IDs from azd environment ────────────────────────────────────────
 chat_id=$(get_azd_value "AI_AGENT_CHAT_ID")
 order_id=$(get_azd_value "AI_AGENT_ORDER_ID")
 promotion_id=$(get_azd_value "AI_AGENT_PROMOTION_ID")
 help_me_choose_id=$(get_azd_value "AI_AGENT_HELP_ME_CHOOSE_ID")
-workflow_chat_id=$(get_azd_value "AI_AGENT_WORKFLOW_CHAT_ID")
-workflow_promotion_id=$(get_azd_value "AI_AGENT_WORKFLOW_PROMOTION_ID")
-workflow_order_id=$(get_azd_value "AI_AGENT_WORKFLOW_ORDER_ID")
-workflow_help_me_choose_id=$(get_azd_value "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID")
 cart_recovery_id=$(get_azd_value "AI_AGENT_CART_RECOVERY_ID")
 review_id=$(get_azd_value "AI_AGENT_REVIEW_ID")
 product_content_id=$(get_azd_value "AI_AGENT_PRODUCT_CONTENT_ID")
@@ -61,6 +50,9 @@ catalog_suggestion_id=$(get_azd_value "AI_AGENT_CATALOG_SUGGESTION_ID")
 mcp_service_url=$(get_azd_value "MCP_SERVICE_URL")
 manufacturing_agent_endpoint=$(get_azd_value "MANUFACTURING_AGENT_ENDPOINT")
 api_functions_url=$(get_azd_value "API_FUNCTIONS_URL")
+# Storefront origin for sitemap.xml URLs and password-reset email links. The Static Web App is provisioned after
+# (and depends on) the Function App, so Bicep cannot pass its random hostname here.
+storefront_url=$(get_azd_value "APP_URL")
 
 if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]] || [[ -z "$cart_recovery_id" ]] || [[ -z "$product_content_id" ]]; then
   color_red "ERROR: One or more required agent IDs are missing from the selected azd environment."
@@ -86,10 +78,6 @@ if az functionapp config appsettings set \
     "AI_AGENT_ORDER_ID=$order_id" \
     "AI_AGENT_PROMOTION_ID=$promotion_id" \
     "AI_AGENT_HELP_ME_CHOOSE_ID=$help_me_choose_id" \
-    "AI_AGENT_WORKFLOW_CHAT_ID=${workflow_chat_id:-}" \
-    "AI_AGENT_WORKFLOW_PROMOTION_ID=${workflow_promotion_id:-}" \
-    "AI_AGENT_WORKFLOW_ORDER_ID=${workflow_order_id:-}" \
-    "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID=${workflow_help_me_choose_id:-}" \
     "AI_AGENT_CART_RECOVERY_ID=$cart_recovery_id" \
     ${review_id:+"AI_AGENT_REVIEW_ID=$review_id"} \
     "AI_AGENT_PRODUCT_CONTENT_ID=$product_content_id" \
@@ -104,6 +92,7 @@ if az functionapp config appsettings set \
     ${mcp_service_url:+"MCP_SERVICE_URL=$mcp_service_url"} \
     ${manufacturing_agent_endpoint:+"MANUFACTURING_AGENT_ENDPOINT=$manufacturing_agent_endpoint"} \
     ${api_functions_url:+"API_FUNCTIONS_URL=$api_functions_url"} \
+    ${storefront_url:+"APP_URL=$storefront_url"} \
   --output none; then
   color_green "✓ Azure Functions configured with the demo's AI agents."
 else

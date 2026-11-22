@@ -16,7 +16,6 @@ param maxReplica int = 3
 param revisionSuffix string
 @secure()
 param sqlConnectionString string
-param appUrl string = ''
 // api-mcp OAuth issuer + dedicated DAB audience used by DAB's JWT provider to validate
 // bearer tokens (dab-config.json reads DAB_JWT_ISSUER / DAB_JWT_AUDIENCE via @env()).
 // Derived from deployed hostnames in main.bicep; no hard-coded FQDNs. When empty (e.g. a
@@ -52,12 +51,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: containerAppEnvId
     configuration: {
       activeRevisionsMode: 'Single'
-      secrets: [
-        {
-          name: 'database-connection-string'
-          value: sqlConnectionString
-        }
-      ]
       ingress: {
         external: true
         targetPort: 80
@@ -125,10 +118,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'TENANT_ID'
               value: subscription().tenantId
-            }
-            {
-              name: 'APP_URL'
-              value: appUrl
             }
             {
               name: 'DAB_JWT_ISSUER'

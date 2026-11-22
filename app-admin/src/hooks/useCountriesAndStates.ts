@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getRestApiUrl } from "@/lib/utils";
+import { dabFetch } from "@/services/dabFetch";
 
 export interface CountryRegion {
   CountryRegionCode: string;
@@ -27,13 +28,15 @@ const fetchCountriesOnce = async (): Promise<CountryRegion[]> => {
     let nextLink: string | null = `${dabApiUrl}/CountryRegion`;
 
     while (nextLink) {
-      const response = await fetch(nextLink);
+      const response = await dabFetch(nextLink);
       if (response.ok) {
         const data = await response.json();
         allCountries = [...allCountries, ...(data.value || [])];
         nextLink = data.nextLink || null;
       } else {
-        break;
+        // Don't cache a partial/empty list (e.g. a rejected read); retry on next mount.
+        countriesFetchPromise = null;
+        throw new Error(`Failed to load countries: ${response.status}`);
       }
     }
 
@@ -75,7 +78,7 @@ export const useCountriesAndStates = (countryCode?: string) => {
       setIsStatesLoading(true);
       try {
         const dabApiUrl = getRestApiUrl();
-        const response = await fetch(
+        const response = await dabFetch(
           `${dabApiUrl}/StateProvince?$filter=CountryRegionCode eq '${countryCode}'`,
         );
         if (response.ok) {

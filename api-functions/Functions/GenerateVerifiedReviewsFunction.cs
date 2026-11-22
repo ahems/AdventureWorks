@@ -19,12 +19,13 @@ namespace api_functions.Functions;
 /// POST /api/generate-verified-reviews/start
 ///   body: { "productCount": N, "reviewsPerProduct": M }
 ///   productCount 0 = all qualifying; reviewsPerProduct default 1
-///   → 202 Accepted; batch job runs in background
-///   → 409 Conflict if a job is already running
+///   → 202 Accepted { jobId, ... }; one message per product is enqueued on
+///     verified-reviews-queue and processed by the queue trigger below
+///   → 409 Conflict if a non-stale job is already running
 ///
 /// GET  /api/generate-verified-reviews/status
-///   → VerifiedReviewsJobState (isRunning, processedCount, totalCount,
-///      productsProcessed, productsTotal, productName, lastError)
+///   → VerifiedReviewsJobState (pure read; isStale is computed, never reset here —
+///     ReviewJobWatchdog expires abandoned jobs)
 ///
 /// GET  /api/products/{productId}/customers-with-delivered-orders
 ///   → { customers: [...], count: N }  (diagnostic endpoint)
@@ -37,6 +38,7 @@ public class GenerateVerifiedReviewsFunction
     private readonly ReviewService _reviewService;
     private readonly TelemetryClient _telemetryClient;
     private readonly WebPubSubService _webPubSub;
+    private readonly VerifiedReviewsQueue _queue;
 
     // In-process guard. Table Storage IsRunning flag provides cross-instance persistence.
     private static readonly SemaphoreSlim _startLock = new(1, 1);
@@ -47,7 +49,8 @@ public class GenerateVerifiedReviewsFunction
         ReviewBatchAgentService reviewBatchAgentService,
         ReviewService reviewService,
         TelemetryClient telemetryClient,
-        WebPubSubService webPubSub)
+        WebPubSubService webPubSub,
+        VerifiedReviewsQueue queue)
     {
         _logger = logger;
         _reviewAgentService = reviewAgentService;
@@ -55,6 +58,7 @@ public class GenerateVerifiedReviewsFunction
         _reviewService = reviewService;
         _telemetryClient = telemetryClient;
         _webPubSub = webPubSub;
+        _queue = queue;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -110,21 +114,9 @@ public class GenerateVerifiedReviewsFunction
         {
             var currentState = await _reviewService.GetVerifiedReviewsJobStateAsync();
 
-            // Auto-reset stale guard: no progress in >10 min (same logic as GET /status)
-            if (currentState.IsRunning)
-            {
-                var lastActivity = currentState.LastProgressAt ?? currentState.StartedAt;
-                if (lastActivity.HasValue &&
-                    DateTimeOffset.UtcNow - lastActivity.Value > TimeSpan.FromMinutes(10))
-                {
-                    _logger.LogWarning("Verified reviews batch job guard auto-reset (no progress since {t})",
-                        lastActivity.Value);
-                    currentState.IsRunning = false;
-                    await _reviewService.SaveVerifiedReviewsJobStateAsync(currentState);
-                }
-            }
-
-            if (currentState.IsRunning)
+            // A stale job (no progress for StaleAfter) may be replaced; its remaining queue
+            // messages carry the old job id and are ignored by the processor.
+            if (currentState.IsRunning && !currentState.IsStale)
             {
                 var conflict = req.CreateResponse(HttpStatusCode.Conflict);
                 await conflict.WriteStringAsync(JsonSerializer.Serialize(new
@@ -172,26 +164,52 @@ public class GenerateVerifiedReviewsFunction
             }
 
             var totalReviews = batchData.Sum(x => x.Customers.Count);
-
+            var startedAt = DateTimeOffset.UtcNow;
             var jobState = new VerifiedReviewsJobState
             {
                 IsRunning = true,
+                JobId = Guid.NewGuid().ToString("N"),
                 ProductId = 0,
                 ProductName = batchData[0].Product.Name,
                 ProcessedCount = 0,
                 TotalCount = totalReviews,
                 ProductsProcessed = 0,
                 ProductsTotal = batchData.Count,
-                StartedAt = DateTimeOffset.UtcNow
+                StartedAt = startedAt,
+                LastProgressAt = startedAt
             };
             await _reviewService.SaveVerifiedReviewsJobStateAsync(jobState);
 
-            _ = Task.Run(() => RunBatchJobAsync(batchData, jobState));
+            try
+            {
+                foreach (var (product, customers) in batchData)
+                {
+                    await _queue.EnqueueAsync(new VerifiedReviewsQueueMessage
+                    {
+                        JobId = jobState.JobId,
+                        Product = product,
+                        CustomerIds = customers.Select(c => c.CustomerID).ToList(),
+                        EnqueuedAt = DateTimeOffset.UtcNow
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to enqueue verified-reviews job {JobId}", jobState.JobId);
+                await _reviewService.StopVerifiedReviewsJobAsync(jobState.JobId,
+                    "Failed to enqueue verified-reviews generation job.");
+                var error = req.CreateResponse(HttpStatusCode.InternalServerError);
+                await error.WriteStringAsync(JsonSerializer.Serialize(
+                    new { error = "Failed to start verified-reviews generation job." },
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+                return error;
+            }
 
             var accepted = req.CreateResponse(HttpStatusCode.Accepted);
             await accepted.WriteStringAsync(JsonSerializer.Serialize(new
             {
                 message = $"Generating {totalReviews} verified review(s) across {batchData.Count} product(s)",
+                jobId = jobState.JobId,
                 productsTotal = batchData.Count,
                 totalCount = totalReviews
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
@@ -214,22 +232,6 @@ public class GenerateVerifiedReviewsFunction
         HttpRequestData req)
     {
         var state = await _reviewService.GetVerifiedReviewsJobStateAsync();
-
-        // Auto-reset an orphaned job: if isRunning but no progress update in >10 min
-        // (e.g. function host was recycled mid-job and the finally block never ran)
-        if (state.IsRunning)
-        {
-            var lastActivity = state.LastProgressAt ?? state.StartedAt;
-            if (lastActivity.HasValue &&
-                DateTimeOffset.UtcNow - lastActivity.Value > TimeSpan.FromMinutes(10))
-            {
-                _logger.LogWarning(
-                    "GetVerifiedReviewsStatus: auto-resetting orphaned job (no progress since {t})",
-                    lastActivity.Value);
-                state.IsRunning = false;
-                await _reviewService.SaveVerifiedReviewsJobStateAsync(state);
-            }
-        }
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         response.Headers.Add("Content-Type", "application/json");
@@ -283,115 +285,143 @@ public class GenerateVerifiedReviewsFunction
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Background batch job
+    // Queue trigger: one message per product of a verified-reviews job
     // ─────────────────────────────────────────────────────────────────────────
 
-    private async Task RunBatchJobAsync(
-        List<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)> batch,
-        VerifiedReviewsJobState state)
+    [Function("VerifiedReviews_QueueTrigger")]
+    public async Task ProcessVerifiedReviewsQueueMessage(
+        [QueueTrigger(VerifiedReviewsQueue.QueueName, Connection = "AzureWebJobsStorage")] BinaryData queueMessage)
     {
-        _logger.LogInformation("VerifiedReviews batch job started: {productCount} products, {totalReviews} reviews",
-            batch.Count, state.TotalCount);
+        VerifiedReviewsQueueMessage? message;
+        try
+        {
+            message = JsonSerializer.Deserialize<VerifiedReviewsQueueMessage>(queueMessage.ToString());
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Invalid verified-reviews queue message.");
+            return;
+        }
 
-        var totalSaved = 0;
+        if (message == null || string.IsNullOrWhiteSpace(message.JobId) || message.Product.ProductID <= 0)
+        {
+            _logger.LogWarning("Skipping malformed verified-reviews queue message.");
+            return;
+        }
+
+        var product = message.Product;
+        var state = await _reviewService.GetVerifiedReviewsJobStateAsync();
+        if (!state.IsRunning || !string.Equals(state.JobId, message.JobId, StringComparison.Ordinal))
+        {
+            _logger.LogInformation("Ignoring verified-reviews message for inactive job {JobId}, ProductID={pid}",
+                message.JobId, product.ProductID);
+            return;
+        }
+
+        // Re-read eligibility so a redelivered message skips customers whose review was already saved.
+        var eligible = (await _reviewService.GetCustomersWithDeliveredOrderForProductAsync(product.ProductID))
+            .ToDictionary(c => c.CustomerID);
+        var savedIds = new List<int>();
 
         try
         {
-            for (var productIndex = 0; productIndex < batch.Count; productIndex++)
+            foreach (var customerId in message.CustomerIds.Distinct())
             {
-                var (product, customers) = batch[productIndex];
+                if (!eligible.TryGetValue(customerId, out var customer))
+                    continue;
 
-                // Update current product name so UI can show which product is being processed
-                state.ProductName = product.Name;
-                await _reviewService.SaveVerifiedReviewsJobStateAsync(state);
-
-                var savedIds = new List<int>();
-
-                foreach (var customer in customers)
+                string? error = null;
+                try
                 {
-                    try
+                    var review = await _reviewAgentService.GenerateReviewAsync(product, customer);
+                    if (review != null)
                     {
-                        var review = await _reviewAgentService.GenerateReviewAsync(product, customer);
-                        if (review != null)
-                        {
-                            var reviewId = await _reviewService.SaveGeneratedReviewAndGetIdAsync(review);
-                            savedIds.Add(reviewId);
-                            totalSaved++;
-                            _logger.LogInformation(
-                                "Saved verified review {id} for CustomerID={cid}, ProductID={pid}",
-                                reviewId, customer.CustomerID, product.ProductID);
-                        }
-                    }
-                    catch (Exception ex) when (ex is not FoundryToolPolicyException)
-                    {
-                        _logger.LogError(ex, "Error generating review for CustomerID={cid}, ProductID={pid}",
-                            customer.CustomerID, product.ProductID);
-                        state.LastError = $"Product '{product.Name}', CustomerID {customer.CustomerID}: {ex.Message}";
-                    }
-
-                    state.ProcessedCount++;
-                    state.LastProgressAt = DateTimeOffset.UtcNow;
-                    await _reviewService.SaveVerifiedReviewsJobStateAsync(state);
-
-                    await _webPubSub.SendToGroupAsync("reviews", new { @event = "generation-progress", processed = state.ProcessedCount, total = state.TotalCount });
-                }
-
-                // Generate staff replies for 33-60% of saved reviews for this product
-                if (savedIds.Count > 0)
-                {
-                    var rng = new Random();
-                    var replyRatio = rng.NextDouble() * 0.27 + 0.33;
-                    var replyCount = Math.Max(1, (int)Math.Round(savedIds.Count * replyRatio));
-                    var replyIds = savedIds.OrderBy(_ => rng.Next()).Take(replyCount).ToList();
-
-                    var replyInputs = replyIds.Select(id => (
-                        ReviewId: id,
-                        ReviewerName: "Customer",
-                        Rating: 4,
-                        Comments: string.Empty,
-                        ProductName: product.Name
-                    )).ToList();
-
-                    try
-                    {
-                        var replies = await _reviewBatchAgentService.GenerateReviewRepliesAsync(replyInputs);
-                        foreach (var (reviewId, reply) in replies)
-                            await _reviewService.SaveReviewReplyAsync(reviewId, reply);
-                        _logger.LogInformation("Saved {count} replies for productId={pid}", replies.Count, product.ProductID);
-                    }
-                    catch (Exception ex) when (ex is not FoundryToolPolicyException)
-                    {
-                        _logger.LogWarning(ex, "Failed to generate replies for productId={pid}", product.ProductID);
+                        var reviewId = await _reviewService.SaveGeneratedReviewAndGetIdAsync(review);
+                        savedIds.Add(reviewId);
+                        _logger.LogInformation(
+                            "Saved verified review {id} for CustomerID={cid}, ProductID={pid}",
+                            reviewId, customer.CustomerID, product.ProductID);
                     }
                 }
-
-                state.ProductsProcessed = productIndex + 1;
-                await _reviewService.SaveVerifiedReviewsJobStateAsync(state);
-
-                _telemetryClient.TrackEvent("VerifiedReviewsBatchProductCompleted", new Dictionary<string, string>
+                catch (Exception ex) when (ex is not FoundryToolPolicyException)
                 {
-                    ["ProductID"] = product.ProductID.ToString(),
-                    ["ProductName"] = product.Name,
-                    ["ReviewCount"] = savedIds.Count.ToString()
+                    _logger.LogError(ex, "Error generating review for CustomerID={cid}, ProductID={pid}",
+                        customer.CustomerID, product.ProductID);
+                    error = $"Product '{product.Name}', CustomerID {customer.CustomerID}: {ex.Message}";
+                }
+
+                var progress = await _reviewService.ReportVerifiedReviewProgressAsync(message.JobId, product.Name, error);
+                if (progress == null)
+                {
+                    _logger.LogInformation("Verified-reviews job {JobId} stopped or replaced; abandoning ProductID={pid}",
+                        message.JobId, product.ProductID);
+                    return;
+                }
+
+                await _webPubSub.SendToGroupAsync("reviews", new
+                {
+                    @event = "generation-progress", jobId = message.JobId,
+                    processed = progress.ProcessedCount, total = progress.TotalCount
                 });
             }
 
+            // Generate staff replies for 33-60% of saved reviews for this product
+            if (savedIds.Count > 0)
+            {
+                var rng = new Random();
+                var replyRatio = rng.NextDouble() * 0.27 + 0.33;
+                var replyCount = Math.Max(1, (int)Math.Round(savedIds.Count * replyRatio));
+                var replyIds = savedIds.OrderBy(_ => rng.Next()).Take(replyCount).ToList();
+
+                var replyInputs = replyIds.Select(id => (
+                    ReviewId: id,
+                    ReviewerName: "Customer",
+                    Rating: 4,
+                    Comments: string.Empty,
+                    ProductName: product.Name
+                )).ToList();
+
+                try
+                {
+                    var replies = await _reviewBatchAgentService.GenerateReviewRepliesAsync(replyInputs);
+                    foreach (var (reviewId, reply) in replies)
+                        await _reviewService.SaveReviewReplyAsync(reviewId, reply);
+                    _logger.LogInformation("Saved {count} replies for productId={pid}", replies.Count, product.ProductID);
+                }
+                catch (Exception ex) when (ex is not FoundryToolPolicyException)
+                {
+                    _logger.LogWarning(ex, "Failed to generate replies for productId={pid}", product.ProductID);
+                }
+            }
+        }
+        catch (FoundryToolPolicyException ex)
+        {
+            _logger.LogError(ex, "Verified-reviews job {JobId} stopped after a tool-policy violation", message.JobId);
+            await _reviewService.StopVerifiedReviewsJobAsync(message.JobId, ex.Message);
+            return;
+        }
+
+        var completed = await _reviewService.CompleteVerifiedReviewsProductAsync(
+            message.JobId, product.ProductID, message.CustomerIds.Distinct().Count());
+
+        _telemetryClient.TrackEvent("VerifiedReviewsBatchProductCompleted", new Dictionary<string, string>
+        {
+            ["JobId"] = message.JobId,
+            ["ProductID"] = product.ProductID.ToString(),
+            ["ProductName"] = product.Name,
+            ["ReviewCount"] = savedIds.Count.ToString()
+        });
+
+        if (completed is { IsRunning: false, JobId: var jobId } && jobId == message.JobId &&
+            completed.ProductsProcessed >= completed.ProductsTotal)
+        {
             _telemetryClient.TrackEvent("VerifiedReviewsBatchJobCompleted", new Dictionary<string, string>
             {
-                ["ProductCount"] = batch.Count.ToString(),
-                ["TotalReviews"] = totalSaved.ToString()
+                ["JobId"] = message.JobId,
+                ["ProductCount"] = completed.ProductsTotal.ToString(),
+                ["TotalReviews"] = completed.TotalCount.ToString()
             });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "VerifiedReviews batch job failed");
-            state.LastError = ex.Message;
-        }
-        finally
-        {
-            state.IsRunning = false;
-            await _reviewService.SaveVerifiedReviewsJobStateAsync(state);
-            _logger.LogInformation("VerifiedReviews batch job finished: saved={count}", totalSaved);
+            _logger.LogInformation("Verified-reviews job {JobId} finished", message.JobId);
         }
     }
 }

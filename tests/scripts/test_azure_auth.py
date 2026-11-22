@@ -257,7 +257,7 @@ class DeploymentAndRequestTests(unittest.TestCase):
             with self.subTest(resource=resource, status=status):
                 argv = ["azure-auth.py", "request", "--identity", "manufacturing",
                         "--resource", resource, "--environment", "test-env", "--path", path]
-                stdout = Mock()
+                stdout = Mock(spec=["buffer", "write", "flush"])
                 with patch.object(auth.sys, "argv", argv), patch.object(auth.sys, "stdout", stdout), \
                         patch.object(auth, "deployment", return_value=(BASE, BASE + "/" + resource)), \
                         patch.object(auth, "azd_value", return_value=BASE + "/graphql/"), \
@@ -291,7 +291,7 @@ class DeploymentAndRequestTests(unittest.TestCase):
                     "DAB_RESOURCE_IDENTIFIER": "",
                     "API_URL": BASE + "/graphql"}[key]
 
-        stdout = Mock()
+        stdout = Mock(spec=["buffer", "write", "flush"])
         with patch.object(auth.sys, "argv", [
             "azure-auth.py", "request", "--identity", "manufacturing",
             "--resource", "dab", "--path", "/graphql"

@@ -89,7 +89,7 @@ api-mcp's `ManufacturingAutonomyGuard` only allows write tools when the mode is 
 
 ### Proposals
 
-Proposals live in `awManufacturingProposals`. A proposal expires after 5 minutes; the list shows up to 10 and auto-rejects expired or overflow items. **Approve all** executes up to 20 pending proposals.
+Proposals live in `awManufacturingProposals`. A proposal expires after 5 minutes; the read-only list shows the newest 10 unexpired items, and `SimulationMaintenance_Timer` (every minute) rejects expired or overflow items. **Approve all** executes up to 20 pending proposals.
 
 ### Auto-shutoff
 
@@ -140,8 +140,6 @@ Group `manufacturing-agent`: `run-created`, `run-started`, `step-updated`, `run-
 | `MANUFACTURING_AGENT_ENDPOINT` | Functions; set by postdeploy from `AGENT_MANUFACTURING_AGENT_RESPONSES_ENDPOINT` |
 | `AZURE_AI_MODEL_DEPLOYMENT_NAME` | Hosted agent model deployment (default `chat`) |
 | Hosted agent resources | 0.5 CPU, 1 GiB (`manufacturing-agent/`) |
-
-`AI_AGENT_MANUFACTURING_ID` is not used by this pipeline.
 
 ## Limits
 

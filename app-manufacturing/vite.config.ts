@@ -7,13 +7,6 @@ const reactDomPath = path.resolve(__dirname, "./node_modules/react-dom");
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  server: {
-    host: "::",
-    port: 8080,
-    hmr: {
-      overlay: false,
-    },
-  },
   plugins: [react()],
   resolve: {
     alias: {

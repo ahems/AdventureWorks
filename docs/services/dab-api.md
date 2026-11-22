@@ -29,7 +29,7 @@ All three endpoints run in one Azure Container App (`av-api-*`) on port 80 behin
 - DAB exposes **69 entities** (66 tables and 3 views; no stored procedures). Every entity uses DAB's default names: REST path `/api/<Entity>`, GraphQL list `<camelPlural>` and single-record `<camelSingular>_by_pk`. See [DAB entities](../reference/dab-entities.md) for every entity, role and relationship, and [DAB naming conventions](../architecture/dab-naming-conventions.md) for the naming rules.
 - `Person.Address` is not exposed because its `SpatialLocation` column uses the SQL `geography` type, which DAB does not support. Use the Functions address routes instead.
 - `HumanResources.Employee` is exposed through the `HumanResources.vEmployee` view because the table has `hierarchyid` columns.
-- `host.mode` is `development`, so detailed errors, GraphQL tooling and Swagger are available. Response caching is off.
+- `host.mode` is `production`: database error details are hidden, and the Swagger UI and the Nitro GraphQL IDE are off. GraphQL introspection stays on, and the OpenAPI document is still served at `/api/openapi`. Response caching is off.
 
 ### Lists and pagination
 
@@ -58,7 +58,7 @@ sequenceDiagram
 
 - **Token validation.** DAB uses its `AzureAD` JWT provider as a generic bearer-token validator. The issuer (`DAB_JWT_ISSUER`) is the api-mcp public URL and the audience (`DAB_JWT_AUDIENCE`) is `<issuer>/dab`. These are api-mcp tokens, not Entra ID tokens.
 - **Role selection.** The caller names a role in the `X-MS-API-ROLE` header, and that role must be in the token's `roles` claim. A token without the header runs as `authenticated`; no token runs as `anonymous`.
-- **Roles.** Nine roles are used: `anonymous`, `authenticated`, `consumer`, `sales-admin`, `marketing-admin`, `inventory-admin`, `operations-admin`, `executive-admin` and `manufacturing-engineer`. `anonymous` can only read, and only the 33 public catalog entities.
+- **Roles.** Nine roles are used: `anonymous`, `authenticated`, `consumer`, `sales-admin`, `marketing-admin`, `inventory-admin`, `operations-admin`, `executive-admin` and `manufacturing-engineer`. `anonymous` can only read, and only the 33 public catalog entities. Admin-role writes follow each role's api-mcp write scopes (`customers.write`, `orders.write`, `admin.write`, `manufacturing.write`), so `inventory-admin` is read-only; see [DAB entities](../reference/dab-entities.md#roles).
 - **Row ownership.** Database policies limit self-service data to the caller: `business_entity_id` for person, contact, cart and review rows, and `customer_id` for `SalesOrderHeader`.
 - **Field rules.** Some fields are hidden from public and consumer roles, for example product cost and stocking fields, inventory shelf and bin, and reviewer email.
 - **CORS.** Every origin is allowed, without credentials. Callers send bearer tokens, not cookies.
@@ -90,12 +90,12 @@ Check the GraphQL `errors` array as well as the HTTP status. See [authenticated 
 
 ## Container image and startup
 
-- **Image.** The runtime image is `mcr.microsoft.com/azure-databases/data-api-builder` without a version tag, so each build uses the latest DAB release. The config file is copied to `/App`.
+- **Image.** The runtime image is pinned to `mcr.microsoft.com/azure-databases/data-api-builder:2.1.7`, and the build stage installs the matching `Microsoft.DataApiBuilder` 2.1.7 CLI (`DAB_VERSION` in the dockerfile). Change both together when you upgrade DAB. The config file is copied to `/App`.
 - **Startup wrapper.** [`entrypoint.sh`](../../api/entrypoint.sh) runs before DAB:
   1. Sets `DAB_MCP_ALLOWED_HOST` to the container app's host name, so the `/mcp` endpoint accepts requests for that host.
   2. Waits until the managed identity endpoint returns a token.
-  3. Sleeps 30 seconds to give the database time to resume.
-  4. Starts DAB with `dab-config.json`.
+  3. Starts DAB with `dab-config.json`. If DAB exits at startup (for example, the database is resuming or the seed job hasn't created the schema yet), it retries with exponential backoff: 5 seconds, doubling up to 40 seconds (`DB_RETRY_INITIAL_SECONDS`, `DB_RETRY_MAX_SECONDS`).
+  4. Stops retrying after 150 seconds (`DB_START_DEADLINE_SECONDS`, below the startup probe window) and exits with DAB's status, so Container Apps restarts the replica.
 - **Probes.** A TCP startup probe on port 80 starts after 60 seconds and allows 12 failures 10 seconds apart. DAB's own `/health` endpoint reports the DAB process, not database readiness.
 
 ## Hosting
@@ -108,11 +108,10 @@ Check the GraphQL `errors` array as well as the HTTP status. See [authenticated 
 | Build | Remote build in ACR (`azure.yaml`, `remoteBuild: true`) |
 | Telemetry | Application Insights via `APPLICATIONINSIGHTS_CONNECTION_STRING` |
 
-The container scales to zero, so the first request after an idle period waits for startup. The `api` service postdeploy hook, [`api-postdeploy.sh`](../../scripts/hooks/api-postdeploy.sh), sets an `APP_URL` environment variable to the storefront URL. `dab-config.json` does not read it; CORS is defined in the config file.
+The container scales to zero, so the first request after an idle period waits for startup. CORS is defined in `dab-config.json`; the `api` service has no postdeploy hook.
 
 Runtime settings are listed in [environment variables](../reference/environment-variables.md#dab-api-api).
 
-## Deploying and running locally
+## Deploying and testing
 
-- **Deploy:** `azd deploy api --no-prompt` rebuilds the image and creates a new revision.
-- **Run locally:** the VS Code task **start api (DAB)** runs `dab start` in `api/`. Provide `DATABASE_CONNECTION_STRING`, `DAB_JWT_ISSUER`, `DAB_JWT_AUDIENCE` and `DAB_MCP_ALLOWED_HOST` (for example `localhost`). Do not disable authentication. The deployed database is private, so local DAB needs a database you can reach; prefer testing against the deployed API.
+DAB runs only in Azure. `azd deploy api --no-prompt` rebuilds the image and creates a new revision; then test the deployed endpoint with the authenticated helper. The database is private, so there is no local DAB run.

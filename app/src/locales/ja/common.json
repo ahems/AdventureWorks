@@ -115,6 +115,7 @@
     "aiFeaturesSemanticDesc": "自然言語のクエリを理解するためにAI埋め込みを使用しています。試してみてください：「赤い自転車」、「雨のハイキング用防水ギア」、「サイクリスト向けの軽量装備」",
     "matchCounts": "{{descriptionMatches}}件の説明一致、{{reviewMatches}}件のレビュー一致、{{nameMatches}}件の名前一致が見つかりました",
     "semanticUnavailable": "セマンティック検索サービスは利用できません。AIサービスが稼働しており、埋め込みがインデックスされていることを確認してください。",
+    "aiRateLimited": "AI 検索は現在混み合っています。{{minutes}} 分後にもう一度お試しください。",
     "noMatchingProducts": "該当する商品が見つかりませんでした",
     "enterSearchQuery": "製品を検索するためにクエリを入力してください",
     "noResultsForQuery": "当社のAI搭載検索では「{{query}}」に一致する商品が見つかりませんでした。別のキーワードやフレーズをお試しください。",
@@ -267,7 +268,11 @@
       "lastName": "ドウ",
       "email": "john@example.jp",
       "phone": "555-123-4567"
-    }
+    },
+    "testCardsOnly": "保存できるのは公開テスト用カード番号（例: 4242 4242 4242 4242）のみです。保存されるのはカードの種類、下 4 桁、有効期限だけです。",
+    "errorSavePayment": "支払い方法を保存できませんでした。もう一度お試しください。",
+    "addCard": "カードを追加",
+    "invalidTestCard": "このカードは保存できません。有効期限内の有効な公開テスト用カード番号を使用してください。"
   },
   "checkout": {
     "backToCart": "カートに戻る",

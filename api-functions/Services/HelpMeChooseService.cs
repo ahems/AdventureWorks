@@ -58,10 +58,8 @@ public class HelpMeChooseService
         _sqlConnectionString = configuration["SQL_CONNECTION_STRING"]
             ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
 
-        // Use the plain help-me-choose agent (not the workflow orchestrator variant) because
-        // HelpMeChooseService relies on structured_inputs which are only configured on
-        // eshop-help-me-choose-agent. The workflow agent is a Foundry orchestrator without
-        // tool/instruction setup and would return unstructured prose.
+        // HelpMeChooseService relies on the structured_inputs configured on
+        // eshop-help-me-choose-agent.
         var agentId = configuration["AI_AGENT_HELP_ME_CHOOSE_ID"];
         _agentId = agentId ?? throw new InvalidOperationException(
             "AI_AGENT_HELP_ME_CHOOSE_ID environment variable is not set");

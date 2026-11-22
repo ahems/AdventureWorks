@@ -57,7 +57,7 @@ flowchart LR
     P --> EV["Web PubSub: warehouse"]
 ```
 
-1. The first operation (or `POST warehouse/initialize`) seeds the worker pool from `HumanResources` department 5 and default handling, receiving and damage configuration.
+1. `SimulationMaintenance_Timer` on host start, the first operation or `POST warehouse/initialize` seeds the worker pool from `HumanResources` department 5 and default handling, receiving and damage configuration.
 2. Handling time is drawn from the product subcategory's minimum and maximum minutes. Items heavier than 5 kg take proportionally longer. Supplier receipts add inspection time.
 3. Damage is rolled per operation. Damaged units are removed from the quantity, recorded as a damage event and written off at standard cost.
 4. Inventory changes apply to location 7. Quantities are clamped to 32,767 per SKU.
@@ -109,7 +109,7 @@ Group `warehouse`: `config-changed`, `operation-completed` (coalesced), `invento
 
 ## Security
 
-Routes need `manufacturing.read` or `manufacturing.write`. Real-time subscribers receive the `warehouse` group only when their token has `realtime.connect`, `inventory.read` and an internal user category.
+Routes need `manufacturing.read` or `manufacturing.write`. Real-time subscribers receive the `warehouse` group only when their token has `realtime.connect`, `inventory.read` or `manufacturing.read`, and an internal user category.
 
 ## Configuration
 

@@ -24,16 +24,20 @@ public class AIService
 {
     private readonly string _endpoint;
     private readonly string _embeddingDeploymentName = "embedding";
-    private readonly string _imageDeploymentName = "gpt-image-1";
+    private readonly string? _imageDeploymentName;
     private readonly ILogger<AIService> _logger;
     private readonly TelemetryClient _telemetryClient;
 
-    public AIService(string endpoint, ILogger<AIService> logger, TelemetryClient telemetryClient)
+    public AIService(string endpoint, ILogger<AIService> logger, TelemetryClient telemetryClient, string? imageDeploymentName = null)
     {
         _endpoint = endpoint;
         _logger = logger;
         _telemetryClient = telemetryClient;
+        _imageDeploymentName = string.IsNullOrWhiteSpace(imageDeploymentName) ? null : imageDeploymentName.Trim();
     }
+
+    /// <summary>Foundry image deployment name from the <c>AI_IMAGE_DEPLOYMENT_NAME</c> setting, or null when none is deployed.</summary>
+    public string? ImageDeploymentName => _imageDeploymentName;
 
     public async Task<List<ProductDescriptionEmbedding>> GenerateEmbeddingsAsync(List<ProductDescriptionData> descriptions)
     {
@@ -302,6 +306,10 @@ public class AIService
 
     public async Task<List<ProductPhotoData>> GenerateProductImagesAsync(List<ProductImageData> products)
     {
+        if (_imageDeploymentName is null)
+            throw new InvalidOperationException(
+                "Image generation is unavailable: AI_IMAGE_DEPLOYMENT_NAME is not set (no image model was deployed).");
+
         var credential = new DefaultAzureCredential();
         // Image generation can take 2-4 minutes per image.  The SDK default
         // NetworkTimeout is 100 s which is too short, causing AggregateException
