@@ -154,7 +154,7 @@ public class FoundryAgentClient
     /// <paramref name="conversationHistory"/> to seed the context, or leave it null
     /// for a stateless single-shot call.
     /// </summary>
-    /// <param name="agentId">Named agent ID, e.g. "aw-help-me-choose-agent".</param>
+    /// <param name="agentId">Named agent ID, e.g. "eshop-help-me-choose-agent".</param>
     /// <param name="userMessage">The new user message.</param>
     /// <param name="conversationHistory">
     ///   Optional prior messages to include when starting a new conversation.
@@ -524,8 +524,20 @@ public class FoundryAgentClient
                     }
                 }
 
-                _logger.LogError("Foundry Responses API returned {Status}. Response body omitted.",
-                    (int)httpResponse.StatusCode);
+                _logger.LogError(
+                    "Foundry Responses API returned {Status}. Response body omitted; error code {ErrorCode}, " +
+                    "type {ErrorType}, remaining tokens {RemainingTokens}, remaining requests {RemainingRequests}, " +
+                    "request bytes {RequestBytes} (instructions {InstructionBytes}, input {InputBytes}, " +
+                    "tools {ToolBytes}, structured inputs {StructuredInputBytes}).",
+                    (int)httpResponse.StatusCode, SafeErrorField(responseBody, "code"),
+                    SafeErrorField(responseBody, "type"),
+                    SafeNumericHeader(httpResponse, "x-ratelimit-remaining-tokens"),
+                    SafeNumericHeader(httpResponse, "x-ratelimit-remaining-requests"),
+                    Encoding.UTF8.GetByteCount(json),
+                    Encoding.UTF8.GetByteCount(requestBody.Instructions ?? string.Empty),
+                    SerializedBytes(requestBody.Input),
+                    SerializedBytes(requestBody.Tools),
+                    SerializedBytes(requestBody.StructuredInputs));
                 throw new InvalidOperationException(
                     $"Foundry Responses API failed ({(int)httpResponse.StatusCode})");
             }
@@ -711,6 +723,32 @@ public class FoundryAgentClient
     private static string SafeShapeName(string? value) =>
         value is { Length: > 0 and <= 64 } && value.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '_' or '-' or '.')
             ? value : "other";
+
+    // Only identifier-shaped error fields are logged; messages can echo prompts or tool output.
+    private static string SafeErrorField(string responseBody, string field)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("error", out var error) &&
+                error.ValueKind == JsonValueKind.Object &&
+                error.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String)
+                return SafeShapeName(value.GetString());
+        }
+        catch (JsonException)
+        {
+        }
+        return "none";
+    }
+
+    private static string SafeNumericHeader(HttpResponseMessage response, string name) =>
+        response.Headers.TryGetValues(name, out var values) &&
+        values.FirstOrDefault() is { Length: > 0 and <= 12 } value && value.All(char.IsAsciiDigit)
+            ? value : "none";
+
+    private static int SerializedBytes(object? value) =>
+        value is null ? 0 : Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(value, _serializeOptions));
 
     private FoundryAgentResponse ParseResponse(
         string responseBody, string agentId, CachedAgentDefinition definition, FoundryResponsesRequest request,

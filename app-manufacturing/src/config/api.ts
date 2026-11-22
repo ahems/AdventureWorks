@@ -4,7 +4,7 @@
  * To change an API endpoint, update it here (or set the corresponding
  * VITE_* environment variable in `.env`) — no other files need editing.
  *
- * - ODATA_BASE: primary OData backend (Products, BOM, Work Orders, Vendors, etc.)
+ * - ODATA_BASE: DAB REST base URL (Products, BOM, Work Orders, etc.; OData-style query parameters)
  * - MANUFACTURING_BASE: manufacturing simulation / supply / planning functions API
  *
  * In production (container), values are injected at runtime via /config.js into
@@ -46,7 +46,7 @@ export const API_MCP_URL: string =
   (import.meta.env.VITE_API_MCP_URL as string | undefined) ||
   "";
 
-/** Negotiate URL for Web PubSub real-time push. Empty string = disabled. */
+/** Negotiate URL for Web PubSub real-time push, derived from the Functions base URL (local Functions host by default). */
 export const WEB_PUBSUB_NEGOTIATE_URL: string = (() => {
   const functionsBase =
     runtimeConfig?.API_FUNCTIONS_URL ||

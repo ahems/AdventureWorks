@@ -1,118 +1,71 @@
-# AdventureWorks E-Commerce Application
+---
+title: Storefront app (app/) — React SPA on Azure Static Web Apps
+summary: Component README for the AdventureWorks customer storefront; how to run, build, test, configure and deploy it, with links to the full storefront guide.
+audience: [developer, ai-agent]
+components: [app]
+related: [docs/apps/storefront.md, docs/architecture/realtime-eventing.md, docs/features/monitoring/HEALTH_DIAGNOSTICS.md, docs/operations/deployment.md]
+---
 
-A modern e-commerce web application built with React, TypeScript, and Vite, featuring a GraphQL API integration with the AdventureWorks database.
+# Storefront app (`app/`)
 
-## Features
+The customer-facing AdventureWorks e-shop: browse and search the catalog, manage a
+cart, check out, view orders and receipts, chat with the AI assistant and switch
+between 23 locales. It reads catalog data from the DAB GraphQL API, calls Azure
+Functions for business workflows and signs users in through the api-mcp OAuth server.
+For the page-by-page guide, see **[docs/apps/storefront.md](../docs/apps/storefront.md)**.
 
-- 🛒 Full-featured e-commerce with shopping cart
-- 🎨 Modern UI with doodle-style design system
-- 📱 Responsive design for all devices
-- 🔍 Advanced search and filtering
-- 🎯 Product categories and subcategories
-- ⭐ Product reviews and ratings
-- 🔐 User authentication
-- 🌐 GraphQL API integration
-- 🏥 **Health diagnostics** (`/health`) — quick, read-only DAB/Functions/SQL/storage/MCP/OAuth checks; existing browser WebSocket status; neutral AI/email/telemetry configuration indicators; separate opt-in functional checks and seed/AI-image data readiness. No automatic reloads or polling. See [Health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md) for coverage, limits, and deployment/smoke tests.
+**Tech and hosting:** React 19, TypeScript, Vite, Tailwind CSS, shadcn/ui and TanStack
+Query, built locally and deployed to **Azure Static Web Apps** (azd service `app`).
 
-## GraphQL API Integration
+## Key folders
 
-This app fetches data from a GraphQL API powered by Microsoft Data API Builder. See [GRAPHQL_INTEGRATION.md](./GRAPHQL_INTEGRATION.md) for detailed documentation.
+| Path | Contents |
+|---|---|
+| `src/pages/`, `src/components/` | Routes and UI components |
+| `src/data/apiService.ts`, `src/hooks/` | GraphQL data service and React Query hooks |
+| `src/hooks/useRealTimeUpdates.ts` | Web PubSub event → query-invalidation dispatcher |
+| `src/locales/` | Bundled translation JSON (23 locales) |
+| `scripts/` | Build-time config generation and `node --test` regression tests |
+| `staticwebapp.config.template.json` | SPA fallback, sitemap redirect and security headers |
 
-### Quick Start
-
-1. Copy the environment template:
-
-```bash
-cp .env.example .env
-```
-
-2. Update `.env` with your API URL:
-
-```env
-VITE_API_URL=https://your-api-url.azurecontainerapps.io/graphql
-```
-
-3. Install dependencies and run:
+## Run, build and test
 
 ```bash
+cd app
 npm install
-npm run dev
+npm run dev          # Vite dev server on http://localhost:8080
+npm run build        # generates config.js and builds dist/
+npm run lint
+node --test scripts/health-checks.test.mjs scripts/sale-product-model-card.test.mjs
 ```
 
-## Project info
+The storefront has no `npm test` script; run the `node --test` files directly. The
+cross-frontend live-updates regression is
+`node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs` (from the repo root).
 
-### Health regression tests
+## Configuration
 
-Run `node --test scripts/health-checks.test.mjs` from this directory.
-These cover status and payload validation, optional readiness, request deadlines,
-cancellation, pagination, and the semantic-search network-failure regression.
+Runtime values come from `window.APP_CONFIG` in `/config.js` (generated during
+`azd deploy`), falling back to `VITE_API_URL`, `VITE_API_FUNCTIONS_URL` and
+`VITE_API_MCP_URL`. For local development against Azure, copy `.env.example` to
+`.env` and fill these from `azd env get-value <KEY> --no-prompt`. See
+[runtime configuration](../docs/apps/storefront.md#runtime-configuration) and the
+[environment variables reference](../docs/reference/environment-variables.md).
 
-### Sale cart regression tests
+## Deploy
 
-Run `node --test scripts/sale-product-model-card.test.mjs` from this directory.
-The tests cover adding sale products with size-only, color-only, both, or no
-variant options, and blocking unavailable products. Cart success/error feedback
-is provided by `CartContext` after the cart operation, not by the sale card.
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use your preferred IDE**
-
-Clone this repo and push changes.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+azd deploy app --no-prompt
 ```
 
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Deploy using `azd up` — see [QUICKSTART.md](../QUICKSTART.md) for details.
+The predeploy hook writes `.env.production` and `staticwebapp.config.json`; see
+[deployment](../docs/operations/deployment.md).
 
 ## Related docs
 
-- Overall solution architecture and services: [README.md](../README.md)
-- Azure deployment and azd workflow: [QUICKSTART.md](../QUICKSTART.md)
-- Frontend local development details: [app/LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)
-- Data API Builder service and container config: [api/README.md](../api/README.md)
-- Azure Functions and AI/MCP workflows: [api-functions/README.md](../api-functions/README.md)
-- GraphQL naming rules from the AdventureWorks schema: [docs/architecture/DAB_NAMING_CONVENTIONS.md](../docs/architecture/DAB_NAMING_CONVENTIONS.md)
+- [Storefront guide](../docs/apps/storefront.md)
+- [Health diagnostics (`/health`)](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md)
+- [Real-time eventing](../docs/architecture/realtime-eventing.md)
+- [Localization](../docs/features/i18n/localization.md)
+- [DAB naming conventions](../docs/architecture/dab-naming-conventions.md)
+- [Testing strategy](../docs/testing/testing-strategy.md)

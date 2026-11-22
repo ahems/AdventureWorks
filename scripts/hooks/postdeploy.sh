@@ -29,7 +29,15 @@ get_azd_value() {
 manufacturing_endpoint=$(get_azd_value "AGENT_MANUFACTURING_AGENT_RESPONSES_ENDPOINT")
 
 if [[ -z "$manufacturing_endpoint" ]]; then
-  echo "Warning: hosted Manufacturing agent endpoint was not published by azd."
+  # A service-scoped `azd deploy` (or an env rebuilt by recover-azd-env.py) does not
+  # republish the agent output. Reuse the last published endpoint so MCP trust keeps
+  # the hosted principal; hosted-agent-mcp-trust.py re-verifies it live in Foundry.
+  manufacturing_endpoint=$(get_azd_value "MANUFACTURING_AGENT_ENDPOINT")
+  if [[ -n "$manufacturing_endpoint" ]]; then
+    echo "Using the previously published hosted Manufacturing agent endpoint."
+  else
+    echo "Warning: hosted Manufacturing agent endpoint was not published by azd."
+  fi
 else
   azd env set "MANUFACTURING_AGENT_ENDPOINT" "$manufacturing_endpoint" "${environment_args[@]}" --no-prompt >/dev/null
   echo "Published MANUFACTURING_AGENT_ENDPOINT from the hosted agent deployment."

@@ -1,423 +1,147 @@
-# AI Agent Automation
+---
+title: Foundry agents
+summary: The 21 Microsoft Foundry agents AdventureWorks creates (15 prompt agents, 3 workflow agents and 3 intent agents) plus the hosted manufacturing agent, how deployment hooks create them, which code calls each one, memory stores and chat guardrails.
+audience: [developer, operator]
+components: [ai-foundry, api-functions, api-mcp, scripts, infra]
+related:
+  - docs/architecture/ai-architecture.md
+  - docs/features/ai/ai-chat.md
+  - docs/features/ai/ai-content-generation.md
+  - docs/features/manufacturing/manufacturing-agent.md
+---
 
-This document describes the automated AI Agent creation process integrated into the Azure deployment pipeline.
+# Foundry agents
 
-## Overview
+## What it does
 
-During the root `azd up` or `azd deploy` lifecycle, the deployment automatically creates the Azure AI Foundry agents used by the eshop, admin portal, and manufacturing surfaces. This eliminates the need for manual agent setup and ensures agents are configured against the active Foundry project.
+AdventureWorks keeps its AI instructions and tool lists in Microsoft Foundry agent definitions rather than in application code. The deployment hooks create **21 agents** in the Foundry project:
 
-## Automated Process
+- **15 prompt agents** called by Azure Functions for chat, order generation, content, reviews, translation and manufacturing content.
+- **3 workflow agents** and **3 intent agents** that show declarative Foundry workflows. They are deployed for exploration in the Foundry portal and are not called by the app.
 
-### What Gets Created
+The **hosted manufacturing agent** is a separate code-based agent deployed as an azd service; see [manufacturing agent](../manufacturing/manufacturing-agent.md).
 
-When you run `azd up` or `azd provision`, the system automatically:
+## Try it
 
-1. **Deploys Infrastructure** (via Bicep templates)
-   - Azure AI Foundry Hub + Project
-   - Azure OpenAI with GPT model deployments
-    - Azure Functions Flex Consumption (api-functions) and Azure Container Apps (api-mcp, DAB)
-   - All supporting Azure resources
+**Portal:** open the Foundry project (`AI_FOUNDRY_PROJECT_ENDPOINT`) → **Agents** to see the definitions, instructions and tools.
 
-2. **Creates prompt agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
+**App:** sign in to the storefront and open the chat widget, or use the Admin dashboard assistant; see [AI chat](ai-chat.md).
 
-   **Eshop agents** (customer-facing):
-   - **Eshop Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat, product recommendations, order tracking
-   - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — multi-phase product advisor wizard
-   - **Eshop Intent Agent** — classifies intent and routes to the right eshop workflow
-   - **Eshop Workflow Agent** (`AI_AGENT_WORKFLOW_CHAT_ID`) — provisioned for future native workflow execution; the e-shop currently uses the prompt chat agent directly, bypassing the separate workflow Q&A
-
-   **Admin agents** (internal portal):
-   - **Admin Chat Agent** — general-purpose admin assistant with full catalog and order access
-   - **Admin Order Agent** (`AI_AGENT_ORDER_ID`) — autonomous order simulation for any persona
-   - **Admin Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation with live catalog data
-   - **Admin Cart Recovery Agent** (`AI_AGENT_CART_RECOVERY_ID`) — analyses stale carts and generates recovery strategies
-   - **Admin Customer Agent** — generates realistic fictitious customer profiles for any locale
-   - **Admin Product Content Agent** (`AI_AGENT_PRODUCT_CONTENT_ID`) — generates and refines product descriptions and marketing copy
-   - **Admin Order Intent Agent** — classifies admin order generation requests
-   - **Admin Order Workflow Agent** (`AI_AGENT_WORKFLOW_ORDER_ID`) — identifies persona, gathers constraints, invokes order agent
-   - **Admin Promotion Intent Agent** — classifies promotion campaign generation requests
-   - **Admin Promotion Workflow Agent** (`AI_AGENT_WORKFLOW_PROMOTION_ID`) — gathers promo parameters, invokes promotion agent
-
-     **Autonomous hosted agent:**
-
-   - **Manufacturing Agent** (`manufacturing-agent` service in the root `azure.yaml`) — deployed by root `azd deploy`, then wired to Functions through `MANUFACTURING_AGENT_ENDPOINT`; triggered on new order placement via SQL Change Tracking
-
-   Each agent that requires live data is registered with two MCP tool servers:
-   - `api-mcp` service (semantic product/catalog tools)
-   - DAB `/mcp` endpoint (raw entity data tools)
-
-3. **Injects Agent IDs and hosted-agent endpoint** (`scripts/hooks/api-functions-postdeploy.sh` and root `scripts/hooks/postdeploy.sh`)
-   - After all services deploy, patches the `api-functions` app with prompt-agent IDs and the hosted Manufacturing agent endpoint
-
-4. **Environment Variables** (available in azd environment)
-   - `AI_FOUNDRY_PROJECT_ENDPOINT`: Azure AI Foundry project endpoint
-   - `AI_AGENT_CHAT_ID`: Eshop chat agent
-   - `AI_AGENT_ORDER_ID`: Admin order generation agent
-   - `AI_AGENT_PROMOTION_ID`: Admin promotion generation agent
-   - `AI_AGENT_CART_RECOVERY_ID`: Admin cart recovery analysis agent
-   - `AI_AGENT_PRODUCT_CONTENT_ID`: Admin product content generation agent
-   - `AI_AGENT_HELP_ME_CHOOSE_ID`: Eshop product advisor wizard agent
-   - `AI_AGENT_WORKFLOW_CHAT_ID`: Provisioned e-shop workflow routing agent (not used by the prompt-only chat client)
-   - `AI_AGENT_WORKFLOW_PROMOTION_ID`: Admin promotion workflow agent
-   - `AI_AGENT_WORKFLOW_ORDER_ID`: Admin order workflow agent
-   - `MANUFACTURING_AGENT_ENDPOINT`: Hosted Manufacturing agent Responses endpoint
-   - `MCP_SERVICE_URL`: api-mcp service endpoint
-
-## Agent Configuration
-
-### E-shop chat guardrails
-
-The storefront demonstrates several distinct layers, without adding a prompt/keyword filter to the MCP server:
-
-- **Foundry RAI policy**: `infra/modules/eshop-chat-guardrails.bicep` provisions `AdventureWorks-Eshop` on the existing AI account. It retains standard harm filtering and adds blocking Prompt Shields (the `Jailbreak` prompt control), protected-text filtering, and a completion blocklist for common code syntax. The policy is wired into `aiservices.bicep` for normal provisioning.
-- **Explicit policy selection**: `FoundryAgentClient` loads the prompt agent's instructions and tools, then calls the project Responses API directly. It is not a native named-agent invocation. Every customer-chat inference, MCP approval and empty-text continuation sends `x-policy-id: AdventureWorks-Eshop`; merely assigning a policy to an agent in the portal would not protect this execution path. Other agents retain their existing policy.
-- **Shopping-only instructions**: `scripts/utilities/agents/eshop-chat-agent.sh` refuses programming, debugging, homework, claimed developer authority, fabricated prior assistance, third-party customer requests and secrets. Mixed questions decline the prohibited portion and offer legitimate shopping help. Publish changes through the normal agent-creation scripts; restart/deploy Functions to refresh cached definitions.
-- **Real authorization boundaries**: Functions derives customer identity from the validated delegated token, ignores browser-supplied identity/history, restricts admin-agent routing, and binds stored conversations to the signed subject and selected agent. MCP's existing scope and customer-ownership authorization remains essential; a model refusal is not an access-control boundary.
-- **Honest demo indicators**: The storefront has normal shopping suggestions and a collapsible **Try the safety demo** section. Safety examples fill the message box for review before sending. Only structured platform blocks receive the **Blocked by Microsoft Foundry** badge; ordinary instruction-based refusals do not. Platform blocks emit `Agent.GuardrailBlocked` telemetry, return no partial output, and reset the conversation continuation.
-
-Prompt Shields detect recognized prompt-injection attacks, not every off-topic request. The output regex is supplemental and is not a complete detector for every programming language or code format. Protected Material Code is enabled for annotation, not misrepresented as a general no-code filter. Task Adherence preview is not enabled or claimed as a shopping-topic classifier. Agent instructions handle business scope; test and monitor them rather than claiming an absolute guarantee.
-
-To update only these guardrail resources without reprovisioning the application:
+**Agent IDs:**
 
 ```bash
-az deployment group create --resource-group "$AZURE_RESOURCE_GROUP" \
-  --template-file infra/modules/eshop-chat-guardrails.bicep \
-  --parameters accountName="$AZURE_OPENAI_ACCOUNT_NAME"
+azd env get-value AI_AGENT_CHAT_ID --no-prompt
+azd env get-value AI_AGENT_ORDER_ID --no-prompt
 ```
 
-Run the live regression suite described in [tests/scripts/README.md](../../../tests/scripts/README.md), as well as the focused `FoundryAgentClientTests`, `AIAgentServiceTests` and `FunctionsOAuthOptionsTests` backend tests. Include legitimate shopping and order-history follow-ups, not just attack prompts.
+## How it works
 
-### Agent Details
-
-Each agent is created via `az rest --method PUT` to the Foundry data plane API with:
-
-- **Model:** Auto-selected from `chatGptDeploymentName` env var (e.g., `gpt-4.1-mini`)
-- **Authentication:** Azure Managed Identity (passwordless)
-- **Tool Servers:** Two MCP servers registered per agent
-  - `api-mcp` — custom semantic tools (SearchProducts, GetCustomerOrders, etc.)
-  - DAB `/mcp` — GraphQL entity tools (Product, Customer, SalesOrder, etc.)
-
-### re-running Agent Creation
-
-The creation script is idempotent — re-running `postprovision.sh` configures all agents. The API Functions postdeploy hook also upserts the Help-Me-Choose agent so its security policy stays synchronized during a targeted deployment:
-
-```bash
-azd deploy api-functions --no-prompt
+```mermaid
+flowchart LR
+    PP["postprovision.sh"] --> C["create-foundry-agents.sh"]
+    PD["postdeploy.sh<br/>(only when scripts change)"] --> C
+    C --> S["scripts/utilities/agents/*.sh<br/>18 scripts"]
+    S -->|"upsert prompt / workflow agents<br/>+ memory stores"| F[("Foundry project")]
+    C --> ENV["azd env: AI_AGENT_*_ID"]
+    AFP["api-functions postdeploy hook"] -->|"AI_AGENT_* app settings"| FN["Azure Functions"]
+    FN -->|"Responses API<br/>+ MCP bearer token"| F
+    F -->|"MCP tools"| MCP["api-mcp"]
 ```
 
-The authentication assurance live profile reads the selected deployment's Foundry
-agent definition and checks the public questions/recommendations routes without
-an application-user token. It verifies the catalog-only tool list, absence of
-memory and DAB MCP, and rejects fallback/response-ID-shaped results. A separate
-deployed telemetry check confirmed execution of the authorized catalog tools.
-
-Backend MCP service tokens must request explicit scope sets; the api-mcp service
-grant rejects omitted or unknown scopes, and token clients verify the exact
-granted set when the token response includes `scope`. OAuth permits omitting
-that field when the granted set matches the request, so clients accept that
-omission as the requested set. Help-Me-Choose requests `products.read`; customer
-generation uses `admin.write`; order generation requests only the product,
-inventory, customer, order-read and customer-generation scopes needed by its
-tool allow-list. The hosted manufacturing agent requests read scopes for
-ReadOnly/ProposePending and adds `manufacturing.write` only for FullyAutonomous
-runs. User-facing chat uses the caller's delegated MCP token instead of a
-service token. Agents with server-supplied data disable MCP tools for the
-invocation.
+### Creation
 
-The Foundry provisioner omits MCP servers when their explicit tool allow-list
-is empty; DAB MCP is opt-in and requires its own non-empty allow-list. The
-normal `azd deploy` hook reapplies prompt-agent definitions when their source
-fingerprint changes, while avoiding a duplicate update after `azd up`.
+- `postprovision.sh` runs `scripts/utilities/create-foundry-agents.sh` after RBAC propagates. It runs all 18 scripts in `scripts/utilities/agents/` and stores a hash of the scripts as `FOUNDRY_AGENT_CONFIG_HASH`.
+- `postdeploy.sh` re-runs creation only when the hash changes.
+- The `api-functions` postdeploy hook re-upserts the Help-Me-Choose agent and copies the `AI_AGENT_*` IDs, `MCP_SERVICE_URL`, `MANUFACTURING_AGENT_ENDPOINT` and `API_FUNCTIONS_URL` into Function app settings.
 
-## Thread Persistence
-
-Agents that support multi-turn conversations use a Foundry-managed
-`previous_response_id`; the frontend returns the `threadId` for follow-up calls.
-Public Help-Me-Choose is an exception: it does not expose response IDs or resume
-caller-selected Foundry conversations because its routes are anonymous.
-
-## Structured Inputs
+Each prompt agent uses the `chatGptDeploymentName` model. Tools are built by `scripts/utilities/agents/lib/build-agent-tools.py` with an explicit allow-list against the `adventureworks_mcp` server; an empty allow-list means no MCP tool. Agent definitions never store an MCP authorization header.
 
-Each agent's Foundry portal definition must declare a `structured_inputs` schema listing the Handlebars variables used in its instructions. The `api-functions` code passes runtime values for these at invocation time, and Foundry resolves `{{variable}}` placeholders before the model sees the instructions.
+To change an agent, edit its script and run `azd deploy --no-prompt`; the hooks detect the change and upsert the agents.
 
-> **Prerequisite**: If you recreate or modify an agent via `create-foundry-agents.sh`, re-add the `structured_inputs` schema block in the Foundry portal for that agent. Without it, Handlebars placeholders remain unresolved and context is lost.
+### Runtime
 
-### Variables per agent
+`api-functions/Services/FoundryAgentClient.cs` reads the agent definition, then calls the Foundry Responses API with the definition's instructions and tools. It:
 
-| Agent                | Variables declared in portal `structured_inputs` schema                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat                 | `customerId` (string), `cultureId` (string), `userName` (string)                                                                           |
-| Help-Me-Choose       | `cultureId` (string, default `"en"`), `profileContext` (string — catalog/shopper hint)                                                               |
-| Order Generation     | `todayDate`, `personaDescription`, `isExistingCustomer` (bool), `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
-| Promotion Generation | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                            |
-| Customer Generation  | `locale` (string), `todayDate` (string)                                                                                                    |
+- fills Handlebars placeholders such as `{{userId}}`, `{{userName}}` and `{{cultureId}}` before sending;
+- injects a per-request MCP bearer token and a W3C `traceparent` into the MCP tool headers;
+- enforces the expected tool allow-list for guarded agents;
+- continues conversations with `previous_response_id` and checks that a conversation belongs to the caller;
+- sends `x-memory-user-id` for agents with memory.
 
-> `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts`, and `profileContext` should be marked **optional** in the portal schema so Handlebars `{{#if}}` branches work correctly when those values are absent.
+### Agent catalog
 
-## Memory Stores
+| Foundry name | Kind | Env var | Purpose | MCP tools | Memory | Used by |
+|---|---|---|---|---|---|---|
+| `eshop-chat-agent` | prompt | `AI_AGENT_CHAT_ID` | Storefront customer support | 8 (orders, products, recommendations, reviews, availability) | yes | `POST /api/agent/chat` (delegated user token) |
+| `admin-chat-agent` | prompt | `AI_AGENT_ADMIN_CHAT_ID` | Admin assistant | 15 read tools | yes | `POST /api/agent/chat` with `isAdmin` |
+| `admin-order-agent` | prompt | `AI_AGENT_ORDER_ID` | AI order generation | 12 | yes | Shopping simulator, `GenerateOrderWithAI`, `GenerateOrdersBulk` |
+| `admin-promotion-agent` | prompt | `AI_AGENT_PROMOTION_ID` | Promotion suggestions | none | yes | `GeneratePromotion`, auto-promotion queue |
+| `admin-cart-recovery-agent` | prompt | `AI_AGENT_CART_RECOVERY_ID` | Abandoned-cart strategy | none | yes | `carts/analyze-recovery` |
+| `admin-review-agent` | prompt | `AI_AGENT_REVIEW_ID` | Single verified review | none | yes | Verified review generation |
+| `admin-customer-agent` | prompt | `AI_AGENT_CUSTOMER_ID` | Fictitious customer profiles | `generate_random_customer`, `generate_random_customer_for_locale` | yes | `customers/generate-with-ai` |
+| `admin-product-content-agent` | prompt | `AI_AGENT_PRODUCT_CONTENT_ID` | Product descriptions | none | yes | `products/generate-content` |
+| `manufacturing-content-agent` | prompt | `AI_AGENT_MANUFACTURING_CONTENT_ID` | Assembly instructions, diagrams, part sheets | none | no | `manufacturing/content/*` |
+| `admin-translation-agent` | prompt | `AI_AGENT_TRANSLATION_ID` | Translations | none | yes | `Translate*` routes, AI job queue |
+| `admin-review-batch-agent` | prompt | `AI_AGENT_REVIEW_BATCH_ID` | Batch reviews with replies | none | yes | Review generation routes |
+| `admin-review-analysis-agent` | prompt | `AI_AGENT_REVIEW_ANALYSIS_ID` | Review sentiment and moderation | none | yes | `reviews/analyze-batch`, moderation queue |
+| `admin-email-content-agent` | prompt | `AI_AGENT_EMAIL_CONTENT_ID` | Marketing email content | none | yes | `email/generate-ai-content` |
+| `admin-catalog-suggestion-agent` | prompt | `AI_AGENT_CATALOG_SUGGESTION_ID` | New category suggestions | none | yes | `GenerateCategoryWithAI` |
+| `eshop-help-me-choose-agent` | prompt | `AI_AGENT_HELP_ME_CHOOSE_ID` | Anonymous product wizard | 4 catalog tools | no | `/api/helpme/*` (catalog-only service token) |
+| `eshop-workflow-agent` | workflow | `AI_AGENT_WORKFLOW_CHAT_ID` | Routes chat to help-me-choose or support | — | — | Not called by the app |
+| `admin-promotion-workflow-agent` | workflow | `AI_AGENT_WORKFLOW_PROMOTION_ID` | Guided promotion creation | — | — | Not called by the app |
+| `admin-order-workflow-agent` | workflow | `AI_AGENT_WORKFLOW_ORDER_ID` | Guided order generation | — | — | Not called by the app |
+| `eshop-intent-agent` | intent | — | Classifier inside the chat workflow | none | no | Workflow only |
+| `admin-order-intent-agent` | intent | — | Classifier inside the order workflow | none | no | Workflow only |
+| `admin-promotion-intent-agent` | intent | — | Classifier inside the promotion workflow | none | no | Workflow only |
 
-Agents configured with a named Foundry memory store retain long-term context,
-scoped per user/context via the `x-memory-user-id` header set by
-`FoundryAgentClient`.
+Workflow definitions are in `workflows/*.yaml`.
 
-| Agent                | Memory Store Name             | What Is Retained                                                                                | What Is Excluded                                 |
-| -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Chat                 | `eshop-chat-memory`           | Preferred bike category, activity level, budgets, clothing/shoe sizes, brand preferences        | Payment details, passwords, addresses            |
-| Promotion Generation | `admin-promotion-memory`      | Promotion type patterns, category performance insights, seasonal timing, discount effectiveness | Individual customer PII, payment data            |
-| Order Generation     | `admin-order-memory`          | Persona order patterns, product performance by persona type, successful order compositions      | Customer PII, financial data                     |
-| Customer Generation  | `admin-customer-memory`       | Recently generated customer names, cities, email domains per locale for variety across runs     | Real personal data (all profiles are fictitious) |
+### Memory stores
 
-Memory scoping headers set by `FoundryAgentClient`:
+13 prompt agents have a Foundry memory store (`AI_AGENT_*_MEMORY_STORE`, created with the `embedding` deployment). Functions sends the caller's ID in `x-memory-user-id`. How much the stores influence responses has not been verified in this project.
 
-- Chat: `customer-{customerId}`
-- Promotion: `promotion-gen-{promotionType}`
-- Order: `order-gen-customer-{customerId}` or `order-gen-persona-{personaType}`
-- Customer: `customer-gen-locale-{locale}`
+### Guardrails
 
-Help-Me-Choose is a public, stateless catalog feature and does not use a memory
-store. It calls only the product-catalog MCP tools with a workload token limited
-to `products.read`; it does not receive caller-controlled customer identities or
-resume browser-supplied Foundry response IDs. The selected deployment's agent
-definition and anonymous questions/recommendations flow have been live-verified;
-see the current status in the
-[authentication assurance record](../authentication/END_TO_END_AUTHENTICATION.md).
-
-The `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, and `subcategoryId` variables should be declared as optional in the schema so agents handle both the `{{#if ...}}` and `{{else}}` branches of Handlebars conditionals correctly.
-
-## Agent Configuration
-
-The created agent has the following characteristics:
-
-### Agent Details
-
-- **Name:** AdventureWorks Customer Service Agent
-- **Model:** Auto-selected based on availability (e.g., `gpt-4.1-mini`, `gpt-4o-mini`)
-- **Endpoint:** Your Azure AI Foundry instance
-- **Authentication:** Azure Managed Identity (passwordless)
-
-### MCP Tools Available
-
-1. **get_customer_orders** - Retrieve customer order history by CustomerID
-2. **get_order_details** - Get detailed order information with optional customer validation
-3. **find_complementary_products** - AI-powered product recommendations
-4. **search_products** - Search product catalog
-5. **get_product_details** - Get detailed product information
-
-### Agent Instructions
-
-The agent is pre-configured with instructions for:
-
-- Order tracking and status inquiries
-- Product searches and recommendations
-- Finding complementary products
-- Customer order history queries
-
-## Using the Agent
-
-### Quick Test
-
-After deployment completes, test the agent immediately:
-
-```bash
-# Test with default query
-python3 test_agent.py
-
-# Expected output:
-# 🤖 Loading AdventureWorks Customer Service Agent...
-#    Model: gpt-4.1-mini
-#    MCP Server: https://av-mcp-xxx.azurecontainerapps.io/mcp
-#
-# 👤 User: What tools do you have access to help customers?
-#
-# 🤖 Agent: I have access to several tools to help customers:
-# 1. get_customer_orders - Retrieve order history using Customer ID
-# 2. get_order_details - Get detailed information about specific orders
-# ...
-```
-
-### Custom Queries
-
-Test customer service scenarios:
-
-```bash
-# Order tracking
-python3 test_agent.py "I'm customer 29825, show me my recent orders"
-
-# Product search
-python3 test_agent.py "What mountain bikes do you have under $1000?"
-
-# Recommendations
-python3 test_agent.py "I just bought a Mountain-200 bike, what accessories should I get?"
-
-# Order details
-python3 test_agent.py "Can you tell me about order 67260?"
-```
-
-### Integration in Code
-
-Use the saved configuration in your own applications:
-
-```python
-import json
-from pathlib import Path
-from agent_framework import ChatAgent, MCPStreamableHTTPTool
-from agent_framework_azure_ai import AzureAIAgentClient
-from azure.identity.aio import DefaultAzureCredential
-
-# Load the auto-generated configuration
-with open("AI_AGENT_CONFIG.json") as f:
-    config = json.load(f)
-
-# Create MCP tool
-mcp_tool = MCPStreamableHTTPTool(
-    name="AdventureWorks MCP",
-    description="AdventureWorks customer service tools",
-    url=config['mcp_server'],
-)
-
-# Create agent
-async with DefaultAzureCredential() as credential:
-    chat_client = AzureAIAgentClient(
-        project_endpoint=config['endpoint'],
-        model_deployment_name=config['model'],
-        async_credential=credential,
-        agent_name=config['agent_name'],
-    )
-
-    async with ChatAgent(
-        chat_client=chat_client,
-        instructions="Your custom instructions here",
-        tools=[mcp_tool],
-    ) as agent:
-        # Use the agent
-        async for chunk in agent.run_stream("Your query here"):
-            if chunk.text:
-                print(chunk.text, end="")
-```
-
-## Configuration File Format
-
-The `AI_AGENT_CONFIG.json` file contains:
-
-```json
-{
-  "agent_name": "AdventureWorks Customer Service Agent",
-  "model": "gpt-4.1-mini",
-  "endpoint": "https://av-openai-xxx.cognitiveservices.azure.com/",
-    "mcp_server": "https://av-mcp-xxx.azurecontainerapps.io/mcp",
-  "tools": [
-    "get_customer_orders",
-    "get_order_details",
-    "find_complementary_products",
-    "search_products",
-    "get_product_details"
-  ]
-}
-```
-
-## Troubleshooting
-
-### Agent Not Created
-
-If the agent creation fails during `azd provision`, check:
-
-1. **Python 3.8+ installed:**
-
-   ```bash
-   python3 --version
-   ```
-
-2. **Package installation:**
-
-   ```bash
-   pip install agent-framework-azure-ai --pre
-   ```
-
-3. **Azure authentication:**
-   ```bash
-   az login
-   ```
-
-### Manual Agent Creation
-
-If automatic creation fails, you can create the agent manually:
-
-```bash
-# Get required values
-azd env get-values | grep -E "(AZURE_OPENAI_ENDPOINT|chatGptModelName|API_FUNCTIONS_URL)"
-
-# Create the agent using the values from above
-python3 << 'EOF'
-import asyncio
-from agent_framework import ChatAgent, MCPStreamableHTTPTool
-from agent_framework_azure_ai import AzureAIAgentClient
-from azure.identity.aio import DefaultAzureCredential
-
-async def create():
-    mcp_tool = MCPStreamableHTTPTool(
-        name="AdventureWorks MCP",
-        description="AdventureWorks customer service tools",
-        url="<API_FUNCTIONS_URL>/api/mcp",
-    )
-
-    async with DefaultAzureCredential() as cred:
-        client = AzureAIAgentClient(
-            project_endpoint="<AZURE_OPENAI_ENDPOINT>",
-            model_deployment_name="<chatGptModelName>",
-            async_credential=cred,
-            agent_name="AdventureWorks Customer Service Agent",
-        )
-
-        async with ChatAgent(
-            chat_client=client,
-            instructions="You are a helpful customer service assistant...",
-            tools=[mcp_tool],
-        ) as agent:
-            response = await agent.run("Hello!")
-            print(f"Agent created: {response.text}")
-
-asyncio.run(create())
-EOF
-```
-
-## Re-running After Changes
-
-If you update the MCP Server tools or want to recreate the agent:
-
-```bash
-# Redeploy functions
-azd deploy api-functions
-
-# Then manually configure the agent using your preferred method
-```
-
-## Security Considerations
-
-- **Authentication:** Agent uses Azure Managed Identity (no API keys)
-- **Authorization:** MCP Server endpoints use Anonymous auth (suitable for demo)
-- **Customer Data:** Tools validate CustomerID for data isolation
-- **Production:** Add authentication to MCP endpoints before production use
-
-## Next Steps
-
-1. **Configure Agent:** Set up the AI Agent manually with desired instructions
-2. **Add More Tools:** Extend the MCP Server with additional functions
-3. **Build UI:** Create a chat interface that uses the agent
-4. **Add Auth:** Implement user authentication to pass CustomerID from logged-in users
-5. **Monitor:** Use Application Insights to track agent usage and performance
-
-## Related docs
-
-- High-level overview of automation: [AI_AGENT_DEPLOYMENT_SUMMARY.md](AI_AGENT_DEPLOYMENT_SUMMARY.md)
-- Migration to Microsoft Agents Framework: [AGENT_FRAMEWORK_MIGRATION.md](AGENT_FRAMEWORK_MIGRATION.md)
-- Telemetry implementation and Kusto queries: [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
-- MCP server and tools: [../api-mcp/README.md](../api-mcp/README.md)
-- Functions that host the agent endpoints: [../api-functions/README.md](../api-functions/README.md)
-- Testing the AI agent and MCP flows: [AI_AND_MCP_TESTING_GUIDE.md](AI_AND_MCP_TESTING_GUIDE.md), [AI_CHAT_MCP_TESTING.md](AI_CHAT_MCP_TESTING.md)
-
-## Related Documentation
-
-- [MCP Server Documentation](api-functions/MCP_SERVER.md)
-- [MCP Server Testing](api-functions/MCP_SERVER_TESTING.md)
-- [CustomerID Migration](MCP_CUSTOMERID_MIGRATION.md)
-- [Deployment Scripts](scripts/README.md)
+`infra/modules/eshop-chat-guardrails.bicep` defines the RAI policy `AdventureWorks-Eshop` (blocking): hate, sexual, violence and self-harm filters at medium, jailbreak detection, protected-material text blocking and a custom blocklist that rejects code output. Functions applies it to customer chat requests by policy ID. See [AI chat](ai-chat.md).
+
+### Other project resources
+
+The hooks also create a Foundry connection `adventureworks-dab-mcp` to the DAB MCP endpoint. No agent currently uses it.
+
+## Data & storage
+
+Agent definitions and memory stores live in the Foundry project. Conversation state is kept by the Responses API (`store: true`). Agent IDs are azd environment values and Function app settings.
+
+## Events
+
+None directly. Features that call agents publish their own events.
+
+## Security
+
+- Hooks use an Azure CLI token for `https://ai.azure.com`. Functions uses its managed identity.
+- MCP calls carry either the signed-in user's delegated token (chat) or a narrowly scoped service token (generation agents). See [OAuth server](../mcp-oauth/README.md).
+
+## Configuration
+
+| Setting | Purpose |
+|---|---|
+| `AI_FOUNDRY_PROJECT_ENDPOINT` | Foundry project |
+| `chatGptDeploymentName` | Model for prompt agents |
+| `AI_AGENT_*_ID`, `AI_AGENT_*_MEMORY_STORE` | Agent and memory IDs |
+| `FOUNDRY_AGENT_CONFIG_HASH` | Detects script changes |
+| `MCP_SERVICE_URL` | MCP server used by agent tools |
+
+`AI_AGENT_MANUFACTURING_ID` and `AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID` appear in some settings files but are not used.
+
+## Limits
+
+- The workflow and intent agents are for portal exploration only.
+- Agent creation needs model capacity in `FOUNDRY_LOCATION`; preup selects available models.
+
+## Related code & docs
+
+- `scripts/utilities/create-foundry-agents.sh`, `scripts/utilities/agents/`
+- `scripts/hooks/postprovision.sh`, `scripts/hooks/postdeploy.sh`, `scripts/hooks/api-functions-postdeploy.sh`
+- `api-functions/Services/FoundryAgentClient.cs`
+- `infra/modules/eshop-chat-guardrails.bicep`, `workflows/`
+- [AI architecture](../../architecture/ai-architecture.md) · [AI content generation](ai-content-generation.md)

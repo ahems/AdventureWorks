@@ -29,6 +29,22 @@ SPEC.loader.exec_module(auth)
 
 
 class ContractTests(unittest.TestCase):
+    def test_isolated_host_build_copies_every_linked_worker_source(self):
+        import functions_host
+
+        linked = functions_host.linked_sources()
+        self.assertIn("api-mcp/AdventureWorks/Telemetry/SqlPrincipalTelemetry.cs", linked)
+        self.assertIn("api-mcp/AdventureWorks/Services/PromotionProductData.cs", linked)
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "api-functions.csproj"
+            project.write_text('<Project><ItemGroup><Compile Include="..\\outside.cs" /></ItemGroup></Project>')
+            (Path(directory).parent / "outside.cs").touch()
+            try:
+                with self.assertRaisesRegex(functions_host.HostFailure, "outside the repository"):
+                    functions_host.linked_sources(project)
+            finally:
+                (Path(directory).parent / "outside.cs").unlink()
+
     def test_isolated_storage_wait_accepts_slow_start_but_not_timeout_or_exit(self):
         import functions_host
 
@@ -4677,6 +4693,7 @@ class ContractTests(unittest.TestCase):
                         patch.object(auth, "reconcile_dab_operation_requirement"), \
                         patch.object(auth, "reconcile_ownership_handlers_requirement"), \
                         patch.object(auth, "reconcile_session_transition_requirement"), \
+                        patch.object(auth, "load_agent_sweep"), \
                         patch.object(auth, "promotion_agent_authorization") as promotion, \
                         patch.object(auth, "promotion_foundry_evidence") as evidence:
                     auth.live(report, deployment, allow_promotion_agent_canary=enabled)
@@ -5372,9 +5389,19 @@ class ContractTests(unittest.TestCase):
             payload = questions if url.endswith("/questions") else fallback
             return 200, {}, json.dumps(payload).encode()
 
-        with patch.object(auth, "http", side_effect=fallback_http):
+        with patch.object(auth, "http", side_effect=fallback_http), \
+                patch.object(auth, "foundry_throttled", return_value=False) as throttled:
             auth.help_me_choose_public_flow(fallback_report, deployment, allow_agent_canary=True)
         self.assertEqual([check["status"] for check in fallback_report.checks], ["PASS", "PASS", "FAIL"])
+        traces = fallback_report.inventory["helpMeChooseTraceIds"]
+        throttled.assert_called_once_with(deployment, traces["recommendations"], sleep=time.sleep)
+
+        throttled_report = report_with_control()
+        with patch.object(auth, "http", side_effect=fallback_http), \
+                patch.object(auth, "foundry_throttled", return_value=True):
+            auth.help_me_choose_public_flow(throttled_report, deployment, allow_agent_canary=True)
+        self.assertEqual([check["status"] for check in throttled_report.checks], ["PASS", "PASS", "BLOCKED"])
+        self.assertIn("HTTP 429", throttled_report.checks[-1]["detail"])
 
         thread_report = report_with_control()
         threaded_questions = {
@@ -5385,11 +5412,61 @@ class ContractTests(unittest.TestCase):
             payload = threaded_questions if url.endswith("/questions") else recommendations
             return 200, {}, json.dumps(payload).encode()
 
-        with patch.object(auth, "http", side_effect=threaded_http) as http:
+        with patch.object(auth, "http", side_effect=threaded_http) as http, \
+                patch.object(auth, "foundry_throttled", return_value=False):
             auth.help_me_choose_public_flow(thread_report, deployment, allow_agent_canary=True)
         http.assert_called_once()
         self.assertEqual([check["status"] for check in thread_report.checks], ["PASS", "FAIL", "BLOCKED"])
         self.assertNotIn("foundry-response-id", json.dumps(thread_report.checks))
+
+    def test_foundry_throttle_requires_the_exact_429_on_the_canary_trace(self):
+        trace = "b" * 32
+        queries = []
+
+        def deployment_with(counts):
+            def azure(*args):
+                if args[:2] == ("resource", "list"):
+                    return ["/subscriptions/s/app"]
+                queries.append(args[args.index("--analytics-query") + 1])
+                return {"tables": [{"rows": [[counts.pop(0)]]}]}
+            return SimpleNamespace(required=lambda _: "rg", azure=azure)
+
+        sleeps = []
+        self.assertTrue(auth.foundry_throttled(deployment_with([0, 1]), trace, sleep=sleeps.append))
+        self.assertEqual(sleeps, [30])
+        self.assertIn(f"operation_Id == '{trace}'", queries[0])
+        self.assertIn(f"outerMessage == '{auth.FOUNDRY_THROTTLE_MESSAGE}'", queries[0])
+        self.assertFalse(auth.foundry_throttled(deployment_with([0, 0, 0, 0]), trace, sleep=lambda _: None))
+        with self.assertRaises(auth.EvidenceError):
+            auth.foundry_throttled(deployment_with([1]), "x' or 1==1 //", sleep=lambda _: None)
+
+        for status, throttled, expected in [("FAIL", True, "BLOCKED"), ("FAIL", False, "FAIL"),
+                                            ("PASS", True, "PASS")]:
+            with self.subTest(status=status, throttled=throttled):
+                report = auth.Report(Path("."))
+                report.add("agent:x", "agents", status, "Generated.")
+                with patch.object(auth, "foundry_throttled", return_value=throttled):
+                    auth.classify_foundry_throttle(report, None, "agent:x", trace)
+                self.assertEqual(report.checks[0]["status"], expected)
+        report = auth.Report(Path("."))
+        report.add("agent:x", "agents", "FAIL", "Generated.")
+        with patch.object(auth, "foundry_throttled", side_effect=auth.EvidenceError("no telemetry")):
+            auth.classify_foundry_throttle(report, None, "agent:x", trace)
+        self.assertEqual(report.checks[0]["status"], "FAIL")
+
+    def test_telemetry_queries_are_not_capped_to_the_cli_default_hour(self):
+        deployment = auth.Deployment.__new__(auth.Deployment)
+        deployment.runtime = None
+        deployment.subscription = "00000000-0000-0000-0000-000000000000"
+        with patch.object(auth, "json_command", return_value={}) as command:
+            deployment.azure("monitor", "app-insights", "query", "--app", "a", "--analytics-query", "q")
+            deployment.azure("monitor", "app-insights", "query", "--app", "a", "--analytics-query", "q",
+                             "--offset", "2h")
+            deployment.azure("resource", "list")
+        first, explicit, other = (call.args[0] for call in command.call_args_list)
+        self.assertEqual(first[first.index("--offset") + 1], auth.TELEMETRY_QUERY_OFFSET)
+        self.assertEqual(explicit.count("--offset"), 1)
+        self.assertNotIn("--offset", other)
 
     def test_help_me_choose_public_flow_requires_a_passing_agent_definition_before_network(self):
         deployment = SimpleNamespace(required=lambda _: "https://functions.example.test")

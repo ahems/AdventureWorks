@@ -1,9 +1,17 @@
+---
+title: MCP OAuth authorization server and protected MCP tools
+summary: How api-mcp acts as a self-contained OpenIddict OAuth 2.0 authorization server for AdventureWorks database users and protects its 63 MCP tools with audience-bound JWTs, business-domain scopes, ownership and service-principal policies.
+audience: [developer, security-reviewer, demo-presenter, ai-agent]
+components: [api-mcp, api-functions, app, app-admin, app-manufacturing, mcp-inspector, manufacturing-agent, infra]
+related: [../authentication/END_TO_END_AUTHENTICATION.md, ../../architecture/identity-and-auth.md, TOOL_SCOPE_MATRIX.md, ../functions-oauth/README.md, ../../testing/AZURE_AUTHENTICATED_SCRIPTS.md]
+---
+
 # MCP OAuth Authorization (Self-Contained Demo)
 
 See [end-to-end authentication assurance](../authentication/END_TO_END_AUTHENTICATION.md)
-for the complete user/workload trust model, executable validation, exception
-boundaries and remaining gaps. Historical design/security-review statements below
-are not a current full-solution conformance result.
+for the complete user/workload trust model, executable validation and exception
+boundaries, and [identity and authentication](../../architecture/identity-and-auth.md)
+for a short architecture overview.
 
 This feature turns the existing **`api-mcp`** service into an **OAuth 2.0-protected
 MCP resource** *and* the **authorization server that protects it** — entirely
@@ -96,7 +104,7 @@ flowchart LR
     disc["Discovery + JWKS\n/.well-known/*"]
     val["JWT validation + scope/ownership policies"]
     mcp["/mcp (protected MCP resource)"]
-    tools["62 MCP tools"]
+    tools["63 MCP tools"]
   end
 
   func["api-functions\n(agent host / MCP client)"]
@@ -181,9 +189,13 @@ hard-coded**.
 
 ## Clients
 
-All first-party clients are **public** (no secret) and use **Authorization Code + PKCE**
-with the `code` response type. First-party apps skip the consent screen; third-party
-clients (e.g. `mcp-inspector`) still require explicit consent. The service client
+All first-party clients are **public** (no secret). The admin, manufacturing and
+Inspector clients use **Authorization Code + PKCE** with the `code` response type; the
+e-shop uses the first-party e-shop credentials grant (see
+[Token acquisition](#token-acquisition)). Trusted first-party clients
+(`adventureworks-eshop`, `adventureworks-admin`, `adventureworks-manufacturing`,
+`adventureworks-inspector`) skip the consent screen; third-party clients (e.g.
+`mcp-inspector`) still require explicit consent. The service client
 `adventureworks-agents` is used only for the managed-identity grant. Redirect URIs are
 wired from the deployed app URLs at deploy time (`scripts/hooks/postdeploy.sh`) — never hard-coded.
 
@@ -237,17 +249,17 @@ authorization catalog is not part of runtime authorization and does not need to 
 created or seeded. This does not drop or modify any such tables already present in an
 Azure deployment.
 
-| Role | Category | Granted scopes (besides `mcp.access`) |
-| ---- | -------- | ------------------------------------- |
-| `consumer` | consumer | `products.read`, `orders.read`, `orders.write` |
-| `sales-admin` | employee | `products.read`, `sales.read`, `customers.read`, `orders.read`, `admin.read` |
-| `marketing-admin` | employee | `products.read`, `sales.read`, `customers.read`, `admin.read`, `admin.write` |
+| Role | Category | Granted scopes (besides `mcp.access` and `realtime.connect`) |
+| ---- | -------- | ------------------------------------------------------------ |
+| `consumer` | consumer | `products.read`, `orders.read`, `orders.write`, `customers.read`, `customers.write` (own records only, by ownership) |
+| `sales-admin` | employee | `products.read`, `sales.read`, `customers.read`, `customers.write`, `orders.read`, `admin.read` |
+| `marketing-admin` | employee | `products.read`, `sales.read`, `customers.read`, `customers.write`, `admin.read`, `admin.write` |
 | `inventory-admin` | employee | `products.read`, `inventory.read`, `manufacturing.read`, `admin.read` |
-| `operations-admin` | employee | `products.read`, `sales.read`, `customers.read`, `orders.read`, `inventory.read`, `admin.read` |
-| `executive-admin` | employee | **all 13** scopes besides `mcp.access`, including `realtime.connect`, `manufacturing.*` and `mcp.admin` |
+| `operations-admin` | employee | `products.read`, `sales.read`, `customers.read`, `customers.write`, `orders.read`, `inventory.read`, `admin.read` |
+| `executive-admin` | employee | `products.read`, `sales.read`, `customers.read`, `customers.write`, `inventory.read`, `manufacturing.read`, `orders.read`, `orders.write`, `admin.read`, `admin.write`, `mcp.admin` (everything except `manufacturing.write`) |
 | `manufacturing-engineer` | manufacturing | `products.read`, `inventory.read`, `manufacturing.read`, `manufacturing.write` |
 
-Every seeded interactive role also receives `realtime.connect`. That baseline
+Every seeded role also receives `realtime.connect`. That baseline
 scope alone grants no event group: each Web PubSub group requires its own mapped
 business scope, and internal groups additionally require an internal category.
 
@@ -272,7 +284,7 @@ only.
 
 ## Tool-to-scope matrix
 
-Every one of the **62** MCP tools is classified. The complete matrix — tool wire name,
+Every one of the **63** MCP tools is classified. The complete matrix — tool wire name,
 required scope, access mode, and ownership argument — is in
 **[TOOL_SCOPE_MATRIX.md](TOOL_SCOPE_MATRIX.md)**, generated from the single source of
 truth [`ToolAuthorizationPolicy.cs`](../../../api-mcp/AdventureWorks/Auth/ToolAuthorizationPolicy.cs).
@@ -302,14 +314,21 @@ that somehow carried an internal scope would still be denied (defense-in-depth).
 Tasks in the existing Azure/in-memory stores bind subject, client, category,
 originating tool and its required scope. Every read/control operation rechecks
 that binding against the current tool policy; changed or unclassified policies
-and old unbound records deny without migration or backfill.
+and old unbound records deny without migration or backfill. In Azure, MCP Tasks
+are stored in the `awMcpTasks` table.
+
+**Confirmation for destructive tools.** `begin_manufacturing_run`,
+`stop_manufacturing`, `update_scrap_configuration`, `update_location_configuration`
+and `reset_all_simulators` ask the client to confirm (MCP elicitation) before acting.
+Programmatic and autonomous callers pass `confirmed=true` to skip the prompt; scope,
+category and service-principal checks still apply.
 
 ## Authorization inspection
 
 Two surfaces expose *why* a request was allowed or denied, without ever revealing raw
 tokens:
 
-- **Consent / inspection page** — served **today** by the authorization server at
+- **Consent / inspection page** — served by the authorization server at
   `GET /authorize`. It shows the **current AdventureWorks user**, the **app** (client),
   the resolved **role**, the target **resource**, and the **requested scopes** before the
   user approves. It does **not** bypass the app's existing login/selection.
@@ -334,8 +353,12 @@ sequenceDiagram
     SPA->>SPA: Generate code_verifier + S256 code_challenge + state
     SPA->>AS: GET /authorize?client_id&redirect_uri&code_challenge&method=S256&state&scope&resource
     AS->>DB: Resolve current AdventureWorks user → sub, category, role, scopes
-    AS-->>SPA: Consent/inspection (current user, app, role, resource, requested scopes)
-    SPA->>AS: POST /authorize (decision=allow)
+    alt Third-party client (mcp-inspector)
+        AS-->>SPA: Consent/inspection (current user, app, role, resource, requested scopes)
+        SPA->>AS: POST /authorize (decision=allow)
+    else Trusted first-party client
+        AS->>AS: Skip consent
+    end
     AS-->>SPA: 302 redirect_uri?code=<single-use>&state
     SPA->>AS: POST /token (code + code_verifier + redirect_uri + resource)
     AS->>AS: Validate PKCE, redirect, code (single-use), resource
@@ -349,6 +372,20 @@ sequenceDiagram
 Rejected at `/authorize` or `/token`: missing PKCE, `plain` PKCE, invalid/missing `state`,
 wildcard or non-matching redirect URIs, unknown scopes/resources, and expired or reused
 authorization codes; at `/token`, an invalid PKCE verifier is rejected.
+
+The e-shop does not use this redirect flow; it posts the customer's credentials with the
+e-shop credentials grant (see [Token acquisition](#token-acquisition)).
+
+| Item | Lifetime / limit |
+| ---- | ---------------- |
+| Access token | 10 minutes (configurable 1–60) |
+| Authorization code | 5 minutes, single use |
+| Refresh token | 12 hours absolute (not sliding) |
+| Login cookie | 30 minutes |
+| `/token` rate limit | 20 requests per minute per IP, all grants |
+| `/login` rate limit | 10 requests per minute per IP |
+
+The OpenIddict store and the one-time code cache are in memory in each replica.
 
 ## JWT access-token validation
 
@@ -398,12 +435,10 @@ flowchart TB
   identities are **never** Key Vault Administrators.
 - The provider has **bounded retries with exponential backoff** to absorb RBAC role
   propagation delay, and all replicas/restarts use the same Key Vault-backed material.
-- The source template provisions a vault private endpoint, private DNS zone and
-  VNet link for the Container Apps environment. The vault's public firewall
-  defaults to deny; the provisioning hook temporarily permits the deployer's
-  current IP for certificate setup and removes its own rule afterward. The
-  private-link change requires user-owned environment recreation and is not yet
-  verified in the current deployment.
+- The template provisions a vault private endpoint, private DNS zone and VNet
+  link for the Container Apps environment. The vault's public firewall defaults
+  to deny; the provisioning hook temporarily permits the deployer's current IP
+  for certificate setup and removes its own rule afterward.
 - Certificate setup targets the selected azd subscription and retries only
   read-only inventory/readiness checks. It lists pending certificates too; an
   unavailable or malformed inventory stops setup rather than assuming absence.
@@ -482,8 +517,9 @@ restricted to the e-shop client and consumer accounts.
   credentials to `api-mcp` `/login`, which returns straight into `/authorize`
   (Authorization Code + PKCE) and back to `/oauth/callback`.
 - **No consent prompt for first-party clients.** Clients in the trusted first-party list
-  (`adventureworks-admin`, `adventureworks-eshop`, `adventureworks-manufacturing`) skip
-  the consent screen; third-party clients such as `mcp-inspector` still see it.
+  (`adventureworks-admin`, `adventureworks-eshop`, `adventureworks-manufacturing`,
+  `adventureworks-inspector`) skip the consent screen; third-party clients such as
+  `mcp-inspector` still see it.
 - **Refresh tokens.** The admin requests `offline_access` and receives a rotating refresh
   token (12 h lifetime). `graphql-client.ts` refreshes the access token ahead of expiry
   and retries once on `401` / `AUTH_NOT_AUTHENTICATED`. If the refresh fails, the user is
@@ -493,7 +529,15 @@ restricted to the e-shop client and consumer accounts.
   `grant_type=urn:adventureworks:params:oauth:grant-type:managed-identity`,
   `client_id=adventureworks-agents` and `assertion=<Entra token>`. `api-mcp` validates
   the assertion against `MCP_ENTRA_TENANT_ID` and only accepts principal IDs listed in
-  `MCP_TRUSTED_SERVICE_PRINCIPAL_IDS` (both set in `infra/modules/aca-api-mcp.bicep`).
+  `MCP_TRUSTED_SERVICE_PRINCIPAL_IDS`. Bicep (`infra/modules/aca-api-mcp.bicep`) sets
+  `MCP_ENTRA_TENANT_ID` and seeds the trusted list with the Functions identity; the
+  `postdeploy` hook then rewrites the list to add the hosted manufacturing agent's
+  principal, which it also stores as `MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID`.
+- **Service-principal tool limits.** `ServicePrincipalPolicy` restricts each trusted
+  workload further: the Functions identity may call 12 tools across 6 scopes, and the
+  hosted manufacturing agent 20 tools. `ManufacturingAutonomyGuard` allows the agent's
+  `begin_manufacturing_run` and `place_supply_order` only while the manufacturing agent
+  configuration is in FullyAutonomous mode (3) with an unexpired `autoShutoffAt`.
 - Authorization codes are strictly single-use.
 - **Manufacturing app.** `app-manufacturing` uses the same silent flow with the
   `adventureworks-manufacturing` client (`app-manufacturing/src/services/dabAuth.ts`).
@@ -641,8 +685,9 @@ Reviewed before completion (see also [Accepted demo limitations](#accepted-demo-
 - **Key Vault privileges:** runtime identity is `Key Vault Secrets User` only, vault-scoped.
 - **Logs/outputs/images:** no tokens/codes/verifiers/keys/secrets in logs, source, images,
   or outputs.
-- **CORS/cookies:** HTTPS in Azure; secure, `HttpOnly`, appropriate `SameSite` cookies;
-  `localStorage` avoided for tokens.
+- **CORS/cookies:** HTTPS in Azure; secure, `HttpOnly`, appropriate `SameSite` cookies.
+  The e-shop keeps tokens in tab-scoped `sessionStorage`; the admin and manufacturing
+  portals keep their session in `localStorage` so it survives new tabs.
 - **Health probes:** remain open; discovery/JWKS/authorize/token/login remain accessible.
 
 ## Accepted demo limitations

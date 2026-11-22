@@ -1,6 +1,8 @@
 #!/bin/bash
-# Post-provision script for setting up Static Web App build environment variables
-# and configuring Aspire Dashboard access
+# Post-provision hook: reconciles runtime RBAC, sets storefront build variables,
+# prepares the seed-job image, checks Aspire Dashboard access, creates the api-mcp
+# Key Vault signing certificate, configures SQL access and roles, starts the seed job,
+# and assigns Foundry project roles before creating the Foundry agents.
 
 set -e
 

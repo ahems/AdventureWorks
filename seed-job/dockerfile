@@ -17,6 +17,7 @@ WORKDIR /app
 COPY seed-database.ps1 /app/seed-database.ps1
 COPY ManufacturingOverlays.psm1 /app/ManufacturingOverlays.psm1
 COPY RuntimeDatabaseAccess.psm1 /app/RuntimeDatabaseAccess.psm1
+COPY SeedTelemetry.psm1 /app/SeedTelemetry.psm1
 
 # Copy SQL scripts
 COPY sql/ /app/sql/

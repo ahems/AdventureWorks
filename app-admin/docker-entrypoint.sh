@@ -26,5 +26,5 @@ CONFIGEOF
 echo "Generated config.js:"
 cat /app/dist/config.js
 
-# Serve static files on port 80 with SPA fallback (--single handles /index.html fallback)
+# Serve static files on port 80 with SPA fallback (-s/--single handles /index.html fallback)
 exec serve -s /app/dist -l 80 --no-clipboard

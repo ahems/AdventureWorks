@@ -1,215 +1,157 @@
-# Manufacturing Agent
+---
+title: Manufacturing agent
+summary: Hosted Foundry agent that reacts to new sales orders, checks stock and capacity through MCP tools and, depending on its mode, reports findings, proposes actions for approval or acts autonomously.
+audience: [developer, demo-presenter]
+components: [api-functions, manufacturing-agent, api-mcp, app-manufacturing]
+related:
+  - docs/features/manufacturing/manufacturing-overview.md
+  - docs/features/manufacturing/planning-and-feasibility.md
+  - docs/features/ai/foundry-agents.md
+  - docs/architecture/realtime-eventing.md
+---
 
-## Overview
+# Manufacturing agent
 
-The **Manufacturing Agent** is an autonomous AI agent that fires when a new order is placed in the AdventureWorks eshop. Unlike the other agents (which are conversational and invoked by a user), this agent runs programmatically with no human in the loop.
+## What it does
 
-The agent is a **Foundry Hosted Agent** (`kind: hosted`) running .NET 10 code. It is controlled by a four-state autonomy mode that users configure from the Manufacturing app's Agent Control page.
+When a sales order is placed, the manufacturing agent checks whether the ordered products can be supplied from stock, built from components or need purchasing. What it does next depends on the **agent mode**:
 
-## Architecture
+| Mode | Name | Behaviour |
+|---|---|---|
+| 0 | Off (default) | No runs are created |
+| 1 | ReadOnly | Investigates and records findings |
+| 2 | ProposePending | Investigates and creates proposals for a person to approve |
+| 3 | FullyAutonomous | Investigates and starts manufacturing runs or places supply orders itself |
 
+The agent is the hosted `manufacturing-agent` azd service (`host: azure.ai.agent`, Microsoft Agent Framework). It reaches AdventureWorks data only through the api-mcp MCP tools.
+
+## Try it
+
+**UI:** in the Manufacturing portal open **Manufacturing Agent** (`/manufacturing-agent`). Choose a mode and an auto-shutoff (1 h, 2 h, 4 h, 8 h, 1 day, 3 days or none). Mode 3 asks for confirmation. Place an order in the storefront or start the [shopping simulator](../simulators/shopping-simulator.md) and watch runs and steps appear.
+
+**API:**
+
+```bash
+python3 scripts/utilities/azure-auth.py request --identity manufacturing \
+  --resource functions --path /api/manufacturing/agent-config
+
+python3 scripts/utilities/azure-auth.py request --identity manufacturing \
+  --resource functions --path /api/manufacturing/agent-config \
+  --method PUT --data '{"mode": 1, "autoShutoffHours": 1}'
+
+python3 scripts/utilities/azure-auth.py request --identity manufacturing \
+  --resource functions --path '/api/manufacturing/agent-runs?limit=30'
 ```
-Customer places order
-       │
-       ▼
-Sales.SalesOrderHeader (INSERT)
-       │  SQL Change Tracking
-       ▼
-OrderPlacedSqlTrigger (Azure Function)
-       ├── order-receipt-generation queue  ──► GenerateAndSendReceiptFunction
-       ├── sales-order-status queue        ──► ProcessSalesOrderStatus_QueueTrigger
-       └── [mode check]
-            │  Off  → skip (no queue message, zero token consumption)
-            └► manufacturing-agent-queue
-                  │  ManufacturingAgentQueueTrigger
-                  ▼
-         Foundry Hosted Agent (manufacturing-agent)
-                  │  uses MCP tools (server-side via HostedMcpServerTool)
-                  ├── ManufacturingMcpTools
-                  └── SupplyChainMcpTools
-```
-
-## Autonomy modes
-
-The agent supports four modes, configurable at runtime from the Agent Control page (`/manufacturing-agent`) in the manufacturing app:
-
-| Mode                  | Value | Behaviour                                                                                                      | Token cost         |
-| --------------------- | ----- | -------------------------------------------------------------------------------------------------------------- | ------------------ |
-| **Off**               | 0     | Agent is disabled. No queue messages enqueued, no AI tokens consumed. **Default.**                             | None               |
-| **Read-Only**         | 1     | Agent analyses inventory for each order and logs findings. No actions taken.                                   | ~1–3k tokens/order |
-| **Propose + Approve** | 2     | Agent proposes manufacturing runs and supply orders. Each proposal requires human approval before it executes. | ~2–5k tokens/order |
-| **Fully Autonomous**  | 3     | Agent executes manufacturing runs and supply orders directly. No human approval required.                      | ~2–5k tokens/order |
-
-### Switching modes
-
-1. Navigate to **Agent Control** in the manufacturing app sidebar.
-2. Select the desired mode from the four-option selector.
-3. Switching to Fully Autonomous requires confirmation.
-4. The mode takes effect immediately — the next order placed will use the new mode.
-
-> **Note:** Switching to Off clears the queue gate at the SQL trigger level. Any messages already in the queue will be discarded by the queue trigger without calling the hosted agent.
 
 ## How it works
 
-1. **SQL Change Tracking** watches `Sales.SalesOrderHeader` for INSERTs. Azure Functions polls for changes and fires `OrderPlacedSqlTrigger`.
-2. The trigger enqueues receipt generation and order status processing.
-3. If the agent mode is **Off**, the trigger returns immediately — no queue message is created and no tokens are consumed.
-4. Otherwise, a pending run record is created in Azure Table Storage and a message is enqueued on `manufacturing-agent-queue`.
-5. `ManufacturingAgentQueueTrigger` dequeues one message at a time (`batchSize: 1`), reads the current mode, and calls the Foundry Hosted Agent via the Responses protocol.
-6. The agent uses `ManufacturingMcpTools` and `SupplyChainMcpTools` to inspect inventory, assess manufacturing feasibility, and (in Propose/Autonomous modes) take or propose actions.
-7. Results are written to the run record and visible in the Agent Control activity feed.
+```mermaid
+sequenceDiagram
+    participant SQL as "Azure SQL"
+    participant T as "OrderPlacedSqlTrigger"
+    participant Q as "manufacturing-agent-queue"
+    participant W as "ManufacturingAgentQueueTrigger"
+    participant A as "Hosted manufacturing-agent"
+    participant M as "api-mcp tools"
+    participant UI as "Manufacturing portal"
+    SQL->>T: "New SalesOrderHeader row"
+    T->>T: "Read agent mode"
+    alt "mode is not Off"
+        T->>Q: "Enqueue run"
+        T-->>UI: "run-created"
+        Q->>W: "Dequeue"
+        W->>W: "Re-check mode"
+        W->>A: "POST responses (Mode=Name (n))"
+        A->>M: "MCP tool calls (OAuth token)"
+        M-->>A: "Stock, feasibility, vendors"
+        A-->>W: "JSON findings"
+        W-->>UI: "step-updated / run-completed"
+    end
+    opt "ProposePending"
+        W->>W: "Create proposals"
+        UI->>W: "Approve or reject"
+    end
+```
 
-### Idle SQL behavior and demo cost
+1. `OrderPlacedSqlTrigger` runs on SQL change tracking for new orders. Besides receipt and order-status work, it creates a run record and queues a message when the mode is not Off. It has an always-ready instance, which keeps a SQL session open even when idle.
+2. `ManufacturingAgentQueueTrigger` re-checks the mode (runs queued before the agent was switched off are discarded) and calls `MANUFACTURING_AGENT_ENDPOINT` with a token for `https://ai.azure.com`.
+3. The agent must return JSON with `findingsSummary`, `toolsUsed`, `recommendedActions` and `actionsExecuted`. Invalid output and transient failures are retried with a 10 s × 2ⁿ back-off up to 8 times, then the message goes to the poison queue. The host processes up to 16 messages at once (`maxDequeueCount` 5).
+4. In ProposePending mode, recommended actions become proposals.
 
-The SQL Change Tracking listener is not dormant when there are no orders. It polls the database to detect new rows. The infrastructure therefore keeps one Flex Consumption instance always ready for `OrderPlacedSqlTrigger`; otherwise Flex Consumption may scale the listener to zero and assign a `NoOpListener`, which can cause new orders to be missed.
+### Hosted agent and tools
 
-This reliability choice also explains an apparent serverless SQL cost anomaly. Although the database is configured for serverless compute and auto-pause, the listener can maintain a SQL session, so the database does not meet the zero-session requirement for auto-pause. Switching the agent autonomy mode to **Off** prevents AI work and token usage, but it does not disable the SQL trigger or its polling connection. For an unused demo, delete the deployment with `azd down --no-prompt` and run `azd up --no-prompt` when it is needed again.
+The hosted agent exchanges its managed-identity assertion for an api-mcp token (client `adventureworks-agents`).
 
-Possible future implementations include writing an order event to a queue or transactional outbox as part of order creation, hosting the SQL-trigger component separately and starting it only for active demonstrations, or accepting manual/delayed order processing and removing the listener. These require deliberate reliability and deployment changes; simply removing `alwaysReady` is not an equivalent fix.
+- **ReadOnly and ProposePending:** 18 read tools, such as stock, feasibility, shortage forecast and vendor lookups.
+- **FullyAutonomous:** adds `manufacturing.write` and the `begin_manufacturing_run` and `place_supply_order` tools.
 
-## Bottleneck model
+api-mcp's `ManufacturingAutonomyGuard` only allows write tools when the mode is 3 and the auto-shutoff has not passed. Postdeploy sets the service trust list (`MCP_TRUSTED_SERVICE_PRINCIPAL_IDS`, `MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID`, `MCP_FUNCTIONS_PRINCIPAL_ID`).
 
-The queue trigger processes one order at a time. When the shopping simulator runs at high volume, orders back up in `manufacturing-agent-queue` — exactly like work orders backing up at an understaffed shop floor location. The Agent Control page shows:
+### Proposals
 
-- **Queue depth** with a colour-coded bar (green → amber → red)
-- **Estimated drain time** at the current processing rate
-- **Retrying** entries when the agent hits token rate limits (exponential backoff: 10s → 20s → 40s → 80s → … → poison queue after 8 attempts)
+Proposals live in `awManufacturingProposals`. A proposal expires after 5 minutes; the list shows up to 10 and auto-rejects expired or overflow items. **Approve all** executes up to 20 pending proposals.
+
+### Auto-shutoff
+
+`autoShutoffHours` sets `autoShutoffAt`. When the time has passed, the next config read switches the mode back to Off.
+
+### Routes
+
+All are under `/api/manufacturing/`. Reads need `manufacturing.read`; changes need `manufacturing.write`.
+
+| Route | Purpose |
+|---|---|
+| `GET`, `PUT agent-config` | Mode and auto-shutoff |
+| `GET agent-runs?limit=30` | Recent runs |
+| `POST agent-runs/{id}/step` | Step updates written by the run pipeline |
+| `GET agent-queue-status` | Queue and poison-queue depth |
+| `DELETE agent-queue`, `DELETE agent-queue/poison` | Clear the queues |
+| `GET`, `POST proposals` | List or create proposals |
+| `POST proposals/{id}/approve`, `proposals/{id}/reject` | Act on one proposal |
+| `POST proposals/approve-all`, `proposals/reject-all` | Act on all pending proposals |
+
+### Portal
+
+`/manufacturing-agent` shows the run feed, step timeline, queue depth with a drain estimate and a warning above 20 pending runs. `AgentControlBanner` disables manual work-order creation while the agent is active. **Settings** can clear the queue and the poison queue.
+
+## Data & storage
+
+| Store | Contents |
+|---|---|
+| `awManufacturingAgentRuns` | Runs and steps |
+| `awManufacturingProposals` | Pending, approved and rejected proposals |
+| `awManufacturingAgentConfig` | Mode and `autoShutoffAt` |
+| `manufacturing-agent-queue` (+ poison) | Queued runs |
+
+## Events
+
+Group `manufacturing-agent`: `run-created`, `run-started`, `step-updated`, `run-completed`, `config-changed`, `queue-cleared`, `poison-queue-cleared`, `state-changed`. The portal invalidates its run, proposal and queue queries; there is no polling.
+
+## Security
+
+- Functions routes: `manufacturing.read` / `manufacturing.write` (manufacturing-engineer role).
+- Hosted agent: service token from api-mcp; write tools gated by `ManufacturingAutonomyGuard`.
+- Functions calls the agent with its managed identity.
 
 ## Configuration
 
-| Environment variable           | Description                                                       |
-| ------------------------------ | ----------------------------------------------------------------- |
-| `MANUFACTURING_AGENT_ENDPOINT` | Foundry hosted agent responses endpoint (set by postdeploy.sh)    |
-| `API_FUNCTIONS_URL`            | Functions base URL for step callbacks (set by Bicep + postdeploy) |
-| `AI_FOUNDRY_PROJECT_ENDPOINT`  | Azure AI Foundry project endpoint                                 |
-| `SQL_CONNECTION_STRING`        | Azure SQL connection string (Active Directory Default auth)       |
-| `AzureWebJobsStorage__*`       | Storage account connection (Table Storage for run records, Queue) |
+| Setting | Where |
+|---|---|
+| `MANUFACTURING_AGENT_ENDPOINT` | Functions; set by postdeploy from `AGENT_MANUFACTURING_AGENT_RESPONSES_ENDPOINT` |
+| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | Hosted agent model deployment (default `chat`) |
+| Hosted agent resources | 0.5 CPU, 1 GiB (`manufacturing-agent/`) |
 
-## Table Storage
+`AI_AGENT_MANUFACTURING_ID` is not used by this pipeline.
 
-Three tables are used (all in the `AzureWebJobsStorage` account):
+## Limits
 
-| Table                        | Content                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------- |
-| `awManufacturingAgentConfig` | Single row: current mode                                                   |
-| `awManufacturingAgentRuns`   | One row per agent invocation — status, findings, tools used, step progress |
-| `awManufacturingProposals`   | Proposals created in ProposePending mode, with approve/reject status       |
+- Each order creates one run; a busy shopping simulator can build a long queue. Use the drain estimate and clear the queue if needed.
+- Mode 3 actions use real simulation resources (bank balance, inventory, vendor stock).
 
-## Deploying the hosted agent
+## Related code & docs
 
-The hosted agent is registered as a service in the root `azure.yaml`. Running the normal demo deployment deploys it with the other services:
-
-```bash
-azd up
-# or, for an existing environment:
-azd deploy
-```
-
-The root `postdeploy` hook copies the endpoint generated by azd into `MANUFACTURING_AGENT_ENDPOINT` and injects it into the API Functions app. No separate agent environment or manual endpoint configuration is required.
-
-## Local development
-
-The SQL trigger does not fire locally unless you have a direct connection to Azure SQL with Change Tracking enabled. To test the queue pipeline locally:
-
-1. Start the hosted agent: `cd manufacturing-agent/mcp-tools && azd ai agent run --no-client`
-2. Start Azure Functions: `cd api-functions && func host start`
-3. Manually enqueue a base64-encoded message:
-
-```bash
-MSG=$(echo -n '{"salesOrderId":71774,"customerId":29825,"runId":"test-001","retryCount":0}' | base64)
-az storage message put --account-name <storage> --queue-name manufacturing-agent-queue --content "$MSG" --auth-mode login
-```
-
-Alternatively run the existing end-to-end test script:
-
-```bash
-bash tests/scripts/test-manufacturing-trigger.sh
-```
-
-## Telemetry
-
-Each queue trigger invocation logs to Application Insights:
-
-- `[AgentQueue] Invoking hosted agent for RunId=..., SalesOrderId=..., Mode=...`
-- `[AgentQueue] RunId=... completed. Findings: ...`
-- `[AgentQueue] Agent is Off — discarding RunId=...` (when mode is Off)
-
-Query recent activity:
-
-```kusto
-traces
-| where timestamp > ago(1h)
-| where message contains "[AgentQueue]"
-| order by timestamp desc
-```
-
-| `AzureWebJobsStorage` | Azure Storage connection for queue output bindings |
-
-## Creating the agent
-
-The manufacturing agent is created **automatically** during `azd up` as part of `postprovision.sh`. No manual step is required.
-
-To recreate or update the agent after deployment, re-run the agent creation script:
-
-```bash
-bash scripts/utilities/create-foundry-agents.sh
-```
-
-The script writes `AI_AGENT_MANUFACTURING_ID` to the azd environment automatically.
-
-## SQL Change Tracking prerequisite
-
-SQL Change Tracking is enabled on `Sales.SalesOrderHeader` by `scripts/hooks/postprovision.sh`:
-
-```sql
-ALTER DATABASE [AdventureWorks]
-    SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON);
-
-ALTER TABLE [Sales].[SalesOrderHeader]
-    ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF);
-```
-
-To enable manually:
-
-```bash
-# Get SQL credentials
-SQL_SERVER=$(azd env get-value SQL_SERVER_NAME)
-SQL_DB=$(azd env get-value SQL_DATABASE_NAME)
-
-# Run via sqlcmd (requires az login)
-az sql db query \
-  --server "$SQL_SERVER" --database "$SQL_DB" \
-  --query "ALTER TABLE [Sales].[SalesOrderHeader] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF)"
-```
-
-## Local development
-
-The SQL trigger does not fire locally unless you have a direct connection to Azure SQL with Change Tracking enabled. To test locally:
-
-1. Run the functions host:
-   ```bash
-   cd api-functions && func host start
-   ```
-2. The SQL trigger requires `SQL_CONNECTION_STRING` pointing to Azure SQL.
-3. Insert a test order via DAB to trigger the function.
-
-Alternatively use the test script:
-
-```bash
-bash tests/scripts/test-manufacturing-trigger.sh
-```
-
-## Telemetry
-
-Each agent invocation creates a `RequestTelemetry` operation in Application Insights named `ManufacturingAgent.Invoke` with properties:
-
-- `SalesOrderId`
-- `CustomerId`
-- `ResponseId` (from Foundry)
-
-## Future extension points
-
-- Enable `BeginManufacturingRun` when stock falls below a threshold
-- Enable `PlaceSupplyOrder` to automatically reorder from preferred vendors
-- Add structured output schema for the agent to return a typed manufacturing plan
-- Add a human-approval gate before placing expensive supply orders
+- `api-functions/Functions/OrderPlacedSqlTrigger.cs`, `ManufacturingAgentQueueTrigger.cs`, `ManufacturingAgentRunFunctions.cs`, `ManufacturingAgentConfigFunctions.cs`, `ManufacturingProposalFunctions.cs`
+- `manufacturing-agent/mcp-tools/src/mcp-tools/Program.cs`
+- `api-mcp/AdventureWorks/Auth/ManufacturingAutonomyGuard.cs`
+- `tests/scripts/test_manufacturing_agent_tools.py`, `tests/scripts/test_hosted_agent_mcp_trust.py`
+- [Foundry agents](../ai/foundry-agents.md) · [Real-time eventing](../../architecture/realtime-eventing.md)

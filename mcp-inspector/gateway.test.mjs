@@ -5,6 +5,7 @@ import { request as httpRequest } from "node:http";
 import test from "node:test";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { configuration, createGateway, oauth, validateToken } from "./gateway.mjs";
+import { createTelemetry, parseConnectionString, routeLabel } from "./telemetry.mjs";
 
 const config = configuration({ API_MCP_URL: "https://mcp.example.test/mcp",
   API_DAB_MCP_URL: "https://dab.example.test/mcp", MCP_PROXY_FULL_ADDRESS: "https://inspector.example.test/proxy" });
@@ -13,7 +14,7 @@ const claims = (overrides = {}) => ({ sub: "employee-1", app: "adventureworks-in
   roles: ["executive-admin"], scope: "mcp.access products.read", iat: seconds(), exp: seconds() + 600,
   aud: config.targets[0].audience, ...overrides });
 
-async function fixture(t) {
+async function fixture(t, options = {}) {
   let time = Date.now(), subject = "employee-1", tokenExpiry = time + 600000;
   const exchanges = [], requests = [], logs = [];
   const authorization = {
@@ -25,7 +26,7 @@ async function fixture(t) {
         "server-held-" + audience, audience, time);
     },
   };
-  const gateway = createGateway(config, authorization, { now: () => time, log: value => logs.push(value),
+  const gateway = createGateway(config, authorization, { ...options, now: () => time, log: value => logs.push(value),
     request: async (target, options) => {
       requests.push({ target, ...options });
       return new Response(JSON.stringify({ result: { ok: true } }), { status: 200,
@@ -306,4 +307,40 @@ test("a different user's replacement login cancels an in-flight OAuth exchange w
     release();
     await callback;
   }
+});
+
+test("telemetry labels fixed routes and never exports OAuth query values", async t => {
+  assert.equal(routeLabel("/oauth/callback"), "/oauth/callback");
+  assert.equal(routeLabel("/assets/index-abc.js"), "/assets/*");
+  assert.equal(routeLabel("/proxy/unknown"), "/proxy/*");
+  assert.equal(parseConnectionString("InstrumentationKey=nope"), null);
+  assert.equal(parseConnectionString("InstrumentationKey=00000000-0000-0000-0000-000000000000;" +
+    "IngestionEndpoint=http://insecure.example.test/"), null);
+  const tracked = [];
+  const { begin, finish, call } = await fixture(t, { telemetry: { track: record => tracked.push(record) } });
+  const flow = await begin();
+  await finish(flow);
+  const trace = "0af7651916cd43dd8448eb211c80319c";
+  assert.equal((await call("/health", { headers: { traceparent: `00-${trace}-b7ad6b7169203331-01` } })).status, 200);
+  await new Promise(resolve => setImmediate(resolve));
+  const routes = tracked.map(record => record.pathname);
+  assert.ok(routes.includes("/auth/login") && routes.includes("/oauth/callback") && routes.includes("/health"));
+  const state = flow.authorize.searchParams.get("state");
+  for (const record of tracked) {
+    const text = JSON.stringify(record);
+    assert.ok(!text.includes("code0") && !text.includes(state) && !text.includes("?"));
+  }
+  const sent = [];
+  const telemetry = createTelemetry("InstrumentationKey=00000000-0000-0000-0000-000000000001;" +
+    "IngestionEndpoint=https://ingest.example.test/", { send: async (url, init) => { sent.push({ url, init }); },
+    origin: config.origin });
+  for (const record of tracked) telemetry.track(record);
+  await telemetry.flush();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, "https://ingest.example.test/v2.1/track");
+  const envelopes = sent[0].init.body.split("\n").map(line => JSON.parse(line));
+  assert.equal(envelopes.length, tracked.length);
+  assert.ok(envelopes.every(item => item.tags["ai.cloud.role"] === "mcp-inspector" && !item.data.baseData.url.includes("?")));
+  assert.ok(envelopes.some(item => item.tags["ai.operation.id"] === trace));
+  assert.ok(!sent[0].init.body.includes("code0") && !sent[0].init.body.includes(state));
 });

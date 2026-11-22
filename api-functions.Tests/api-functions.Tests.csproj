@@ -6,8 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- Fast, offline unit tests for the Functions OAuth resource server: policy-registry
-         coverage, enforcement-mode resolution and token-claim projection. No Azure resources,
+    <!-- Fast, offline unit tests for api-functions: OAuth policy registry and enforcement,
+         ownership checks, carts/orders/receipts, Web PubSub, Foundry/agent clients,
+         manufacturing helpers, health and email policy. No Azure resources,
          no network, no running host required. -->
   </PropertyGroup>
 

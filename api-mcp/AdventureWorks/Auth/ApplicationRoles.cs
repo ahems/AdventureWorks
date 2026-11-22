@@ -7,7 +7,7 @@ namespace AdventureWorks.Auth;
 /// </summary>
 public static class UserCategories
 {
-    /// <summary>External e-shop consumer (Person.PersonType = 'IN' with a Sales.Customer row).</summary>
+    /// <summary>External e-shop consumer (any person whose Person.PersonType is not 'EM').</summary>
     public const string Consumer = "consumer";
 
     /// <summary>Internal employee administering e-shop / business data (Person.PersonType = 'EM').</summary>

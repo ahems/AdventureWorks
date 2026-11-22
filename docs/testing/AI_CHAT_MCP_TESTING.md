@@ -1,3 +1,15 @@
+---
+title: Chat and MCP authentication testing
+summary: Focused deployed checks and opt-in billable canaries that verify delegated customer and admin chat authorization through api-mcp.
+audience: [developer, security-reviewer, ai-agent]
+components: [api-functions, api-mcp, foundry]
+related:
+  - docs/testing/AI_AND_MCP_TESTING_GUIDE.md
+  - docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md
+  - docs/testing/testing-strategy.md
+  - docs/features/mcp-oauth/TOOL_SCOPE_MATRIX.md
+---
+
 # Chat and MCP authentication testing
 
 The customer-chat endpoint requires an MCP-audience OAuth token. It resolves the
@@ -60,6 +72,12 @@ execution evidence. Business data, tokens, user subjects and model text are
 withheld from the report. The normal Foundry response is stored; no order,
 simulator or email mutation is attempted.
 
+Add `--agent-tool-sweep` to either canary to prompt each reviewed chat tool that
+the run has not yet correlated, one potentially billable request per tool. Each
+trace must also match the SQL session principal that the MCP or Functions
+workload reported, as described in the
+[agent tool sweep](../features/authentication/END_TO_END_AUTHENTICATION.md#agent-tool-sweep-and-generation-agent-canaries).
+
 Each opt-in chat canary also checks sampled completed-response telemetry for
 the Functions-to-Foundry bearer token's client-ID match. It binds a hash of the
 configured ID to the selected attached identity and verifies the Functions host,
@@ -106,3 +124,9 @@ tokens, passwords, private responses or the complete `azd` environment while
 testing. For manual authenticated calls, use the
 [authentication helper](AZURE_AUTHENTICATED_SCRIPTS.md); use the
 [MCP scope matrix](../features/mcp-oauth/TOOL_SCOPE_MATRIX.md) for all tool policies.
+
+## Related
+
+- [AI and MCP testing guide](AI_AND_MCP_TESTING_GUIDE.md)
+- [Testing strategy](testing-strategy.md)
+- [Authenticated scripts](AZURE_AUTHENTICATED_SCRIPTS.md)

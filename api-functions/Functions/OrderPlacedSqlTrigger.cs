@@ -13,15 +13,15 @@ namespace api_functions.Functions;
 /// SQL change-tracking trigger that fires when new rows are inserted into
 /// Sales.SalesOrderHeader (i.e. a customer places an order).
 ///
-/// This is the server-side replacement for the two fire-and-forget HTTP calls
-/// that OrderConfirmationPage.tsx used to make after checkout:
-///   - POST /api/orders/generate-and-send-receipt
-///   - POST /api/orders/begin-processing-order
+/// Server-side post-checkout processing for new orders.
 ///
-/// On each INSERT the function:
+/// For each change batch it publishes a generic <c>database-changed</c> event to the
+/// <c>orders</c> Web PubSub group. On each INSERT the function:
 ///   1. Enqueues a receipt-generation + email job on <c>order-receipt-generation</c>
 ///   2. Enqueues an order-status pipeline job on <c>sales-order-status</c>
 ///   3. Creates a pending agent run record and enqueues to <c>manufacturing-agent-queue</c>
+///   4. Updates the auto-promotion order counter and, when its threshold is reached,
+///      enqueues a job on <c>auto-promotion-queue</c>
 /// </summary>
 public class OrderPlacedSqlTrigger
 {

@@ -53,7 +53,7 @@ trigger_and_wait() {
         echo "   • Check Azure Functions are deployed: azd env get-values | grep API_FUNCTIONS_URL"
         echo "   • View function logs in Azure Portal"
         echo "   • For local dev, ensure 'func start' is running in api-functions/"
-        echo "   • See REVIEW_GENERATION_SCRIPTS.md for detailed troubleshooting"
+        echo "   • See docs/features/reviews/product-reviews.md for detailed troubleshooting"
         return 1
     fi
     

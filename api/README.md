@@ -1,409 +1,76 @@
-# API Service - Data API Builder
+---
+title: DAB API service (api/) — Data API builder GraphQL, REST and MCP
+summary: Component README for the Data API builder container that exposes the AdventureWorks database as GraphQL, REST and MCP endpoints secured by api-mcp OAuth tokens; files, configuration, local run and deployment.
+audience: [developer, operator, ai-agent]
+components: [api]
+related: [docs/services/dab-api.md, docs/reference/dab-entities.md, docs/architecture/dab-naming-conventions.md, docs/architecture/identity-and-auth.md]
+---
 
-This directory contains the AdventureWorks API service, implemented using [Microsoft Data API Builder (DAB)](https://github.com/Azure/data-api-builder). REST, GraphQL and native MCP accept resource-bound user JWTs issued by api-mcp; database access uses Managed Identity.
+# DAB API service (`api/`)
 
-## Overview
+The `api` service is [Microsoft Data API builder](https://learn.microsoft.com/azure/data-api-builder/)
+(DAB). With no custom code, it turns 69 AdventureWorks entities (66 tables and 3 views)
+into **GraphQL** (`/graphql`), **REST** (`/api`) and native **MCP** (`/mcp`) endpoints.
+Callers send resource-bound user JWTs issued by api-mcp plus an `X-MS-API-ROLE`
+header; DAB enforces entity, field and row-ownership permissions and reaches Azure SQL
+as the runtime managed identity. For the full service guide, see
+**[docs/services/dab-api.md](../docs/services/dab-api.md)**.
 
-The API service is automatically deployed by Azure Developer CLI (`azd`) as a separate container app alongside the main web application. Entity permissions define authenticated access and intentional public reads.
+**Tech and hosting:** Data API builder container image
+(`mcr.microsoft.com/azure-databases/data-api-builder`), remote-built in ACR and hosted
+on **Azure Container Apps** with scale-to-zero (azd service `api`).
 
-### Key Features
+## Files
 
-- **REST API**: RESTful endpoints at `/api` for CRUD operations
-- **GraphQL API**: GraphQL endpoint at `/graphql` for flexible queries
-- **Application-user Authentication**: api-mcp JWT issuer/audience validation and entity role policies
-- **Managed Identity**: Passwordless database access using Azure Managed Identity
-- **Application Insights**: Telemetry and monitoring integration
-- **CORS Support**: Configurable cross-origin resource sharing
+| File | Purpose |
+|---|---|
+| `dab-config.json` | Data source, REST/GraphQL/MCP runtime, JWT issuer/audience, CORS, telemetry and all entity permissions |
+| `dockerfile` | Build stage installs the DAB tool; runtime stage copies the config and `entrypoint.sh` |
+| `entrypoint.sh` | Startup wrapper: derives `DAB_MCP_ALLOWED_HOST`, waits for a managed identity token, then starts DAB |
 
-### Saved payment methods
+Entity names follow DAB's default naming rules; see
+[DAB naming conventions](../docs/architecture/dab-naming-conventions.md) and the
+[DAB entity reference](../docs/reference/dab-entities.md). `Person.Address` is not
+exposed (its `geography` column is unsupported); use the Functions address routes.
 
-Consumer and built-in authenticated roles cannot read `CreditCard` directly.
-The storefront uses the `customers.read` Functions route
-`GET /api/payment-methods`, bound to the signed person's BusinessEntityID,
-which returns only masked card metadata. Existing `PersonCreditCard` link reads
-and deletions remain owner-scoped; self-service cannot create foreign card links.
-Internal DAB permissions are unchanged.
+## Configuration
 
-## How It's Deployed by azd
+DAB reads `@env()` placeholders from the Container App environment:
 
-The API service is defined in `azure.yaml` as a separate service:
+| Variable | Purpose |
+|---|---|
+| `DATABASE_CONNECTION_STRING` | Azure SQL connection string with `Authentication=Active Directory Default` |
+| `DAB_JWT_ISSUER`, `DAB_JWT_AUDIENCE` | api-mcp issuer and the `<issuer>/dab` audience |
+| `DAB_MCP_ALLOWED_HOST` | Trusted host for `/mcp`; derived by `entrypoint.sh` in Azure (use `localhost` for a direct local `dab start`) |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Telemetry |
 
-```yaml
-services:
-  api:
-    project: ./api
-    host: containerapp
-    language: python
-    docker:
-      path: dockerfile
-      remoteBuild: true
+Runtime database access (read, write, `EXECUTE` and object-level `VIEW DEFINITION`) is
+granted to the managed identity by the seed job. See the
+[environment variables reference](../docs/reference/environment-variables.md#dab-api-api).
+
+## Call, run and deploy
+
+```bash
+# Authenticated GraphQL call against the deployed API
+python3 scripts/utilities/azure-auth.py request \
+  --identity manufacturing --resource dab --path /graphql --method POST \
+  --data '{"query":"{ products(first: 5) { items { ProductID Name } hasNextPage endCursor } }"}'
+
+# Deploy a new revision
+azd deploy api --no-prompt
 ```
 
-### Deployment Flow
-
-1. **Build Phase**: `azd deploy` builds the Docker image using the `dockerfile` in this directory
-2. **Remote Build**: The container is built in Azure Container Registry (ACR) with `remoteBuild: true`
-3. **Container Deployment**: The built image is deployed to Azure Container Apps
-4. **Environment Variables**: `azd` injects required environment variables from the azd environment
-5. **Startup**: The `entrypoint.sh` script waits for Managed Identity token availability before starting DAB
-
-## File Structure
-
-```text
-api/
-├── README.md              # This file
-├── dockerfile             # Multi-stage Docker build for Data API Builder
-├── entrypoint.sh          # Startup script with MI token wait logic
-└── dab-config.json        # Data API Builder configuration
-```
-
-## Configuration Files
-
-### dockerfile
-
-**Purpose**: Multi-stage Docker build that installs Data API Builder and configures the runtime environment.
-
-**Build Stages:**
-
-1. **Build Stage** (`mcr.microsoft.com/dotnet/sdk:8.0`):
-   - Creates a dotnet tool manifest
-   - Installs `Microsoft.DataApiBuilder` as a dotnet tool
-   - Copies the pre-configured `dab-config.json`
-
-2. **Runtime Stage** (`mcr.microsoft.com/azure-databases/data-api-builder`):
-   - Copies the DAB installation and config from build stage
-   - Adds the `entrypoint.sh` wrapper script
-   - Sets environment variables for Managed Identity wait behavior
-
-**Environment Variables:**
-
-| Variable                   | Default                        | Description                                         |
-| -------------------------- | ------------------------------ | --------------------------------------------------- |
-| `MI_RESOURCE`              | `https://database.windows.net` | Azure resource URL for token acquisition            |
-| `MI_INITIAL_DELAY_SECONDS` | `0`                            | Initial delay before checking MI token availability |
-| `MI_PERIOD_SECONDS`        | `1`                            | Wait period between token availability checks       |
-| `MI_FAILURE_THRESHOLD`     | `60`                           | Maximum number of retry attempts before failing     |
-
-### entrypoint.sh
-
-**Purpose**: Wrapper script that ensures Managed Identity tokens are available before starting Data API Builder.
-
-**Functionality:**
-
-1. **Environment Detection**: Checks if running in Azure Container Apps by detecting `IDENTITY_ENDPOINT`
-2. **Managed Identity Wait Loop**:
-   - Polls the Managed Identity endpoint until HTTP 200 is received
-   - Uses configurable retry logic with exponential backoff capabilities
-   - Supports user-assigned managed identity via `MI_CLIENT_ID` or `AZURE_CLIENT_ID`
-3. **Startup**: Launches Data API Builder with the configuration file once MI is ready
-4. **Logging**: Provides timestamped logs for troubleshooting startup issues
-
-**Why This Is Needed:**
-
-Azure Container Apps may start containers before the Managed Identity system is fully initialized. Without this wait logic, DAB might fail to acquire database tokens on first startup, causing authentication errors.
-
-**Configuration Parameters:**
-
-- **MI_RESOURCE**: The Azure resource for which to acquire tokens (default: SQL Database)
-- **MI_INITIAL_DELAY_SECONDS**: Grace period before first check (useful for cold starts)
-- **MI_PERIOD_SECONDS**: How often to retry token acquisition
-- **MI_FAILURE_THRESHOLD**: Maximum retries before giving up (prevents infinite loops)
-- **MI_CLIENT_ID**: Optional user-assigned managed identity client ID
-
-**Skip Behavior:**
-
-If `IDENTITY_ENDPOINT` is not set (e.g., running locally), the wait logic is skipped and DAB starts immediately.
-
-### dab-config.json
-
-**Purpose**: Configuration file for Data API Builder that defines database connection, authentication, and entity mappings.
-
-Field permissions belong inside each action object, not directly on a role.
-Password reads expose only metadata to executive-admin; hash/salt columns are
-excluded. Customer self-service reads exclude replication/timestamp metadata;
-creation accepts only `PersonID` and `TerritoryID` under the signed-owner
-policy, and updates/deletes are unavailable. Consumer order-header writes
-use the ownership-checked Functions route instead of DAB. These changes
-require deployed verification. See the
-[authentication assurance guide](../docs/features/authentication/END_TO_END_AUTHENTICATION.md)
-for actual-row field checks, role denials and remaining coverage obligations.
-
-#### Native MCP trusted host
-
-The `/mcp` transport requires an exact trusted hostname in addition to the existing
-api-mcp-issued DAB-audience token and DAB role permissions. The startup wrapper derives
-`DAB_MCP_ALLOWED_HOST` from the platform's `CONTAINER_APP_NAME` and
-`CONTAINER_APP_ENV_DNS_SUFFIX`, not the revision-specific `CONTAINER_APP_HOSTNAME`.
-This needs no provisioned setting or deployment-hook repair. Local wrapper startup
-defaults to loopback; a direct local `dab start` must supply `DAB_MCP_ALLOWED_HOST=localhost`.
-An explicit custom hostname is supported, but URLs, ports and wildcard values are
-rejected before DAB starts. Incomplete Azure platform metadata also fails startup.
-
-Do not use `*` to work around an MCP `403`: the transport checks Host and Origin
-to protect against DNS rebinding. A browser-origin scenario is not authorized by
-this host-only change and requires separate verification. REST/GraphQL
-authentication, audiences and entity permissions are unchanged.
-
-**Configuration Sections:**
-
-#### 1. Data Source
-
-```json
-"data-source": {
-  "database-type": "mssql",
-  "connection-string": "@env('DATABASE_CONNECTION_STRING')"
-}
-```
-
-- **Database Type**: Microsoft SQL Server (`mssql`)
-- **Connection String**: Loaded from `DATABASE_CONNECTION_STRING` environment variable
-- **Authentication**: Connection string includes Managed Identity authentication
-
-#### 2. Runtime Configuration
-
-**REST API:**
-
-- Enabled at path `/api`
-- Provides RESTful endpoints for CRUD operations
-- Automatic HTTP verb mapping (GET, POST, PUT, PATCH, DELETE)
-
-**GraphQL API:**
-
-- Enabled at path `/graphql`
-- Supports flexible query and mutation capabilities
-- Supports nested queries and filtering
-- **Note:** For tables with VECTOR columns (e.g. `ProductDescription.DescriptionEmbedding`), use the REST API with `$select`; GraphQL can fail to serialize VECTOR. See [EMBEDDING_EXPORT_LIMITATION.md](../docs/data-management/EMBEDDING_EXPORT_LIMITATION.md).
-
-**CORS:**
-
-- Configured to accept requests only from the deployed frontend application
-- Uses `@env('APP_URL')` environment variable to dynamically restrict origins
-- `allow-credentials` set to `true` to support authenticated requests with cookies
-- The `APP_URL` is set during post-deployment by the [`postdeploy.ps1`](../scripts/README.md#3-postdeployps1) script
-
-**Authentication:**
-
-- **Provider**: Azure AD (`AzureAD`)
-- **Audience**: API application ID URI from `API_APP_ID_URI` environment variable
-- **Issuer**: Azure AD tenant-specific issuer URL using `TENANT_ID`
-- **JWT Validation**: Automatic token validation for all requests
-
-#### 3. Telemetry
-
-```json
-"telemetry": {
-  "application-insights": {
-    "enabled": true,
-    "connection-string": "@env('APPLICATIONINSIGHTS_CONNECTION_STRING')"
-  }
-}
-```
-
-Integrates with Azure Application Insights for:
-
-- Request/response logging
-- Performance metrics
-- Exception tracking
-- Custom telemetry
-
-#### 4. Entities
-
-```json
-"entities": {
-  "todo": {
-    "source": "dbo.ToDo",
-    "permissions": [
-      {
-        "role": "authenticated",
-        "actions": ["*"]
-      }
-    ]
-  }
-}
-```
-
-**Entity Mapping:**
-
-- **Entity Name**: `todo` (API endpoint name)
-- **Database Source**: `dbo.ToDo` table
-- **Permissions**: Authenticated users can perform all actions (Create, Read, Update, Delete)
-
-**Generated Endpoints:**
-
-REST:
-
-- `GET /api/todo` - List all todos
-- `GET /api/todo/{id}` - Get todo by ID
-- `POST /api/todo` - Create new todo
-- `PUT /api/todo/{id}` - Update todo
-- `PATCH /api/todo/{id}` - Partial update
-- `DELETE /api/todo/{id}` - Delete todo
-
-GraphQL:
-
-- `POST /graphql` - GraphQL queries and mutations
-
-## Environment Variables Required
-
-The API service requires the following environment variables to be set by `azd` during deployment:
-
-| Variable                                | Description                                      | Set By                                                          |
-| --------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------- |
-| `DATABASE_CONNECTION_STRING`            | SQL connection string with Managed Identity auth | azd (from [infra outputs](../infra/README.md))                  |
-| `API_APP_ID_URI`                        | Azure AD API identifier URI (e.g., `api://guid`) | [`preup.ps1`](../scripts/README.md#1-preupps1) script           |
-| `TENANT_ID`                             | Azure AD tenant ID                               | [`preup.ps1`](../scripts/README.md#1-preupps1) script           |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string           | azd (from [infra outputs](../infra/README.md))                  |
-| `AZURE_CLIENT_ID`                       | User-assigned managed identity client ID         | azd (from [infra outputs](../infra/README.md))                  |
-| `APP_URL`                               | Frontend application URL for CORS restrictions   | [`postdeploy.ps1`](../scripts/README.md#3-postdeployps1) script |
-
-## Database Permissions
-
-The API service connects to Azure SQL Database using the runtime user-assigned
-managed identity. Normal provisioning/seeding configures its contained principal
-through [RuntimeDatabaseAccess.psm1](../seed-job/RuntimeDatabaseAccess.psm1):
-
-- **db_datareader**: Read access to all tables
-- **db_datawriter**: Write access to all tables
-- **EXECUTE**: Shared runtime procedure/function execution.
-- **Object-scoped VIEW DEFINITION** on user tables with default/computed columns:
-  DAB must discover default expressions without exposing defaulted system fields
-  for consumer writes. Added to normal seed setup after mutation tests exposed
-  missing review default metadata.
-- Scoped Change Tracking and XML schema permissions support the other shared
-  runtime services; they do not grant database ownership or DDL administration.
-
-The runtime must not require `db_owner` or `db_ddladmin`. These shared SQL grants
-are a documented demo exception to per-service least privilege; DAB independently
-enforces user roles, fields and database ownership policies. The new metadata
-seed correction is not yet evidence that an existing deployment has the grant.
-Do not patch deployed SQL permissions in place; follow the user-owned demo
-recreation policy when provisioning/seeding changes are required.
-
-For more details on the provisioning process, see the [Scripts Documentation](../scripts/README.md).
-
-## Security Model
-
-### Authentication Flow
-
-1. **Client Request**: Frontend sends request with Azure AD JWT token in `Authorization` header
-2. **Token Validation**: DAB validates the JWT token against Azure AD
-3. **Role Check**: Verifies user has `authenticated` role (any valid Azure AD user)
-4. **Database Access**: DAB uses Managed Identity to query database
-5. **Response**: Returns data to authenticated client
-
-### No Password Storage
-
-- The API service uses **passwordless authentication** via Managed Identity
-- No SQL credentials stored in code, configuration, or environment variables
-- Connection string specifies `Authentication=Active Directory Default`
-
-## Local Development
-
-To run the API service locally:
-
-1. **Prerequisites**:
-   - Docker installed
-   - Azure CLI logged in (`az login`)
-   - Environment variables configured
-
-2. **Build the container**:
-
-   ```bash
-   docker build -t todo-api ./api
-   ```
-
-3. **Run with environment variables**:
-
-   ```bash
-   docker run -p 5000:5000 \
-     -e DATABASE_CONNECTION_STRING="Server=..." \
-     -e API_APP_ID_URI="api://your-guid" \
-     -e TENANT_ID="your-tenant-id" \
-     -e APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=..." \
-     todo-api
-   ```
-
-4. **Test the API**:
-   - REST: `curl http://localhost:5000/api/todo`
-   - GraphQL: Access GraphQL playground at `http://localhost:5000/graphql`
-
-## Troubleshooting
-
-### Container Fails to Start
-
-**Symptom**: Container exits shortly after starting
-
-**Possible Causes**:
-
-1. Managed Identity token not available (check `MI_FAILURE_THRESHOLD`)
-2. Missing environment variables (check container logs)
-3. Invalid `dab-config.json` (validate JSON syntax)
-
-**Solution**:
-
-Check container logs in Azure Portal for detailed error messages
-
-### Authentication Errors
-
-**Symptom**: API returns 401 Unauthorized
-
-**Possible Causes**:
-
-1. JWT token missing or expired
-2. Incorrect `API_APP_ID_URI` or `TENANT_ID`
-3. Token audience doesn't match configuration
-
-**Solution**:
-
-Verify Azure AD app registration and environment variables
-
-### Database Connection Errors
-
-**Symptom**: API returns 500 errors or database timeout
-
-**Possible Causes**:
-
-1. Managed identity not granted database permissions
-2. SQL firewall blocking Container Apps IP range
-3. Connection string incorrect
-
-**Solution**:
-
-- Run [`postprovision.sh`](../scripts/README.md) to ensure permissions are set
-- Verify SQL firewall allows Azure services (configured in [infrastructure](../infra/README.md))
-- Check `DATABASE_CONNECTION_STRING` format
-
-### MI Token Wait Timeout
-
-**Symptom**: Container logs show "Timed out waiting for Managed Identity token"
-
-**Solution**: Increase `MI_FAILURE_THRESHOLD` environment variable in dockerfile or deployment configuration
-
-## Monitoring
-
-The API service sends telemetry to Application Insights. Monitor these metrics:
-
-- **Request Rate**: Number of API calls per minute
-- **Response Time**: Average latency of API requests
-- **Error Rate**: Percentage of failed requests (4xx/5xx)
-- **Database Query Time**: Time spent in SQL queries
-- **Authentication Failures**: Failed JWT validation attempts
-
-Access metrics in Azure Portal → Application Insights → Application Map/Performance/Failures
-
-## Related Documentation
-
-### Project Documentation
-
-- [Root Project README](../README.md) - overall architecture and components
-- [Quickstart Guide](../QUICKSTART.md) - azd workflow and lifecycle hooks
-- [Scripts Documentation](../scripts/README.md) - azd lifecycle scripts including `preup.ps1` and `postprovision.sh`
-- [Infrastructure Documentation](../infra/README.md) - Bicep modules and Azure resource configuration
-- [Azure Functions & AI features](../api-functions/README.md) - serverless endpoints that complement DAB
-- [DAB naming and GraphQL schema rules](../docs/DAB_NAMING_CONVENTIONS.md) - how AdventureWorks tables map to GraphQL entities
-
-### Microsoft Documentation
-
-- [Data API Builder Documentation](https://learn.microsoft.com/azure/data-api-builder/)
-- [Azure Managed Identity](https://learn.microsoft.com/azure/active-directory/managed-identities-azure-resources/)
-- [Azure Container Apps](https://learn.microsoft.com/azure/container-apps/)
+List pages hold 100 items by default; follow GraphQL `first`/`after` cursors or REST
+`$first`/`$after` and `nextLink`. To run locally, use the VS Code task
+**start api (DAB)** with the variables above; never disable authentication. The
+deployed database is private, so prefer testing against the deployed API.
+
+## Related docs
+
+- [DAB API service guide](../docs/services/dab-api.md)
+- [DAB entity reference](../docs/reference/dab-entities.md)
+- [Identity and authentication](../docs/architecture/identity-and-auth.md)
+- [OAuth server](../docs/features/mcp-oauth/README.md)
+- [End-to-end authentication assurance](../docs/features/authentication/END_TO_END_AUTHENTICATION.md)
+- [Seed data generation (vector columns)](../docs/operations/seed-data-generation.md#vector-columns)
+- [Authenticated local scripts](../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md)

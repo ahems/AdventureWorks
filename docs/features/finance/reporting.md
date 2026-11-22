@@ -1,76 +1,110 @@
-# Reporting Feature
+---
+title: Reporting
+summary: Server-side aggregated sales, profitability, inventory and customer reports served by Azure Functions and charted in the Admin portal.
+audience: [developer, demo-presenter]
+components: [api-functions, app-admin]
+related:
+  - docs/features/finance/bank-simulator.md
+  - docs/apps/admin-portal.md
+  - docs/reference/functions-routes.md
+---
 
-The Reports page in the admin portal provides pre-aggregated charts across the full AdventureWorks dataset. It bypasses the DAB GraphQL 100-item pagination limit by querying Azure SQL directly from Azure Functions.
+# Reporting
 
-## Architecture
+## What it does
 
-```
-app-admin (Container App)
-  └── /reports page (React + Recharts)
-        └── useReportingData hooks
-              └── Azure Functions (api-functions, Flex Consumption)
-                    └── ReportingFunctions.cs → ReportingService.cs
-                          └── Azure SQL (GROUP BY / SUM aggregates)
-```
+The Admin portal's report pages chart the whole AdventureWorks dataset: revenue by category, territory and month, top products, order status, inventory, product profitability, discount impact, slow movers and customer statistics.
 
-DAB returns at most 100 rows per request and has no `GROUP BY` support. The Functions tier aggregates server-side and returns ~10–20 rows per endpoint — making the chart data small, fast, and independent of dataset size.
+The aggregation runs in Azure Functions with read-only SQL rather than in DAB. DAB has no `GROUP BY` and pages list results, so totals across thousands of orders would need many requests. Each reporting route returns a small, pre-aggregated result.
 
-## Endpoints
+## Try it
 
-All endpoints are HTTP GET, `AuthorizationLevel.Anonymous`, under the `/api/reporting/` prefix.
+**UI:** in the Admin portal open **Reports** (`/reports`), **Product Profitability** (`/product-profitability`), **Loss Makers** (`/loss-makers`), **Slow Movers** (`/slow-movers`) or **Customer Stats** (`/customer-stats`). Use the channel selector to switch between all orders, online (eShop) and B2B store orders.
 
-| Route                             | SQL tables                                                                                                         | Returns                                                       |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `reporting/revenue-by-category`   | `Sales.SalesOrderDetail`, `Production.Product`, `Production.ProductSubcategory`, `Production.ProductCategory`      | `[{ categoryName, revenue }]`                                 |
-| `reporting/monthly-trend`         | `Sales.SalesOrderHeader`, last 12 months                                                                           | `[{ year, month, revenue, orderCount }]`                      |
-| `reporting/top-products?limit=N`  | `Sales.SalesOrderDetail`, `Production.Product`, default top 10                                                     | `[{ productName, revenue, unitsSold }]`                       |
-| `reporting/orders-by-status`      | `Sales.SalesOrderHeader`                                                                                           | `[{ status, orderCount }]`                                    |
-| `reporting/revenue-by-territory`  | `Sales.SalesOrderHeader`, `Sales.SalesTerritory`                                                                   | `[{ territoryName, countryRegionCode, revenue, orderCount }]` |
-| `reporting/inventory-by-category` | `Production.ProductInventory`, `Production.Product`, `Production.ProductSubcategory`, `Production.ProductCategory` | `[{ categoryName, totalQuantity, productCount }]`             |
-
-## Source Files
-
-### Backend
-
-| File                                            | Purpose                                                |
-| ----------------------------------------------- | ------------------------------------------------------ |
-| `api-functions/Services/ReportingService.cs`    | 6 Dapper methods returning pre-aggregated record types |
-| `api-functions/Functions/ReportingFunctions.cs` | 6 HTTP trigger functions wrapping `ReportingService`   |
-| `api-functions/Program.cs`                      | DI registration — `AddScoped<ReportingService>`        |
-
-### Frontend
-
-| File                                       | Purpose                                |
-| ------------------------------------------ | -------------------------------------- |
-| `app-admin/src/hooks/useReportingData.ts`  | 6 React Query hooks + typed interfaces |
-| `app-admin/src/pages/ReportsPage.tsx`      | Full page with 6 Recharts panels       |
-| `app-admin/src/components/AdminHeader.tsx` | "Reports" nav link (BarChart3 icon)    |
-| `app-admin/src/App.tsx`                    | `/reports` route                       |
-
-## Caching
-
-All hooks use `staleTime: 15 * 60 * 1000` (15 minutes). Aggregate revenue data changes infrequently; background refetch happens automatically once the cache expires.
-
-## Adding a New Report
-
-1. **SQL query** — Add a new `async Task<IEnumerable<TRecord>> GetXxx()` method in `ReportingService.cs`. Use a parameterized Dapper query. Define the return record type in the same file.
-
-2. **Function** — Add a new `[Function("ReportXxx")]` method in `ReportingFunctions.cs` with route `"reporting/xxx"`.
-
-3. **Hook** — Add a typed interface and `useXxxData` hook in `useReportingData.ts`.
-
-4. **Chart** — Add a `<ChartCard>` component in `ReportsPage.tsx` and include it in the responsive grid.
-
-5. **Deploy** — `azd deploy api-functions` (backend), then `azd deploy app-admin` (frontend).
-
-## Deployment
+**API:**
 
 ```bash
-# Deploy the Functions (backend SQL queries)
-azd deploy api-functions
+python3 scripts/utilities/azure-auth.py request --identity admin \
+  --resource functions --path /api/reporting/revenue-by-category
 
-# Deploy the admin portal (frontend)
-azd deploy app-admin
+python3 scripts/utilities/azure-auth.py request --identity admin \
+  --resource functions --path '/api/reporting/top-products?limit=5&channel=b2b'
 ```
 
-Both use ACR remote build and deploy to Azure Container Apps.
+## How it works
+
+```mermaid
+flowchart LR
+    P["Admin report pages"] --> H["useReportingData hooks<br/>React Query, 15-min staleTime"]
+    H --> F["ReportingFunctions"]
+    F --> S["ReportingService<br/>Dapper, read-only SQL"]
+    S --> SQL[("Azure SQL<br/>GROUP BY / SUM")]
+    E["Web PubSub: orders, promotions, warehouse"] -->|"invalidate"| H
+```
+
+Most routes accept `channel=eshop` (online orders) or `channel=b2b` (store orders); without it they include all orders.
+
+### Routes
+
+All are `GET` and need `sales.read`.
+
+| Route | Parameters | Returns |
+|---|---|---|
+| `reporting/revenue-by-category` | `channel` | Revenue per product category |
+| `reporting/monthly-trend` | `channel` | Revenue and order count per month |
+| `reporting/top-products` | `limit` (default 10), `channel` | Best sellers by revenue |
+| `reporting/orders-by-status` | `channel` | Order count per status |
+| `reporting/revenue-by-territory` | `channel` | Revenue and orders per sales territory |
+| `reporting/inventory-by-category` | — | Stock quantity and product count per category |
+| `reporting/dashboard-counts` | — | Headline counts for the dashboard |
+| `reporting/product-profitability` | `limit`, `sortAsc`, `channel` | Revenue, cost and margin per product (ascending for loss makers) |
+| `reporting/product-profitability-detail` | `channel` | Detailed revenue, cost and margin columns for all products |
+| `reporting/profitability-by-category` | `channel` | Margin per category |
+| `reporting/discount-impact` | `channel` | Revenue given away through discounts |
+| `reporting/slow-movers` | `threshold` (default 10), `channel` | Products selling below the threshold |
+| `reporting/sales-trends` | `productId`, `channel` | Sales over time for a product |
+| `reporting/product-price-history` | `productId` | List-price and cost history |
+| `customer-stats` | — | Customer totals |
+| `customer-country-breakdown`, `customer-region-breakdown` | — | Customers by country or region |
+| `customer-monthly-revenue` | — | Customer revenue per month |
+| `customers/top-spenders` | — | Highest-spending customers |
+
+### Financial reports
+
+Simulation finances (procurement spend, manufacturing overhead, payroll and scrap) are served by `financials/summary`, `financials/procurement` and `financials/manufacturing` (`manufacturing.read`). They read the bank simulator's transactions rather than SQL; see [bank simulator](bank-simulator.md#routes).
+
+### Adding a report
+
+1. Add a parameterized Dapper query and record type to `ReportingService.cs`.
+2. Add a `[Function("ReportXxx")]` method with route `reporting/xxx` to `ReportingFunctions.cs`, and register its scope in `api-functions/Auth/FunctionAuthorizationRegistry.cs`.
+3. Add a typed hook to `app-admin/src/hooks/useReportingData.ts`.
+4. Add a `ChartCard` to the page.
+5. Deploy with `azd deploy api-functions --no-prompt` (published directly to Flex Consumption) and `azd deploy app-admin --no-prompt`.
+
+## Data & storage
+
+Read-only queries over `Sales.SalesOrderHeader`, `Sales.SalesOrderDetail`, `Sales.SalesTerritory`, `Sales.Customer`, `Production.Product*`, `Production.ProductInventory` and `Production.ProductCostHistory`. Nothing is cached server-side.
+
+## Events
+
+Reports do not publish events. The Admin portal invalidates report queries on `orders` and `promotions` events, and inventory-by-category on `warehouse` events. There is no polling; React Query also refetches on window focus after the 15-minute stale time.
+
+## Security
+
+`sales.read` (executive-admin, sales-admin, operations-admin and marketing-admin roles). Responses contain aggregates, not customer records, except the top-spenders list.
+
+## Configuration
+
+Uses the Functions `SQL_CONNECTION_STRING`. No report-specific settings.
+
+## Limits
+
+- The seeded orders are historical, so month-based charts are densest in the seeded years until simulators add recent orders.
+- Large aggregates run on every cache miss; keep new queries indexed and bounded.
+
+## Related code & docs
+
+- `api-functions/Functions/ReportingFunctions.cs`, `api-functions/Services/ReportingService.cs`
+- `api-functions/Functions/CustomerStatsFunction.cs`, `GetTopSpendersFunction.cs`
+- `app-admin/src/hooks/useReportingData.ts`, `app-admin/src/pages/ReportsPage.tsx`
+- [Bank simulator](bank-simulator.md) · [Admin portal](../../apps/admin-portal.md) · [Functions routes](../../reference/functions-routes.md)

@@ -1,6 +1,7 @@
 #!/bin/bash
-# Post-deployment script for API Container App
-# Updates the API Container App with the frontend URL for CORS configuration
+# Post-deployment script for the API (DAB) Container App
+# Sets the container's APP_URL environment variable from APP_REDIRECT_URI.
+# DAB CORS itself is defined in api/dab-config.json (all origins, no credentials).
 
 set -euo pipefail
 

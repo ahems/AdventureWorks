@@ -6,6 +6,7 @@ import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import { createTelemetry } from "./telemetry.mjs";
 
 const CLIENT = "adventureworks-inspector";
 const SESSION_COOKIE = "__Host-aw-inspector";
@@ -125,7 +126,7 @@ const setCookie = (name, value, seconds) =>
 
 export function createGateway(config, authorization, { request = fetch, now = Date.now,
   staticRoot = resolve(dirname(fileURLToPath(import.meta.url)), "node_modules/@modelcontextprotocol/inspector/client/dist"),
-  log = code => console.error("Inspector gateway: " + code) } = {}) {
+  log = code => console.error("Inspector gateway: " + code), telemetry = null } = {}) {
   const flows = new Map(), sessions = new Map();
   const controllers = new Set();
   function redirect(res, target, cookies) {
@@ -166,6 +167,15 @@ export function createGateway(config, authorization, { request = fetch, now = Da
     return url;
   }
   const server = createServer(async (req, res) => {
+    if (telemetry) {
+      const startedAt = Date.now();
+      res.once("finish", () => {
+        let pathname = "/";
+        try { pathname = new URL(req.url, "http://gateway.invalid").pathname; } catch { /* label as asset */ }
+        telemetry.track({ method: req.method, pathname, status: res.statusCode, startedAt,
+          traceparent: req.headers.traceparent });
+      });
+    }
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin");
@@ -370,9 +380,10 @@ export function createGateway(config, authorization, { request = fetch, now = Da
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const config = configuration(process.env);
-  const gateway = createGateway(config, await oauth(config));
+  const telemetry = createTelemetry(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING, { origin: config.origin });
+  const gateway = createGateway(config, await oauth(config), { telemetry });
   gateway.server.listen(6274, "127.0.0.1", () => console.log("Inspector OAuth gateway ready"));
-  const stop = () => { void gateway.close(); };
+  const stop = () => { void telemetry.flush(); void gateway.close(); };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
 }

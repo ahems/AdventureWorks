@@ -139,9 +139,8 @@ public class TranslateProductDescriptions
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Durable Activity functions are kept below so that any in-flight
-    // orchestrations started before this deployment can still complete.
-    // They are no longer invoked by new requests.
+    // Durable orchestrator and activities. HttpStart above queues one translation
+    // job per product model instead of starting this orchestrator.
     // ────────────────────────────────────────────────────────────────────────
 
     [Function(nameof(TranslateProductDescriptions_Orchestrator))]

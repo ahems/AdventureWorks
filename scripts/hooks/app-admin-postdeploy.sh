@@ -1,6 +1,6 @@
 #!/bin/bash
 # Post-deployment script for Admin Container App
-# The admin app is now a Container App; environment variables are configured
+# The admin app runs as a Container App; environment variables are configured
 # via Bicep at provision time and injected at container startup.
 # No post-deployment configuration is required.
 

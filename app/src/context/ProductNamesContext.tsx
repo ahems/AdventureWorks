@@ -37,7 +37,7 @@ export const ProductNamesProvider: React.FC<{ children: React.ReactNode }> = ({
         }>(GET_PRODUCT_NAMES_BY_CULTURE, { cultureId: cultureIdPadded });
         return result.productNames.items;
       } catch {
-        // API may not expose productNames yet (e.g. DAB not redeployed); fall back to English names
+        // If the ProductName query fails, fall back to English names
         return [];
       }
     },

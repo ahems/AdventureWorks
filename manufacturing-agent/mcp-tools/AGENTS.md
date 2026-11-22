@@ -1,21 +1,35 @@
 # Coding Agent Instructions
 
-This project is a **Microsoft Foundry hosted agent** — a containerized AI agent that runs in [Foundry Agent Service](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agents). The platform handles containerization, hosting, security, scaling, and observability so you can focus on agent logic.
+This folder is the AdventureWorks **Manufacturing agent**: a Microsoft Foundry hosted agent
+(.NET 10, Microsoft Agent Framework, Responses protocol) that analyses new sales orders
+using AdventureWorks MCP tools served by `api-mcp`. Azure Functions invokes it from the
+manufacturing agent queue. Repository-wide rules are in
+[`.github/copilot-instructions.md`](../../.github/copilot-instructions.md); runtime details
+are in [docs/services/manufacturing-agent.md](../../docs/services/manufacturing-agent.md).
 
 ## Key files
 
-- `Dockerfile` — container definition
+- `src/mcp-tools/Program.cs` — agent host, autonomy-mode tool allowlists (MCP snake_case wire names) and instructions
+- `src/mcp-tools/McpServiceAuthentication.cs` — per-invocation managed-identity token exchange with api-mcp
+- `src/mcp-tools/mcp-tools.csproj`, `src/mcp-tools/Dockerfile` — project and container definition
+- `azure.yaml` — standalone azd project; the demo deploys through the root `azure.yaml`
 
 ## Development workflow
 
-The **Azure Developer CLI (`azd`)** manages the full lifecycle:
-
 ```bash
-azd ai agent run                           # Run locally on http://localhost:8088
-azd ai agent invoke --local "your message" # Test the local agent
-azd deploy                                 # Deploy to Foundry
-azd ai agent invoke "your message"         # Invoke the deployed agent
+dotnet build manufacturing-agent/mcp-tools/src/mcp-tools/mcp-tools.csproj   # from the repo root
+azd deploy manufacturing-agent --no-prompt                                  # from the repo root
 ```
+
+- Deploy only with `azd deploy`. Never run `azd provision`, `azd up` or `azd down`, and never
+  patch Azure resources by hand: this is a demo/POC environment (see the
+  [demo/POC policy](../../.github/copilot-instructions.md#azure-environment-policy-demopoc-only)).
+- The root `scripts/hooks/postdeploy.sh` wires api-mcp trust for the agent's identity; wait
+  for it before invoking the agent.
+- `azd ai agent run` (from this folder) runs the agent on `http://localhost:8088`, but api-mcp
+  only trusts the deployed agent's identity, so test tool calls against the deployed agent.
+- AI invocations cost money and may change data in FullyAutonomous mode; run them intentionally.
+- Do not commit or push changes; the user handles Git.
 
 ## Microsoft Foundry Skill
 
@@ -36,5 +50,6 @@ Then ask naturally, e.g. `Use the Microsoft Foundry Skill to deploy this agent.`
 
 ## References
 
+- [docs/services/manufacturing-agent.md](../../docs/services/manufacturing-agent.md)
 - [Hosted agents overview](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agents)
 - [Microsoft Foundry Skill](https://learn.microsoft.com/en-us/azure/foundry/how-to/develop/use-microsoft-foundry-skill)

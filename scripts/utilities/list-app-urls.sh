@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Print current deployed app URLs from azd environment values.
-# Includes the Static Web App URL plus Container App endpoints.
+# Includes the Static Web App URL plus the DAB, Functions, MCP, admin and
+# MCP Inspector endpoints (listed together under "Container Apps").
 
 set -euo pipefail
 

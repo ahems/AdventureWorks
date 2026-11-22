@@ -31,8 +31,8 @@ public class OrderStatusFunctions
 
     /// <summary>
     /// Enqueues a Status=1 (In Process) message so the order enters the
-    /// automated status pipeline. A random 5–60 minute visibility timeout
-    /// matches the original behaviour of the now-removed HTTP trigger.
+    /// automated status pipeline. The message's visibility timeout is a random
+    /// value between the pipeline config's ProcessingToApproved min/max minutes.
     ///
     /// Route: POST /api/orders/begin-processing-order
     /// Body:  { "salesOrderId": &lt;int&gt; }  (camelCase or PascalCase)

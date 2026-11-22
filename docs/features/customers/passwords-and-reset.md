@@ -1,326 +1,112 @@
-# Password Hashing Implementation
+---
+title: Customer passwords and password reset
+summary: How AdventureWorks stores customer passwords with PBKDF2-SHA256, how customers change or verify a password, and how the emailed password-reset flow works in the storefront and admin portal.
+audience: [developer, security-reviewer, demo-presenter]
+components: [app, app-admin, api-functions, api-mcp]
+related:
+  - accounts-and-sign-in.md
+  - ../email/email-notifications.md
+  - ../functions-oauth/ROUTE_SCOPE_MATRIX.md
+  - ../../architecture/identity-and-auth.md
+---
 
-## Overview
+# Customer passwords and password reset
 
-This implementation adds secure password hashing functionality to the AdventureWorks demo site using the existing `Person.Password` table in the SQL database. The implementation uses **PBKDF2** (Password-Based Key Derivation Function 2) with SHA-256, which is a well-established standard for password hashing.
+Passwords for AdventureWorks people are hashed with PBKDF2-SHA256 and stored in `Person.Password`. Azure Functions sets and verifies passwords and runs the emailed reset flow. The api-mcp OAuth server checks the same hash at sign-in.
 
-> **⚠️ Deployment Required**: After creating these new functions, deploy them to Azure with `azd deploy api-functions` to make them available.
+## What it does
 
-## Quick Start
+- **Set or change a password** for the signed-in customer (or, for internal staff, for a customer).
+- **Verify a password** for the signed-in customer, for example before a sensitive change.
+- **Forgot password:** the customer requests a reset, receives an email with a short code link, and chooses a new password on the storefront `/reset-password` page.
+- **Admin reset:** on the admin **Customers** page, staff can send a reset email or set a new password for a customer.
 
-```bash
-# Deploy the new password functions to Azure
-azd deploy api-functions
+## Try it
 
-# Test the deployed functions
-./test-password-functions.sh
+- **UI (customer):** on the storefront sign-in page choose **Forgot password**, enter your email, then follow the emailed link.
+- **UI (admin):** open **Customers**, select a customer and use **Reset password**.
+- **API:** the reset routes are public. Setting or verifying a password needs a consumer token for that customer; [`tests/scripts/test-password-functions.sh`](../../../tests/scripts/test-password-functions.sh) and [`tests/scripts/test-password-reset-flow.sh`](../../../tests/scripts/test-password-reset-flow.sh) show the full calls with a disposable consumer.
+
+## How it works
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as Customer
+  participant B as Storefront
+  participant F as Azure Functions
+  participant S as Azure SQL
+  participant ACS as Azure Communication Services
+  U->>B: Forgot password (email)
+  B->>F: POST /api/password/reset/request
+  F->>S: Look up person; store 1-hour reset code
+  F->>ACS: Email link /reset-password?token=...&id=...
+  F-->>B: 200 (same message whether or not the email exists)
+  U->>B: Open link
+  B->>F: POST /api/password/reset/validate
+  F-->>B: Code valid?
+  U->>B: New password
+  B->>F: POST /api/password/reset/complete
+  F->>S: Store new PBKDF2 hash
+  F-->>B: 200 (401 if the code is invalid or expired)
 ```
 
-## Architecture
+### Hashing
 
-### Components
+| Property | Value |
+|---|---|
+| Algorithm | PBKDF2 with HMAC-SHA256 |
+| Iterations | 100,000 |
+| Salt | 6 random bytes (8 Base64 characters) |
+| Hash | 96 bytes, Base64-encoded |
+| Storage | `Person.Password` (`PasswordHash`, `PasswordSalt`) |
+| Minimum length | 8 characters |
 
-1. **Password.cs** - Data models for password operations
-   - `Password`: Represents a password record in the database
-   - `SetPasswordRequest`: DTO for setting/updating passwords
-   - `VerifyPasswordRequest`: DTO for password verification
-   - `VerifyPasswordResponse`: Response model for verification results
+### Routes
 
-2. **PasswordService.cs** - Core password hashing service
-   - `StorePasswordAsync()`: Creates or updates a password with secure hash and salt
-   - `VerifyPasswordAsync()`: Verifies a password against stored credentials
-   - `GetPasswordAsync()`: Retrieves password record for a business entity
+| Route | Purpose |
+|---|---|
+| `POST /api/password` | Set a password |
+| `POST /api/password/verify` | Check a password |
+| `POST /api/password/reset/request` | `{ email }`: send a reset email |
+| `POST /api/password/reset/validate` | Check a reset code |
+| `POST /api/password/reset/complete` | Set the new password with a valid code |
 
-3. **PasswordFunctions.cs** - Azure Functions HTTP endpoints
-   - `SetPassword`: POST `/api/password` - Set or update a password
-   - `VerifyPassword`: POST `/api/password/verify` - Verify a password
+Reset codes are 8 characters from an alphabet without look-alike characters (no `0`, `O`, `1`, `I`) and expire after 1 hour.
 
-## Security Features
+## Data & storage
 
-### PBKDF2 Configuration
+`Person.Password` holds the hash and salt. Reset codes are stored with the person and expire after 1 hour. No passwords are logged or returned.
 
-```csharp
-- Salt Size: 10 bytes (stored as base64 in varchar(10))
-- Hash Size: 96 bytes (stored as base64 in varchar(128))
-- Iterations: 100,000 (meets OWASP recommendations)
-- Algorithm: SHA-256
-```
+## Events (Web PubSub)
 
-### Security Measures
+None.
 
-1. **Cryptographically Secure Random Salt**: Uses `RandomNumberGenerator.Create()` for salt generation
-2. **Timing-Safe Comparison**: Uses `CryptographicOperations.FixedTimeEquals()` to prevent timing attacks
-3. **No Plain Text Storage**: Passwords are never stored in plain text
-4. **Automatic Hashing**: All password storage automatically generates new hash and salt
+## Security
 
-## Database Schema
+| Route | Access |
+|---|---|
+| `POST /api/password` | `customers.write`; the signed-in customer for themselves, or internal staff for customer accounts only |
+| `POST /api/password/verify` | `customers.read`; the signed-in customer only |
+| Reset routes | Public |
 
-The implementation uses the existing `Person.Password` table:
+The reset request responds identically whether or not the email exists. See [Functions route scopes](../functions-oauth/ROUTE_SCOPE_MATRIX.md) and [identity and auth](../../architecture/identity-and-auth.md).
 
-```sql
-CREATE TABLE [Person].[Password](
-    [BusinessEntityID] [int] NOT NULL,
-    [PasswordHash] [varchar](128) NOT NULL,
-    [PasswordSalt] [varchar](10) NOT NULL,
-    [rowguid] uniqueidentifier ROWGUIDCOL NOT NULL,
-    [ModifiedDate] [datetime] NOT NULL
-)
-```
+## Configuration
 
-## API Endpoints
+| Setting | Purpose |
+|---|---|
+| `FRONTEND_URL` | Storefront base URL for reset links |
+| `COMMUNICATION_SERVICE_ENDPOINT`, `EMAIL_SENDER_DOMAIN` | Sending the reset email |
 
-> **Authorization (Functions OAuth enforced).** Both endpoints require an api-mcp-issued
-> Functions-audience bearer token (see
-> [functions-oauth](../functions-oauth/README.md)). `POST /api/password` needs `customers.write`:
-> a consumer may only set their **own** password, and staff may only reset passwords for
-> individual customers (PersonType `IN`) — never employee accounts. `POST /api/password/verify`
-> needs `customers.read` and is **self-only**, so it cannot be used as an anonymous password
-> oracle. Sign-in itself never calls these endpoints; it goes through the api-mcp login page.
-> New customers are created with the anonymous `POST /api/signup` endpoint.
-
-### 1. Set Password
-
-**Endpoint**: `POST /api/password`
-
-**Request Body**:
-
-```json
-{
-  "businessEntityID": 1,
-  "password": "SecurePassword123!"
-}
-```
-
-**Response** (200 OK):
-
-```json
-{
-  "message": "Password successfully set",
-  "businessEntityID": 1
-}
-```
-
-**Validation**:
-
-- Password must be at least 8 characters
-- BusinessEntityID must be positive
-- Password cannot be empty
-
-### 2. Verify Password
-
-**Endpoint**: `POST /api/password/verify`
-
-**Request Body**:
-
-```json
-{
-  "businessEntityID": 1,
-  "password": "SecurePassword123!"
-}
-```
-
-**Response** (200 OK):
-
-```json
-{
-  "isValid": true,
-  "message": "Password is valid"
-}
-```
-
-If password is incorrect:
-
-```json
-{
-  "isValid": false,
-  "message": "Invalid password or user not found"
-}
-```
-
-## Usage Examples
-
-### Using curl
-
-```bash
-# Get the Azure Functions URL
-FUNCTION_URL=$(azd env get-values | grep "^API_FUNCTIONS_URL=" | cut -d'=' -f2 | tr -d '"')
-
-# A Functions-audience token for the signed-in user (e.g. the e-shop's functionsFetch token)
-TOKEN="<functions access token>"
-
-# Set a password (own account, or a customer account when called by staff)
-curl -X POST "$FUNCTION_URL/api/password" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"businessEntityID": 1, "password": "SecurePassword123!"}'
-
-# Verify a password (own account only)
-curl -X POST "$FUNCTION_URL/api/password/verify" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"businessEntityID": 1, "password": "SecurePassword123!"}'
-```
+## Limits
 
-### Using JavaScript/TypeScript (Frontend)
+- AdventureWorks sample people do not share a known password. The seeded demo employees Ken (`ken0@adventure-works.com`) and Peter (`peter0@adventure-works.com`) are the identities with a documented demo password; see [authenticated scripts](../../testing/AZURE_AUTHENTICATED_SCRIPTS.md).
+- Sample email addresses on reserved domains are suppressed, so reset emails only reach real addresses you add.
 
-```typescript
-// Get the Functions URL from environment config
-const FUNCTIONS_URL =
-  window.config?.API_FUNCTIONS_URL || import.meta.env.VITE_API_FUNCTIONS_URL;
+## Related code & docs
 
-// In the e-shop, prefer functionsFetch (app/src/services/functionsAuth.ts), which attaches the token.
-// Set password
-async function setPassword(businessEntityId: number, password: string, functionsToken: string) {
-  const response = await fetch(`${FUNCTIONS_URL}/api/password`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${functionsToken}`,
-    },
-    body: JSON.stringify({ businessEntityID: businessEntityId, password }),
-  });
-  return await response.json();
-}
-
-// Verify password
-async function verifyPassword(businessEntityId: number, password: string, functionsToken: string) {
-  const response = await fetch(`${FUNCTIONS_URL}/api/password/verify`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${functionsToken}`,
-    },
-    body: JSON.stringify({ businessEntityID: businessEntityId, password }),
-  });
-  const result = await response.json();
-  return result.isValid;
-}
-```
-
-## Testing
-
-A comprehensive test script is provided: `test-password-functions.sh`
-
-```bash
-# Test against deployed Azure functions (uses azd env values)
-./test-password-functions.sh
-
-# Test against a specific URL
-./test-password-functions.sh https://your-function-app.azurewebsites.net
-```
-
-The test script validates:
-
-1. Password creation
-2. Correct password verification
-3. Wrong password rejection
-4. Password update functionality
-5. Input validation
-
-## Local Development
-
-For local development and testing:
-
-1. Ensure the local database connection is configured:
-
-   ```bash
-   ./setup-local-dev.sh
-   ```
-
-2. Start the Functions:
-
-   ```bash
-   cd api-functions
-   func start
-   ```
-
-3. Test the endpoints against local Functions:
-   ```bash
-   ./test-password-functions.sh http://localhost:7071
-   ```
-
-## Azure Deployment
-
-The password functions are automatically published with the api-functions Flex Consumption Function App:
-
-```bash
-azd deploy api-functions
-```
-
-**Note**: After adding new functions, you must redeploy for them to be available in Azure.
-
-The functions will be available at:
-
-- `https://<function-app-url>/api/password`
-- `https://<function-app-url>/api/password/verify`
-
-You can get your deployed Functions URL with:
-
-```bash
-azd env get-values | grep API_FUNCTIONS_URL
-```
-
-## Integration with Frontend
-
-To integrate with the React frontend:
-
-1. User registration → `POST /api/signup` (anonymous; creates the customer and password server-side)
-2. User login → the api-mcp OAuth login (never a direct password check from the browser)
-3. Change password → `POST /api/password/verify` then `POST /api/password` with the user's Functions token
-4. Store only the issued tokens in session storage (never store passwords)
-
-## Important Notes
-
-1. **Legacy Data**: Existing imported password data is ignored as the original hashing algorithm is unknown
-2. **Demo Purpose**: This implementation uses PBKDF2 which is suitable for a demo. Production systems should consider:
-   - Additional password complexity requirements
-   - Account lockout after failed attempts
-   - Password history to prevent reuse
-   - Rate limiting on verification endpoint
-   - Multi-factor authentication
-
-## Related docs
-
-- Functions implementation and endpoints: [../api-functions/README.md](../api-functions/README.md)
-- Overall application architecture and flows: [../README.md](../README.md)
-- Azure deployment and hooks: [../QUICKSTART.md](../QUICKSTART.md), [../scripts/README.md](../scripts/README.md)
-
-3. **Authentication**: The current implementation uses `AuthorizationLevel.Anonymous` for demo purposes. In production, consider adding proper authentication to the Function endpoints.
-
-## Password Hashing Process
-
-1. **Setting a Password**:
-
-   ```
-   User Password → Generate Random Salt → PBKDF2 Hash → Store (Hash + Salt)
-   ```
-
-2. **Verifying a Password**:
-   ```
-   User Password → Retrieve Stored Salt → PBKDF2 Hash → Compare with Stored Hash
-   ```
-
-## Dependencies
-
-No additional NuGet packages required. Uses built-in .NET libraries:
-
-- `System.Security.Cryptography` for PBKDF2 and cryptographic operations
-- `Microsoft.Data.SqlClient` for database access (already in project)
-- `Dapper` for SQL operations (already in project)
-
-## Error Handling
-
-All functions include comprehensive error handling:
-
-- Input validation errors return 400 Bad Request
-- Database errors return 500 Internal Server Error
-- All errors are logged with Application Insights integration
-
-## Performance
-
-PBKDF2 with 100,000 iterations is intentionally slow to prevent brute-force attacks:
-
-- Password hashing: ~100-200ms
-- Password verification: ~100-200ms
-
-This is a security feature, not a performance issue.
+- `api-functions/Functions/PasswordFunctions.cs`, `PasswordResetFunctions.cs`, `api-functions/Services/PasswordService.cs`
+- `app/src/pages/ResetPasswordPage.tsx`, `app/src/pages/AuthPage.tsx`
+- `app-admin/src/components/AdminPasswordReset.tsx`
+- [Accounts and sign-in](accounts-and-sign-in.md) · [Email notifications](../email/email-notifications.md)

@@ -74,6 +74,25 @@ class RunTests(unittest.TestCase):
         checks = self.run_with(SAFE[3], False)
         self.assertEqual(checks, {"order:preflight": "PASS", "order:creation": "BLOCKED"})
 
+    def test_generated_order_failure_is_classified_on_its_own_trace(self):
+        import agent_sweep
+        instance, report = canary()
+        trace = "c" * 32
+
+        def generation(report, deployment, label, agent_key, policy, tools, request):
+            return request(f"00-{trace}-{'d' * 16}-01")
+
+        with patch.object(instance, "internal", return_value="token"), \
+                patch.object(auth, "http", return_value=(500, {}, b'{"success": false}')), \
+                patch.object(agent_sweep, "service_generation_canary", side_effect=generation), \
+                patch.object(auth, "foundry_throttled", return_value=True) as throttled, \
+                patch.object(instance, "admin_cancel") as cancel:
+            instance.order_generation(SimpleNamespace(customer_id=7), 5)
+        throttled.assert_called_once_with(instance.deployment, trace, sleep=unittest.mock.ANY)
+        cancel.assert_not_called()
+        self.assertEqual(report.checks[0]["status"], "BLOCKED")
+        self.assertEqual(report.inventory["orderCanaryResiduals"][0]["state"], "uncertain")
+
     def test_failed_post_create_checks_still_cancel(self):
         instance, report = canary()
 

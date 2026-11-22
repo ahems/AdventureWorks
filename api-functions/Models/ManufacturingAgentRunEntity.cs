@@ -31,7 +31,7 @@ public class ManufacturingAgentRunEntity : ITableEntity
 
     /// <summary>
     /// The agent's response text — its findings summary.
-    /// Previously discarded; now persisted so the manufacturing UI can display it.
+    /// Persisted so the manufacturing UI can display it.
     /// </summary>
     public string? FindingsSummary { get; set; }
 

@@ -303,7 +303,7 @@ public class AIService
     public async Task<List<ProductPhotoData>> GenerateProductImagesAsync(List<ProductImageData> products)
     {
         var credential = new DefaultAzureCredential();
-        // gpt-image-1 generation can take 2-4 minutes per image.  The SDK default
+        // Image generation can take 2-4 minutes per image.  The SDK default
         // NetworkTimeout is 100 s which is too short, causing AggregateException
         // "Retry failed after N tries" instead of a catchable 429.  Set a longer
         // per-request timeout so the SDK waits for the actual response.

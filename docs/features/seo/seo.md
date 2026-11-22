@@ -1,218 +1,113 @@
-# SEO Implementation Guide
+---
+title: "SEO: meta tags, structured data, robots.txt and sitemap"
+summary: How the storefront sets per-page meta, Open Graph and JSON-LD tags, optimizes images, controls crawlers with robots.txt and serves a dynamic sitemap from Azure Functions.
+audience: [developer, demo-presenter]
+components: [app, api-functions]
+related:
+  - ../commerce/catalog-and-browsing.md
+  - ../../apps/storefront.md
+  - ../../reference/functions-routes.md
+  - ../../services/functions.md
+---
 
-This document outlines the SEO features implemented in the AdventureWorks application.
+# SEO: meta tags, structured data, robots.txt and sitemap
 
-## ✅ Implemented Features
+## What it does
 
-### 1. Dynamic XML Sitemap (`/sitemap.xml`)
+- Product and category pages set their own `<title>`, description, canonical URL, Open Graph and Twitter Card tags.
+- Product pages embed **schema.org JSON-LD** (`Product` with an `Offer`, plus a `BreadcrumbList`), and category pages embed a `BreadcrumbList`, so search engines can show rich results.
+- Catalog images load lazily and asynchronously with a pulse placeholder and fade-in, keeping pages responsive.
+- `robots.txt` allows mainstream search engines and social previews, blocks common AI-training crawlers and excludes private or transient pages.
+- `/sitemap.xml` is generated on demand from the live catalog by an anonymous Azure Function.
 
-- **Location**: Azure Functions at `/api/sitemap.xml`
-- **Features**:
-  - Auto-generated from database (290+ products)
-  - Includes static pages (home, products, sale, FAQ, contact)
-  - Category pages with SEO-friendly slugs
-  - Product detail pages with last modified dates
-  - Proper XML namespace and structure
-  - Updates automatically as products change
-- **Usage**: Search engines discover all pages via `https://yourdomain.com/sitemap.xml`
-
-### 2. Robots.txt
-
-- **Location**: `/public/robots.txt`
-- **Features**:
-  - Allows all major search engines (Google, Bing, Twitter, Facebook)
-  - References sitemap.xml for crawler discovery
-  - Includes crawl-delay directive
-- **Deployment**: Automatically updated via template with correct sitemap URL
-
-### 3. Meta Tags (index.html)
-
-- ✅ Page title with branding
-- ✅ Meta description (155 characters)
-- ✅ Canonical URL to prevent duplicate content
-- ✅ Viewport meta for mobile optimization
-- ✅ Keywords meta tag
-- ✅ Author information
-
-### 4. Open Graph Tags
-
-- ✅ `og:title` - Appears in social media previews
-- ✅ `og:description` - Social media description
-- ✅ `og:type` - Content type (website)
-- ✅ `og:image` - Social media thumbnail
-- ✅ `og:url` - Canonical URL
-
-### 5. Twitter Card Tags
-
-- ✅ `twitter:card` - Large image card format
-- ✅ `twitter:site` - Twitter handle
-- ✅ `twitter:title` - Twitter-specific title
-- ✅ `twitter:description` - Twitter-specific description
-- ✅ `twitter:image` - Twitter preview image
-
-### 6. Structured Data (JSON-LD)
-
-- ✅ **Store Schema** - Business information for rich snippets
-- ✅ **Product Schema** - Via `generateProductStructuredData()` helper
-- ✅ **Breadcrumb Schema** - Via `generateBreadcrumbStructuredData()` helper
-
-### 7. Dynamic SEO Component
-
-- **Location**: `/src/components/SEO.tsx`
-- **Usage**:
-
-  ```tsx
-  import { SEO, generateProductStructuredData } from "@/components/SEO";
-
-  // In your component
-  <SEO
-    title="Product Name | Adventure Works"
-    description="Product description here"
-    image="/images/product.jpg"
-    type="product"
-    structuredData={generateProductStructuredData({
-      name: "Product Name",
-      price: 99.99,
-      sku: "ABC123",
-      availability: "InStock",
-    })}
-  />;
-  ```
-
-### 8. Optimized Images
-
-- **Location**: `/src/components/OptimizedImage.tsx`
-- **Features**:
-  - Lazy loading (`loading="lazy"`)
-  - Async decoding (`decoding="async"`)
-  - Blur-up effect during load
-  - Proper aspect ratios
-  - Mandatory alt text for accessibility
-- **Usage**:
-
-  ```tsx
-  import { OptimizedImage } from "@/components/OptimizedImage";
-
-  <OptimizedImage
-    src="/images/product.jpg"
-    alt="Mountain Bike HL Road Frame"
-    aspectRatio="4/3"
-  />;
-  ```
-
-## 🔧 Configuration Files
-
-### Template-Based Config
-
-- **Template**: `app/staticwebapp.config.template.json`
-- **Generated**: `app/staticwebapp.config.json` (gitignored)
-- **Process**: `scripts/predeploy.sh` generates config with environment-specific URLs
-- **Benefit**: Works across all deployments (dev, staging, prod)
-
-### Environment Variables
-
-- `API_FUNCTIONS_URL` - Used to inject correct sitemap redirect URL
-- Set automatically by `azd` during deployment
-
-## 📊 SEO Checklist
-
-### Per-Page Optimization
-
-When creating new pages, ensure:
-
-- [ ] Use `<SEO>` component with page-specific title/description
-- [ ] Title follows format: "Page Name | Adventure Works"
-- [ ] Description is 150-160 characters
-- [ ] Use semantic HTML (`<header>`, `<main>`, `<article>`, `<section>`)
-- [ ] Proper heading hierarchy (single `<h1>`, then `<h2>`, `<h3>`, etc.)
-- [ ] All images use `<OptimizedImage>` with descriptive alt text
-- [ ] Links have descriptive anchor text (avoid "click here")
-
-### Product Pages
-
-- [ ] Use `generateProductStructuredData()` for rich snippets
-- [ ] Include breadcrumbs with `generateBreadcrumbStructuredData()`
-- [ ] Product images have descriptive alt text (e.g., "Mountain Bike HL Road Frame - Black")
-- [ ] Price, availability, and SKU are visible
-- [ ] Reviews/ratings (if applicable) use Review schema
-
-### Category Pages
-
-- [ ] Unique meta description per category
-- [ ] Breadcrumb navigation
-- [ ] Proper heading structure
-- [ ] Internal links to products and related categories
-
-## 🚀 Performance Best Practices
-
-### Core Web Vitals
-
-1. **LCP (Largest Contentful Paint)**: Use `OptimizedImage` for hero images
-2. **FID (First Input Delay)**: Minimize JavaScript execution
-3. **CLS (Cumulative Layout Shift)**: Set explicit image dimensions/aspect ratios
-
-### Additional Optimizations
-
-- Minified CSS/JS in production build
-- Static Web App edge caching
-- Vite code splitting
-- React lazy loading for routes
-
-## 🔍 Testing & Validation
-
-### Tools
-
-- **Google Search Console**: Submit sitemap, monitor indexing
-- **Bing Webmaster Tools**: Submit sitemap, monitor crawl stats
-- **Rich Results Test**: https://search.google.com/test/rich-results
-- **PageSpeed Insights**: https://pagespeed.web.dev/
-- **Mobile-Friendly Test**: https://search.google.com/test/mobile-friendly
-
-### Manual Checks
+## Try it
 
 ```bash
-# Verify sitemap
-curl https://yourdomain.com/sitemap.xml | head -50
+APP=$(azd env get-value APP_URL --no-prompt)
+FUNCS=$(azd env get-value API_FUNCTIONS_URL --no-prompt)
 
-# Verify robots.txt
-curl https://yourdomain.com/robots.txt
-
-# Check page metadata
-curl -s https://yourdomain.com | grep -E '<title>|<meta.*description'
+curl -s "$APP/robots.txt" | head -20
+curl -sI "$APP/sitemap.xml" | grep -i '^location'      # 301 to the Functions sitemap
+curl -s "$FUNCS/api/sitemap.xml" | head -30
 ```
 
-## 📈 Next Steps
+Then open a product page and inspect the `<head>`: look for `og:title` and the `application/ld+json` script. Paste the URL into a rich-results or social-preview validator to see the rendered card.
 
-1. **Submit to Search Engines**:
-   - Google Search Console: https://search.google.com/search-console
-   - Bing Webmaster Tools: https://www.bing.com/webmasters
+For an end-to-end check of robots.txt, sitemap structure, content coverage and URL reachability, run [tests/scripts/test-robots-sitemap.sh](../../../tests/scripts/test-robots-sitemap.sh).
 
-2. **Monitor Performance**:
-   - Set up Core Web Vitals monitoring
-   - Track keyword rankings
-   - Monitor click-through rates (CTR) from search results
+## How it works
 
-3. **Content Optimization**:
-   - Write unique descriptions for each product
-   - Add customer reviews (schema markup)
-   - Create blog content for long-tail keywords
-   - Build internal linking structure
+### Page metadata
 
-4. **Technical Improvements**:
-   - Add AMP pages for mobile (optional)
-   - Implement image CDN with WebP format
-   - Add hreflang tags for international versions
-   - Consider implementing Progressive Web App (PWA) features
+[SEO.tsx](../../../app/src/components/SEO.tsx) wraps `react-helmet-async` (the `HelmetProvider` is mounted in `main.tsx`). Pages render `<SEO title description image url type structuredData />`; omitted props fall back to site-wide defaults. [index.html](../../../app/index.html) provides baseline meta and Open Graph tags for pages that do not override them.
 
-## 📚 Resources
+| Helper | Output |
+|--------|--------|
+| `generateProductStructuredData` | `Product` with name, description, image, SKU and an `Offer` (price, currency, `InStock`/`OutOfStock`) |
+| `generateBreadcrumbStructuredData` | `BreadcrumbList` from the category path |
 
-- [Google Search Central](https://developers.google.com/search)
-- [Schema.org Documentation](https://schema.org/)
-- [Web.dev SEO Guide](https://web.dev/learn/seo/)
-- [Lighthouse CI](https://github.com/GoogleChrome/lighthouse-ci)
+`ProductPage` and `CategoryPage` use the component. [OptimizedImage.tsx](../../../app/src/components/OptimizedImage.tsx) renders images with `loading="lazy"`, `decoding="async"` and descriptive `alt` text, and is used by product cards and the cart and checkout pages.
 
-## Related docs
+### Sitemap
 
-- Implementation details for SEO components and helpers: [SEO_COMPONENTS_IMPLEMENTATION.md](SEO_COMPONENTS_IMPLEMENTATION.md)
-- Functions that serve SEO-related endpoints (sitemap, OpenAPI, Swagger UI): [../api-functions/README.md](../api-functions/README.md)
-- Overall frontend and backend architecture: [../README.md](../README.md)
+```mermaid
+sequenceDiagram
+  participant B as Crawler
+  participant S as Static Web App
+  participant F as GetSitemap (Functions)
+  participant D as Azure SQL
+  B->>S: GET /robots.txt
+  S-->>B: Static robots.txt (Sitemap directive)
+  B->>S: GET /sitemap.xml
+  S-->>B: 301 Location: {API_FUNCTIONS_URL}/api/sitemap.xml
+  B->>F: GET /api/sitemap.xml
+  F->>D: Categories and products
+  F-->>B: application/xml urlset
+```
+
+1. The predeploy hook generates `app/staticwebapp.config.json` from [staticwebapp.config.template.json](../../../app/staticwebapp.config.template.json), substituting the deployed Functions URL into a `301` redirect for `/sitemap.xml`.
+2. `GetSitemap` ([SitemapFunction.cs](../../../api-functions/Functions/SitemapFunction.cs)) builds a sitemap with static pages, every category and every product, using the request host as the base URL. Each entry includes `lastmod`, `changefreq` and `priority`.
+3. In local development the Vite dev server proxies `/sitemap.xml` to the local Functions host on port 7071.
+
+### Crawler policy
+
+[app/public/robots.txt](../../../app/public/robots.txt) is deployed as a static file:
+
+- **Allowed:** search engines (Googlebot, Bingbot, Slurp and others) and social-preview bots (Twitterbot, facebookexternalhit, LinkedInBot).
+- **Blocked:** AI-training and scraping crawlers such as GPTBot, CCBot, Google-Extended, anthropic-ai, PerplexityBot and Bytespider.
+- **Disallowed paths:** `/auth`, `/reset-password`, `/checkout`, `/order-confirmation`, `/account`, plus sort, filter and paging query variants to avoid duplicate content.
+
+## Data & storage
+
+The sitemap reads categories and products from Azure SQL through `ProductService` on each request. Meta tags and JSON-LD use data the page has already loaded from DAB. Nothing is persisted.
+
+## Events (Web PubSub)
+
+None. The sitemap is generated per request, so catalog changes appear on the next crawl.
+
+## Security
+
+- `GET /api/sitemap.xml` is a public, anonymous route that exposes only catalog data already visible on the storefront.
+- robots.txt excludes account, checkout and password-reset pages from indexing; these pages also require sign-in or a reset token where applicable.
+
+## Configuration
+
+| Setting | Purpose |
+|---------|---------|
+| `API_FUNCTIONS_URL` | Substituted into the SWA sitemap redirect by `scripts/hooks/predeploy.sh` |
+| `app/public/robots.txt` | Static crawler rules and `Sitemap:` directive; edit and redeploy the storefront to change them |
+| `SEO.tsx` defaults | Site-wide title, description and share image |
+
+## Limits
+
+- The storefront is a client-rendered SPA: crawlers that do not execute JavaScript see only the baseline tags from `index.html`.
+- robots.txt and the canonical URL in `index.html` are static and are not rewritten per environment.
+- Only product and category pages set page-specific metadata; other routes use the defaults.
+- JSON-LD prices are emitted in USD regardless of the shopper's selected display currency.
+
+## Related code & docs
+
+- [SEO.tsx](../../../app/src/components/SEO.tsx), [OptimizedImage.tsx](../../../app/src/components/OptimizedImage.tsx), [index.html](../../../app/index.html), [robots.txt](../../../app/public/robots.txt)
+- [SitemapFunction.cs](../../../api-functions/Functions/SitemapFunction.cs), [staticwebapp.config.template.json](../../../app/staticwebapp.config.template.json), [vite.config.ts](../../../app/vite.config.ts)
+- [test-robots-sitemap.sh](../../../tests/scripts/test-robots-sitemap.sh)
+- [Catalog and browsing](../commerce/catalog-and-browsing.md) · [Storefront app](../../apps/storefront.md) · [Functions routes](../../reference/functions-routes.md)

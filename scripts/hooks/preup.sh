@@ -404,14 +404,14 @@ fi
 # Ensure resource group exists before querying its id (use rg_location for resource group)
 ensure_resource_group "$subscription_id" "$resource_group" "$rg_location"
 
-# Compute Foundry account name as in Bicep: 'av-ai-${uniqueString(resourceGroup().id)}'
-# Note: Bicep's uniqueString uses ONLY resourceGroup().id, not environment name or location
+# Compute a deterministic Foundry account name from the resource group id:
+# 'av-ai-' + the first 13 hex chars of its SHA-1 hash. It is passed to Bicep through
+# AZURE_OPENAI_ACCOUNT_NAME, so Bicep's uniqueString() default is not used.
 resource_group_id=$(az group show -n "$resource_group" --subscription "$subscription_id" --query id -o tsv 2>/dev/null || true)
 if [[ -z "$resource_group_id" ]]; then
   color_red "Error: Could not retrieve resource group id for $resource_group."
   exit 1
 fi
-# Use Python to compute uniqueString matching Bicep's uniqueString(resourceGroup().id)
 account_name=$(python3 -c "import hashlib; print('av-ai-' + hashlib.sha1('$resource_group_id'.encode('utf-8')).hexdigest()[:13].lower())")
 set_azd_value "AZURE_OPENAI_ACCOUNT_NAME" "$account_name"
 color_cyan "Microsoft Foundry account name: $account_name"

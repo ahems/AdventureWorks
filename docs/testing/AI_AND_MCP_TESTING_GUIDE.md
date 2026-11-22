@@ -1,430 +1,131 @@
-# AI Chat and MCP Server Complete Testing Guide
+---
+title: AI and MCP testing guide
+summary: How to test the api-mcp server and the Foundry-backed AI endpoints against a deployed demo with audience-bound OAuth tokens, including direct MCP JSON-RPC calls, delegated chat and opt-in billable canaries.
+audience: [developer, operator, ai-agent]
+components: [api-mcp, api-functions, foundry, manufacturing-agent]
+related:
+  - docs/testing/AI_CHAT_MCP_TESTING.md
+  - docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md
+  - docs/testing/testing-strategy.md
+  - docs/features/mcp-oauth/TOOL_SCOPE_MATRIX.md
+  - docs/features/ai/foundry-agents.md
+  - docs/services/api-mcp.md
+---
 
-## Overview
+# AI and MCP testing guide
 
-This guide describes the comprehensive test script `test-ai-and-mcp-complete.sh` that validates all functionality of the AI Chat Feature and MCP Server tools deployed in Azure.
+This guide shows how to test the deployed MCP server and the AI endpoints in Azure Functions. Every protected call uses an OAuth token from [`azure-auth.py`](AZURE_AUTHENTICATED_SCRIPTS.md) that is bound to the target resource. Direct MCP calls cost nothing beyond normal API traffic. Chat and agent calls make **billable** Foundry inferences, so run them on purpose.
 
-## What This Script Tests
+## How the pieces connect
 
-### Part 1: Data Preparation (DAB API)
-
-Uses the Data API Builder (DAB) GraphQL API to fetch real test data:
-
-- **Customer ID**: Fetches the most recently added customer (currently ID 30119)
-- **Product ID**: Fetches a finished goods product for testing
-- **Order ID**: Fetches a recent order for the customer
-
-### Part 2: AI Agent Functions API
-
-Tests the AI chat endpoints in the Functions API:
-
-#### 2.1: Agent Status
-
-- **Endpoint**: `GET /api/agent/status`
-- **Validates**: Service is operational, `framework` equals `"Azure.AI.Foundry"`, and features include `"foundry-agent-threads"`, `"dual-mcp-servers"`, `"thread-persistence"`
-
-#### 2.2: Simple Chat
-
-- **Endpoint**: `POST /api/agent/chat`
-- **Test**: Basic greeting message
-- **Validates**: AI responds to simple conversational input; response contains `threadId`
-
-#### 2.3: Multi-turn Thread Continuation
-
-- **Test**: Second message using the `threadId` returned from 2.2
-- **Validates**: The agent resumes the same Foundry thread (contextual continuation)
-
-### Part 3: MCP Server Tools (Direct)
-
-Tests all 8 MCP tools directly via SSE protocol:
-
-#### 3.1: GetCustomerOrders
-
-```json
-{
-  "customerId": 30119
-}
+```mermaid
+flowchart LR
+    T["Test client (azure-auth.py)"] -->|"MCP-audience token"| F["Functions /api/agent/chat"]
+    F -->|"Responses API"| A["Foundry prompt agent"]
+    A -->|"delegated MCP token"| M["api-mcp /mcp"]
+    T -->|"MCP-audience token"| M
+    M -->|"managed identity"| S["Azure SQL"]
 ```
 
-Fetches order history and status for the customer.
-
-#### 3.2-3.3: GetOrderDetails
-
-```json
-{
-  "orderId": <orderID>
-}
-```
-
-```json
-{
-  "orderId": <orderID>,
-  "customerId": 30119
-}
-```
-
-Tests both with and without customer validation.
-
-#### 3.4: FindComplementaryProducts
-
-```json
-{
-  "productId": <productID>,
-  "limit": 5
-}
-```
-
-Finds products frequently purchased together.
-
-#### 3.5-3.6: SearchProducts
-
-```json
-{
-  "searchTerm": "bike"
-}
-```
-
-```json
-{
-  "searchTerm": "helmet",
-  "categoryId": 1
-}
-```
-
-Tests search with and without category filter.
-
-#### 3.7: GetProductDetails
-
-```json
-{
-  "productId": <productID>
-}
-```
-
-Retrieves detailed product information.
-
-#### 3.8: GetPersonalizedRecommendations
-
-```json
-{
-  "customerId": 30119,
-  "limit": 5
-}
-```
-
-Gets AI-powered product recommendations based on purchase history.
-
-#### 3.9: AnalyzeProductReviews
-
-```json
-{
-  "productId": <productID>
-}
-```
-
-Analyzes customer reviews with sentiment analysis.
-
-#### 3.10: CheckInventoryAvailability
-
-```json
-{
-  "productId": <productID>
-}
-```
-
-Checks real-time inventory across warehouses.
-
-### Part 4: AI Chat with MCP Integration
-
-Tests that the AI Agent correctly uses MCP tools:
-
-#### 4.1: Order Query Tool Integration
-
-- **Test**: "What orders have I placed recently?"
-- **Expected Tool**: `GetCustomerOrders`
-- **Validates**: AI detects order intent and calls correct tool
-
-#### 4.2: Product Search Tool Integration
-
-- **Test**: "Show me some mountain bikes"
-- **Expected Tool**: `SearchProducts`
-- **Validates**: AI detects product search intent
-
-#### 4.3: Product Details Tool Integration
-
-- **Test**: "Tell me more about product {id}"
-- **Expected Tool**: `GetProductDetails`
-- **Validates**: AI detects product detail intent
+- api-mcp serves **Streamable HTTP at `/mcp` only**; there is no separate SSE transport endpoint. Clients must accept both `application/json` and `text/event-stream`.
+- Without a token, `POST /mcp` returns `401` with a `WWW-Authenticate` header whose `resource_metadata` points to the protected-resource metadata document.
+- `tools/list` returns all 63 tools to every authenticated caller. Authorization happens on each `tools/call`, based on the token's scopes, user category and record ownership. See the [tool scope matrix](../features/mcp-oauth/TOOL_SCOPE_MATRIX.md).
+- Tool names are snake_case, for example `search_products`, `get_customer_orders` and `get_business_stats`.
+- Functions reaches Foundry agents through the Responses API (`FoundryAgentClient`). For agent definitions, see [Foundry agents](../features/ai/foundry-agents.md).
 
 ## Prerequisites
 
-- Azure services must be deployed (`azd up`)
-- The following services must be running:
-  - DAB API (GraphQL)
-  - Functions API (AI Agent)
-  - MCP Server (SSE)
-- Azure CLI must be authenticated (`az login`)
-- `jq` must be installed (for JSON parsing)
-- `curl` must be available
+- A deployed environment selected in azd, with the seed job complete.
+- Python 3, plus `jq` for the examples.
+- The seeded identities described in [Authenticated scripts](AZURE_AUTHENTICATED_SCRIPTS.md): `manufacturing` (Peter) and `admin` (Ken). For customer-owned tools, use a disposable consumer account.
 
-## Running the Tests
+## Direct MCP calls
+
+`azure-auth.py request --resource mcp` gets an MCP-audience token and adds the required `Accept` header. The token stays in memory.
 
 ```bash
-# From workspace root
-./test-ai-and-mcp-complete.sh
+# List tools (all 63 are listed; authorization applies per call).
+python3 scripts/utilities/azure-auth.py request \
+  --identity manufacturing --resource mcp --path /mcp --method POST \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# Call a catalog tool (products.read).
+python3 scripts/utilities/azure-auth.py request \
+  --identity manufacturing --resource mcp --path /mcp --method POST \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_products","arguments":{"searchTerm":"helmet"}}}'
+
+# Call an internal reporting tool (sales.read) as Ken.
+python3 scripts/utilities/azure-auth.py request \
+  --identity admin --resource mcp --path /mcp --method POST \
+  --data '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_business_stats","arguments":{}}}'
 ```
 
-The script will:
+The response may arrive as a server-sent event (`event:`/`data:` lines). If so, parse the JSON from the `data:` line. A denied tool call returns a tool error naming the missing scope or category. The same call as Peter tests denial, because Peter lacks `sales.read`. Each decision is logged as the `McpToolAuthorization` event; see [Monitoring](../operations/monitoring.md#api-mcp-and-seed-job).
 
-1. Load Azure environment configuration automatically
-2. Fetch real test data from the database
-3. Run all tests sequentially
-4. Display color-coded results
-5. Provide a summary at the end
+Customer-owned tools such as `get_customer_orders` and `get_order_details` check ownership against the signed-in consumer. Test them with a disposable consumer token. Passing another customer's ID is denied.
 
-## Understanding the Output
+For interactive exploration, the deployed MCP Inspector (`MCP_INSPECTOR_URL`) uses the same OAuth server.
 
-### Color Coding
+## AI endpoints in Functions
 
-- 🔵 **Blue**: Test section headers and info
-- 🟢 **Green**: Passed tests and success messages
-- 🟡 **Yellow**: Test descriptions and warnings
-- 🔴 **Red**: Failed tests and errors
+| Route | Auth | Notes |
+| --- | --- | --- |
+| `GET /api/agent/status` | Anonymous | Returns `status` and the enabled `features` list. Makes no AI call. |
+| `POST /api/agent/chat` | **MCP-audience** bearer token | The caller's identity comes from the token, and any `customerId` in the body is ignored. `isAdmin: true` requires an internal user with `sales.read`. Messages are limited to 4,000 characters. |
+| `GET /api/helpme/questions`, `POST /api/helpme/recommend` | Anonymous | The storefront help-me-choose wizard. `recommend` makes an AI call. |
+| `POST /api/GenerateOrderWithAI` | Internal, `admin.write` | Generates a simulated order with the order agent, so it is both a mutation and an AI call |
 
-### Test Results
-
-Each test shows:
-
-- Test description
-- Request/response details (truncated for readability)
-- Pass/fail status
-- Reason for failure (if applicable)
-
-### Final Summary
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TEST SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Total Tests: 20
-Passed: 18
-Failed: 2
-```
-
-## Expected Results
-
-When everything is working correctly:
-
-- All 20+ tests should pass
-- AI chat should respond coherently
-- MCP tools should return structured data
-- Tool integration should show the AI using appropriate tools
-
-## Common Issues and Troubleshooting
-
-### Issue: "Failed to get customer ID"
-
-**Cause**: DAB API not responding or database connectivity issue  
-**Solution**:
-
-- Check `API_URL` is correct: `azd env get-values | grep API_URL`
-- Verify DAB API is running: `curl $API_URL`
-
-### Issue: "Agent status failed (HTTP 500)"
-
-**Cause**: Functions API or MCP server configuration issue  
-**Solution**:
-
-- Check Application Insights for errors
-- Verify MCP server URL in Functions configuration
-- Check connection strings are set
-
-### Issue: "MCP tool failed"
-
-**Cause**: MCP server SSE endpoint issue or SQL connectivity  
-**Solution**:
-
-- Test MCP server directly: `curl $API_MCP_URL/sse`
-- Check MCP server logs in Container Apps
-- Verify SQL connection string uses Managed Identity
-
-### Issue: "Chat succeeded but didn't return order information"
-
-**Cause**: AI may not have called the correct tool or tool returned no data  
-**Note**: This is a soft failure - the chat worked but may not have used the expected tool  
-**Solution**:
-
-- Check if customer has orders in database
-- Review AI agent logs to see which tools were called
-
-## Architecture Context
-
-### Service Flow
-
-```
-Test Script
-    ↓
-    ├─→ DAB API (GraphQL) ──→ Azure SQL
-    │                          (Test Data)
-    ↓
-    ├─→ Functions API (/api/agent/chat)
-    │       ↓
-    │       └─→ Azure AI Foundry (PersistentAgentsClient)
-    │               ↓ (server-side in Foundry)
-    │               ├─→ api-mcp MCP server
-    │               └─→ DAB /mcp endpoint
-    │                       ↓
-    │                       └─→ Azure SQL
-    │                           (Business Data)
-    ↓
-    └─→ MCP Server (/sse)
-            ↓
-            └─→ Azure SQL
-                (Direct Tool Calls)
-```
-
-### Authentication
-
-- **DAB API**: No authentication (configured in `dab-config.prod.json`)
-- **Functions API**: Anonymous access for testing
-- **MCP Server**: Internal communication via managed identity
-- **Azure SQL**: Passwordless authentication via managed identity
-
-## Test Coverage Matrix
-
-| Feature                | Endpoint        | Tool                           | Status |
-| ---------------------- | --------------- | ------------------------------ | ------ |
-| Data Fetch             | DAB GraphQL     | -                              | ✓      |
-| Agent Status           | Functions API   | -                              | ✓      |
-| Simple Chat            | Functions API   | -                              | ✓      |
-| Product Search Chat    | Functions API   | SearchProducts                 | ✓      |
-| Order Chat             | Functions API   | GetCustomerOrders              | ✓      |
-| Customer Orders        | MCP Direct      | GetCustomerOrders              | ✓      |
-| Order Details          | MCP Direct      | GetOrderDetails                | ✓      |
-| Complementary Products | MCP Direct      | FindComplementaryProducts      | ✓      |
-| Product Search         | MCP Direct      | SearchProducts                 | ✓      |
-| Product Details        | MCP Direct      | GetProductDetails              | ✓      |
-| Recommendations        | MCP Direct      | GetPersonalizedRecommendations | ✓      |
-| Review Analysis        | MCP Direct      | AnalyzeProductReviews          | ✓      |
-| Inventory Check        | MCP Direct      | CheckInventoryAvailability     | ✓      |
-| Chat Tool Integration  | Functions + MCP | All Tools                      | ✓      |
-
-## Testing AI Foundry Features
-
-The following scenarios verify the Foundry-specific features added across all four agents.
-
-### Structured Inputs Resolution
-
-Verify that `{{customerId}}` and `{{cultureId}}` placeholders in the Chat agent's instructions are resolved, not passed literally to the model:
+For all routes and scopes, see the [Functions routes reference](../reference/functions-routes.md).
 
 ```bash
-# POST /api/agent/chat with customerId set — the agent should greet the customer by name
-# (it looks them up via MCP tools using the resolved customerId, not the raw string)
-curl -s -X POST "$API_FUNCTIONS_URL/api/agent/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Who am I?","customerId":29825}' | jq '{response:.response, threadId:.threadId}'
+# Status (no token, no AI call).
+curl -s "$(azd env get-value API_FUNCTIONS_URL --no-prompt)/api/agent/status" | jq '{status, features}'
 ```
 
-The response should reference customer 29825's name — not contain literal `{{customerId}}` text.
-
-### Memory Scoping (`x-memory-user-id`)
-
-Verify that memory is scoped per user by checking that two different customers do not share conversation state:
+A chat turn is billable and needs an MCP-audience token sent to the **Functions** host. `request --resource mcp` targets the MCP host, so mint the token and send it with curl instead. Supply the headers on stdin, as shown in [Use a token with curl](AZURE_AUTHENTICATED_SCRIPTS.md#use-a-token-with-curl-or-another-local-script):
 
 ```bash
-# Customer A — ask about orders
-curl -s -X POST "$API_FUNCTIONS_URL/api/agent/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"What was my last order?","customerId":29825}' | jq '.response'
-
-# Customer B — ask about orders; should NOT reference Customer A's data
-curl -s -X POST "$API_FUNCTIONS_URL/api/agent/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"What was my last order?","customerId":30119}' | jq '.response'
+set -euo pipefail
+MCP_TOKEN=$(python3 scripts/utilities/azure-auth.py token --identity admin --resource mcp)
+FUNCTIONS_URL=$(azd env get-value API_FUNCTIONS_URL --no-prompt)
+printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$MCP_TOKEN" |
+  curl --silent --show-error --fail-with-body --max-time 180 --header @- \
+    --data '{"message":"Summarize sales by order status.","isAdmin":true}' \
+    "${FUNCTIONS_URL%/}/api/agent/chat" | jq '{threadId, toolsUsed, response}'
+unset MCP_TOKEN
 ```
 
-### `tool_choice: "required"` Enforcement
+The response's `threadId` is a Foundry response ID for the same caller and agent. To continue the conversation, send it back as `threadId`.
 
-Verify that agents with `tool_choice: "required"` always invoke at least one MCP tool:
+## Scripted checks
 
-```bash
-# Order Generation — check that ToolsUsed is populated
-curl -s -X POST "$API_FUNCTIONS_URL/api/admin/generate-order" \
-  -H "Content-Type: application/json" \
-  -d '{"personaType":"weekend-warrior"}' | jq '.log[] | select(.type=="dim") | .message | select(contains("tools"))'
+| Script | What it covers | Cost |
+| --- | --- | --- |
+| `bash tests/scripts/test-ai-chat-and-mcp.sh` | Runs the `validate.py --chat` profile: SQL-backed availability, missing-scope denial and customer tool ownership | No inference |
+| `... --customer-agent-canary` | One customer-chat inference, with trace correlation to the delegated MCP decision | Billable |
+| `... --admin-agent-canary` | One admin-chat inference that checks the reviewed read-only tool list | Billable |
+| `... --customer-agent-canary --agent-tool-sweep` (or with `--admin-agent-canary`) | Also prompts each reviewed chat tool not yet correlated and checks the SQL session principal in telemetry | Billable, several requests |
 
-# Help-Me-Choose — check that tool calls appear in the response
-curl -s -X POST "$API_FUNCTIONS_URL/api/help-me-choose/recommendations" \
-  -H "Content-Type: application/json" \
-  -d '{"budget":500,"activityType":"mountain biking"}' | jq '.toolsUsed'
-```
+[Chat and MCP authentication testing](AI_CHAT_MCP_TESTING.md) describes the evidence each profile collects. [`tests/scripts/README.md`](../../tests/scripts/README.md) lists the prerequisites.
 
-Expect at least one tool name in `toolsUsed`/log for each call. An empty `toolsUsed` for these agents indicates a misconfiguration.
+`tests/scripts/test-ai-and-mcp-complete.sh` comes from before the OAuth rollout. It sends no bearer tokens, so protected routes return `401`. Its MCP section labels the transport "SSE", while the current server uses Streamable HTTP at `/mcp`. Use `test-ai-chat-and-mcp.sh` and the direct calls above instead.
 
-### PII Absence in Logs
+## Agent behavior checks
 
-Verify that customer email addresses do not appear in Application Insights traces from Order Generation:
+These are manual checks, and each makes billable calls:
 
-```bash
-# In Azure Portal → App Insights → Logs:
-traces
-| where message contains "Loaded profile:"
-| project timestamp, message
-| order by timestamp desc
-| take 20
-```
+- **Caller binding:** ask the chat "What was my last order?" as two different consumers. Each answer must reflect only that caller's orders, because identity comes from the token.
+- **Tool use:** with the canaries, a narrative answer alone is not evidence. The test requires a completed MCP result that a trace correlates with the delegated authorization decision.
+- **Guardrails:** platform content-filter blocks return no partial output, emit `Agent.GuardrailBlocked` and reset the conversation continuation.
+- **Telemetry:** query `customEvents` for `Agent.ChatSuccess` and `customMetrics` for `Foundry.Responses.InputTokens`. See [Monitoring](../operations/monitoring.md#diagnostic-queries).
 
-The `message` field should contain `CustomerID=` and order count stats but **not** an email address (e.g. `@adventure-works.com`).
+Never enable shell tracing, print tokens, or copy private responses into reports.
 
-### Agent Status Feature Flags
+## Related
 
-```bash
-curl -s "$API_FUNCTIONS_URL/api/agent/status" | jq '.features'
-```
-
-Expected output includes: `"foundry-responses-api"`, `"structured-inputs"`, `"memory-scoping"`, `"tool-choice-required"`, `"dual-mcp-servers"`, `"multi-turn-persistence"`.
-
-## Related Documentation
-
-- [AI Agent Automation](AI_AGENT_AUTOMATION.md) - AI agent implementation details
-- [MCP Server Documentation](api-functions/MCP_SERVER.md) - MCP server architecture
-- [AI Chat MCP Testing](AI_CHAT_MCP_TESTING.md) - Initial testing approach
-- [DAB API README](api/README.md) - DAB configuration and deployment
-
-## Continuous Testing
-
-This script can be integrated into CI/CD pipelines:
-
-```yaml
-# Example Azure DevOps pipeline step
-- script: |
-    chmod +x test-ai-and-mcp-complete.sh
-    ./test-ai-and-mcp-complete.sh
-  displayName: "Validate AI and MCP functionality"
-  continueOnError: false
-```
-
-## Exit Codes
-
-- `0`: All tests passed
-- `1`: One or more tests failed
-
-## Related Documentation
-
-- AI agent automation and deployment: [AI_AGENT_AUTOMATION.md](AI_AGENT_AUTOMATION.md), [AI_AGENT_DEPLOYMENT_SUMMARY.md](AI_AGENT_DEPLOYMENT_SUMMARY.md)
-- Agent migration to Microsoft Agents Framework: [AGENT_FRAMEWORK_MIGRATION.md](AGENT_FRAMEWORK_MIGRATION.md)
-- Detailed telemetry implementation and queries: [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
-- MCP server implementation and tools: [../api-mcp/README.md](../api-mcp/README.md)
-- Functions hosting the agent endpoints: [../api-functions/README.md](../api-functions/README.md)
-- Focused chat/MCP test script guide: [AI_CHAT_MCP_TESTING.md](AI_CHAT_MCP_TESTING.md)
-
-Use this in scripts:
-
-```bash
-if ./test-ai-and-mcp-complete.sh; then
-    echo "Deployment validated successfully"
-else
-    echo "Validation failed - check logs"
-    exit 1
-fi
-```
+- [Chat and MCP authentication testing](AI_CHAT_MCP_TESTING.md)
+- [Authenticated scripts](AZURE_AUTHENTICATED_SCRIPTS.md)
+- [Testing strategy](testing-strategy.md)
+- [MCP tool scope matrix](../features/mcp-oauth/TOOL_SCOPE_MATRIX.md)
+- [Foundry agents](../features/ai/foundry-agents.md)
+- [api-mcp service](../services/api-mcp.md)

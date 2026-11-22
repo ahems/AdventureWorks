@@ -1,3 +1,14 @@
+---
+title: Storefront health diagnostics
+summary: What the storefront /health page and the Functions and MCP readiness contracts check, what a pass does and does not establish, and how to validate them after deployment.
+audience: [operator, developer, demo-presenter]
+components: [app, api-functions, api-mcp, api]
+related:
+  - docs/operations/monitoring.md
+  - docs/operations/troubleshooting.md
+  - docs/testing/testing-strategy.md
+---
+
 # Storefront health diagnostics
 
 The storefront `/health` page is a point-in-time diagnostic view, not an uptime
@@ -27,7 +38,7 @@ scrolling.
 | Functions | `GET /api/health` | Process liveness only; existing response and status are unchanged. |
 | Azure SQL | Functions managed-identity catalog read | Connectivity and `Production.Product` read permission, not every SQL permission or data completeness. |
 | Blob storage | Read properties of receipt, locale, and deployment containers | Containers exist and are accessible, not blob completeness or write permission. |
-| Queue storage | Read properties of all 14 application queues and their poison queues | Queues exist and are accessible, not worker progress, write permission, queue contents, or message delivery. |
+| Queue storage | Read properties of all 15 application queues and their poison queues | Queues exist and are accessible, not worker progress, write permission, queue contents, or message delivery. |
 | Table storage | Read a single page (at most one row, partition key only) from each of the 13 Functions application tables | Tables are readable, not write permission, record correctness, or simulator activity. No row data is returned to the browser. |
 | MCP | Backend requests to `/health` and `/ready` | Process liveness plus the MCP service's own catalog SQL and task-store read access. In-memory task storage is valid locally but not durable. |
 | OAuth | Backend authorization-server discovery request | Issuer/token metadata and PKCE `S256`, not a complete login, signing-key access, or authenticated tool execution. |
@@ -109,6 +120,9 @@ connection with `AZURE_CLIENT_ID` without exposing either identifier. It is
 core readiness. The assurance runner independently binds the selected MCP
 ingress, ready revision, attached identity and SQL server/database before and
 after the read. This samples one connection, not every tool or SQL permission.
+For continuous evidence, api-mcp and Functions also emit the `Sql.SessionPrincipal`
+event for each tool call or function invocation that opens SQL; see
+[monitoring](../../operations/monitoring.md#sql-session-principal-sqlsessionprincipal).
 MCP `/health` and `/alive` remain liveness probes so dependency outages
 do not create restart loops. The Functions backend probes MCP, avoiding extra
 browser CORS requirements.
@@ -169,3 +183,9 @@ job just to deploy diagnostics. For smoke tests, resolve endpoints from
 For continuous availability, queue backlog/poison-message monitoring, agent
 failures, order delivery progress, or telemetry ingestion, use Azure Monitor and
 Application Insights rather than keeping this browser page open.
+
+## Related
+
+- [Monitoring and telemetry](../../operations/monitoring.md)
+- [Troubleshooting](../../operations/troubleshooting.md)
+- [Testing strategy](../../testing/testing-strategy.md)

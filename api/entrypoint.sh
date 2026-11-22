@@ -84,7 +84,7 @@ wait_for_database_schema() {
 
   # Simple approach: Add a configurable delay to allow seed job to complete
   # Container Apps will restart if DAB crashes, creating an effective retry loop
-  # After several restarts (~6 minutes), the seed job completes and DAB starts successfully
+  # Once the seed job has created the schema, a later restart starts DAB successfully
   if [ "${DB_PERIOD}" -gt 0 ]; then
     log "Waiting ${DB_PERIOD}s before starting DAB to allow database seeding to complete..."
     sleep "${DB_PERIOD}"

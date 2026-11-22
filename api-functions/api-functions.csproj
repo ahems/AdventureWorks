@@ -69,6 +69,8 @@
   <ItemGroup>
     <Compile Include="..\api-mcp\AdventureWorks\Services\PromotionProductData.cs"
              Link="Services\PromotionProductData.cs" />
+    <Compile Include="..\api-mcp\AdventureWorks\Telemetry\SqlPrincipalTelemetry.cs"
+             Link="Telemetry\SqlPrincipalTelemetry.cs" />
   </ItemGroup>
 
   <ItemGroup>

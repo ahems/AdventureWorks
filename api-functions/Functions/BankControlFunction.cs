@@ -12,8 +12,9 @@ namespace api_functions.Functions;
 /// All routes are under /api/bank/*.
 ///
 /// The bank maintains one virtual account per currency supported by the website.
-/// The USD account is seeded on first use with the total historical profit from
-/// Sales.usp_GetTotalProfit. Foreign-currency accounts start at zero.
+/// The USD account is seeded on first use with the total historical finished-goods
+/// profit of non-rejected, non-cancelled orders (an inline query using the same
+/// calculation as Sales.usp_GetTotalProfit). Foreign-currency accounts start at zero.
 /// All balances are persisted in Azure Table Storage (awBankAccounts /
 /// awBankTransactions). Negative balances are permitted; no limits or charges apply.
 /// </summary>

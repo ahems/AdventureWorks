@@ -1,3 +1,14 @@
+---
+title: "Deployer permissions: why Contributor is not enough"
+summary: For subscription administrators, why deploying the demo needs a constrained role-assignment permission on top of Contributor, and how to grant it with an allowlist condition for users or a GitHub service principal.
+audience: [security-reviewer, operator]
+components: [infra, azd, github-actions]
+related:
+  - docs/operations/deployment.md
+  - docs/operations/ci-cd.md
+  - .github/workflows/README.md
+---
+
 # Deployer Permissions: Why Contributor Is Not Enough
 
 This page is for **Azure subscription administrators** who have been asked to
@@ -403,3 +414,9 @@ protections therefore matter. To revoke a repository, delete only its credential
 az ad app federated-credential delete --id "$CLIENT_ID" \
   --federated-credential-id "$CREDENTIAL_NAME"
 ```
+
+## Related
+
+- [Deployment lifecycle](operations/deployment.md)
+- [CI/CD workflows](operations/ci-cd.md)
+- [Workflow setup](../.github/workflows/README.md)

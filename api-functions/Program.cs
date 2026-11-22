@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights;
 using Azure.Identity;
 using Azure.Core.Serialization;
@@ -42,13 +43,26 @@ builder.Services.AddSingleton<FunctionsAuthorizationMiddleware>();
 #if AUTH_ASSURANCE_HOST
 builder.UseMiddleware<AuthAssurance.HostEntryProbe>();
 #endif
+builder.UseMiddleware<api_functions.Functions.InvocationTraceMiddleware>();
 builder.UseMiddleware<FunctionsAuthorizationMiddleware>();
 #if AUTH_ASSURANCE_HOST
 builder.UseMiddleware<AuthAssurance.HandlerEntryProbe>();
 #endif
 
-// Register Application Insights for telemetry
-builder.Services.AddApplicationInsightsTelemetryWorkerService();
+// Register Application Insights for telemetry. Adaptive sampling is reinstalled without custom
+// events or exceptions so authorization and identity evidence events are never sampled out.
+builder.Services.AddApplicationInsightsTelemetryWorkerService(options => options.EnableAdaptiveSampling = false);
+builder.Services.Configure<Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration>(configuration =>
+{
+    var chain = configuration.DefaultTelemetrySink.TelemetryProcessorChainBuilder;
+    chain.UseAdaptiveSampling(maxTelemetryItemsPerSecond: 20, excludedTypes: "Event;Exception");
+    chain.Build();
+});
+builder.Services.AddSingleton(sp => new AdventureWorks.Telemetry.SqlPrincipalTelemetry(
+    sp.GetRequiredService<TelemetryClient>(),
+    sp.GetRequiredService<ILogger<AdventureWorks.Telemetry.SqlPrincipalTelemetry>>(),
+    "api-functions", builder.Configuration["SQL_CONNECTION_STRING"], builder.Configuration["AZURE_CLIENT_ID"]));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AdventureWorks.Telemetry.SqlPrincipalTelemetry>());
 
 // Configure JSON serialization to use camelCase for API responses  
 builder.Services.Configure<WorkerOptions>(options =>

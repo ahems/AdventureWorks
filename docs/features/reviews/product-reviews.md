@@ -1,198 +1,144 @@
-# AI-Powered Product Review Generation
+---
+title: Product reviews, AI review generation and moderation
+summary: How customers read, write and vote on product reviews, and how admins generate AI reviews (random or verified-purchase), moderate them with an AI agent, add store replies and create review embeddings for semantic search.
+audience: [developer, demo-presenter, operator]
+components: [app, app-admin, api, api-functions]
+related:
+  - ../search/semantic-search.md
+  - ../ai/foundry-agents.md
+  - ../ai/ai-content-generation.md
+  - ../commerce/catalog-and-browsing.md
+  - ../../reference/webpubsub-events.md
+---
 
-This feature generates creative, fun product reviews using Azure OpenAI to make the demo site more engaging and realistic.
+# Product reviews, AI review generation and moderation
 
-## Overview
+Product pages show customer reviews with ratings, helpful votes and store replies. Shoppers can write reviews. Admins can fill the catalog with AI-generated reviews, moderate pending reviews with an AI agent and generate review embeddings so [semantic search](../search/semantic-search.md) can match review text.
 
-The `GenerateProductReviewsUsingAI` function creates between 0 and 10 reviews per product with varied sentiment and creative commentary that matches the playful tone of the AdventureWorks demo site.
+## What it does
 
-## Features
+- **Storefront:** read reviews, write a review (signed in) and vote reviews helpful.
+- **Random AI reviews:** generate playful reviews for many products in the background.
+- **Verified-purchase reviews:** generate reviews only from customers whose orders for the product were delivered, with store replies to a share of them.
+- **Per-product reviews with replies:** generate reviews and replies for one product.
+- **AI moderation:** analyse every unmoderated review, write a store reply and mark it moderated.
+- **Batch analysis:** analyse a set of reviews (sentiment and themes) on demand.
+- **Review embeddings:** create `CommentsEmbedding` vectors for search.
 
-### Random Review Generation
+## Try it
 
-- **0-10 reviews per product**: Randomly determined for each product
-- **Varied reviewer names**: Mix of different names, some appearing multiple times
-- **Realistic email addresses**: Generated to match reviewer names
-- **Creative commentary**: Fun, amusing reasons users might love or hate products
+- **UI (customer):** open a product page and choose **Write a review**.
+- **UI (admin):** open **Reviews** (`/reviews`) for moderation, or the verified-review wizard from the **Utilities** and product pages.
+- **API (admin, read-only):**
 
-### Sentiment Control
+  ```bash
+  python3 scripts/utilities/azure-auth.py request \
+    --identity admin --resource functions --path /api/generate-verified-reviews/summary
 
-Each product is randomly assigned a sentiment ratio:
+  python3 scripts/utilities/azure-auth.py request \
+    --identity admin --resource functions --path /api/reviews/moderation/status
+  ```
 
-1. **Ratio 1 - Mostly Positive** (70-80% positive)
-   - Most reviews: 4-5 stars
-   - Some reviews: 3 stars (mixed)
-   - Few reviews: 1-2 stars
+- **Script:** [`scripts/generators/generate-reviews-with-embeddings.sh`](../../../scripts/generators/generate-reviews-with-embeddings.sh) starts review generation and then embeddings. Both routes need an `admin.write` token.
 
-2. **Ratio 2 - Mixed** (50/50 split)
-   - Evenly distributed between positive (4-5 stars) and negative (1-2 stars)
-   - Some 3-star reviews for balance
+## How it works
 
-3. **Ratio 3 - Mostly Negative** (70-80% negative)
-   - Most reviews: 1-2 stars
-   - Some reviews: 3 stars (mixed)
-   - Few reviews: 4-5 stars
-
-### Review Content
-
-Reviews are generated to:
-
-- Reference specific product features from enhanced descriptions
-- Include funny, creative reasons for liking/disliking products
-- Match the playful tone of AI-enhanced product descriptions
-- Sound authentic with personality and varied writing styles
-- Range from short quips to detailed commentary
-
-## Usage
-
-### Option 1: Generate Reviews Only
-
-```bash
-./generate-reviews.sh
+```mermaid
+flowchart TD
+  Admin["Admin portal"] -->|"POST GenerateProductReviewsUsingAI_HttpStart"| Start["Enqueue batches of 5 products"]
+  Start --> ChatQ["Queue ai-job-chat-queue"]
+  ChatQ --> Batch["Review batch agent"]
+  Batch --> SQL[("Production.ProductReview")]
+  Batch -->|"last batch"| EmbQ["Queue ai-job-embeddings-queue"]
+  EmbQ --> Emb["Write CommentsEmbedding"]
+  Admin -->|"generate-verified-reviews/start"| Ver["Background verified-review job"]
+  Ver --> SQL
+  Ver --> Replies[("Production.ProductReviewReply")]
+  Ver --> Job[("Table verifiedReviewsJob")]
+  Admin -->|"reviews/moderation/start-analyze-approve-all"| ModQ["Queue review-moderation-queue"]
+  ModQ --> Mod["Review analysis agent"]
+  Mod --> Replies
+  Mod --> SQL
+  Mod --> ModJob[("Table reviewModerationJob")]
+  SQL --> Outbox["Database outbox"] --> Push["Web PubSub reviews"]
 ```
 
-This script:
+### Storefront
 
-1. Triggers the review generation function
-2. Polls for completion
-3. Reports the total number of reviews generated
+- Reviews are read with DAB GraphQL `productReviews`.
+- A signed-in customer creates a review with DAB REST `POST /api/ProductReview`. The storefront sends the customer's `UserID`, and DAB's database policy rejects the request unless it matches the `business_entity_id` claim in the signed token.
+- Helpful votes update `HelpfulVotes` with GraphQL `updateProductReview`; the browser remembers your votes in `localStorage`.
 
-### Option 2: Complete Workflow (Recommended)
+### Random AI reviews
 
-```bash
-./generate-reviews-with-embeddings.sh
-```
+`POST /api/GenerateProductReviewsUsingAI_HttpStart` (optional body `{ "productIds": [...] }`) enqueues one `review` job per 5 products on `ai-job-chat-queue` and returns immediately. The review batch agent writes 0–10 reviews per product with a random sentiment mix (mostly positive, mixed or mostly negative). When the last batch finishes, a `review-embeddings` job is queued automatically. Track the queues with `GET /api/ai-job-queue/status`.
 
-This script runs the complete workflow:
+### Verified-purchase reviews
 
-1. Generates AI-powered reviews for all products
-2. Creates embeddings for the reviews (enables semantic search)
+| Route | Purpose |
+|---|---|
+| `GET /api/generate-verified-reviews/summary` | Products that qualify and the maximum eligible customers per product |
+| `POST /api/generate-verified-reviews/start` | `{ productCount, reviewsPerProduct }` (`productCount: 0` = all) |
+| `GET /api/generate-verified-reviews/status` | Progress (`processedCount`, `totalCount`) |
+| `GET /api/products/{id}/eligible-reviewer-count` | Product-page gate |
+| `GET /api/products/{id}/customers-with-delivered-orders` | Diagnostic list |
+| `POST /api/products/{id}/generate-reviews-with-replies` | Reviews and replies for one product |
 
-### Option 3: Manual API Calls
+The job runs in the background and stores its state in the `verifiedReviewsJob` table. `ReviewJobWatchdog` runs every minute and ends jobs with no activity for 10 minutes.
 
-**Generate Reviews:**
+### Moderation
 
-```bash
-curl -X POST http://localhost:7071/api/GenerateProductReviewsUsingAI_HttpStart
-```
+`POST /api/reviews/moderation/start-analyze-approve-all` snapshots reviews that are not yet moderated and enqueues one message per review on `review-moderation-queue`. Each message runs the review analysis agent, inserts a `ProductReviewReply` and marks the review moderated. `GET /api/reviews/moderation/status` reports progress. `POST /api/reviews/analyze-batch` analyses a supplied list of reviews without changing them.
 
-**Generate Review Embeddings:**
+## Data & storage
 
-```bash
-curl -X POST http://localhost:7071/api/GenerateProductReviewEmbeddings_HttpStart
-```
+| Data | Store |
+|---|---|
+| Reviews | `Production.ProductReview` (including `HelpfulVotes`, `IsModerated` and `CommentsEmbedding VECTOR(1536)`) |
+| Store replies | `Production.ProductReviewReply` |
+| Job state | Tables `verifiedReviewsJob`, `reviewModerationJob` |
+| Queues | `ai-job-chat-queue`, `ai-job-embeddings-queue`, `review-moderation-queue` |
 
-## Architecture
+## Events (Web PubSub)
 
-### Function: GenerateProductReviewsUsingAI
+Group `reviews`:
 
-- **Type**: Durable Function Orchestration
-- **Pattern**: Fan-out/fan-in with batching
-- **Batch Size**: 5 products at a time
+| Event | Meaning |
+|---|---|
+| `generation-progress`, `generation-state-changed` | Verified-review job progress and state |
+| `moderation-progress`, `moderation-state-changed` | Moderation progress and state |
+| Terminal events (`changeType: "terminal"`) | A job finished, failed or expired |
+| `database-changed` | `ProductReview` or `ProductReviewReply` changed |
 
-### Activities
+See [Web PubSub events](../../reference/webpubsub-events.md).
 
-1. **FetchProductsActivity**
-   - Retrieves all finished goods products
-   - Includes product name and English description
-   - Counts existing reviews per product
+## Security
 
-2. **GenerateReviewsWithAIActivity**
-   - Uses Azure OpenAI (GPT model) for generation
-   - High temperature (0.9) for creative variety
-   - Processes each product individually for better control
+- Anonymous users can read reviews; DAB hides the reviewer `EmailAddress` from anonymous reads.
+- Customers can create reviews and change helpful votes through DAB role policies.
+- Admin generation, moderation and embedding routes require `admin.write`; status and summary routes require `admin.read`. The `reviews` Web PubSub group is internal only.
 
-3. **SaveReviewsActivity**
-   - Inserts generated reviews into Production.ProductReview table
-   - Sets ReviewDate to current timestamp
-   - Links reviews to products
+See [DAB entities](../../reference/dab-entities.md) and [Functions route scopes](../functions-oauth/ROUTE_SCOPE_MATRIX.md).
 
-### Function: GenerateProductReviewEmbeddings
+## Configuration
 
-- **Purpose**: Creates vector embeddings for semantic search
-- **Target**: Reviews with comments (not null)
-- **Embedding Model**: text-embedding-3-small (1536 dimensions)
-- **Storage**: VARBINARY(MAX) in CommentsEmbedding column
+| Setting | Agent |
+|---|---|
+| `AI_AGENT_REVIEW_BATCH_ID` | Random and per-product reviews, and store replies |
+| `AI_AGENT_REVIEW_ID` | Verified-purchase reviews |
+| `AI_AGENT_REVIEW_ANALYSIS_ID` | Moderation and batch analysis |
 
-## Database Schema
+See [Foundry agents](../ai/foundry-agents.md).
 
-### Production.ProductReview Table
+## Limits
 
-```sql
-ProductReviewID       INT            -- Auto-generated
-ProductID             INT            -- Links to Product
-ReviewerName          NVARCHAR(50)   -- Randomly generated name
-ReviewDate            DATETIME       -- Auto-set to GETDATE()
-EmailAddress          NVARCHAR(50)   -- Generated email
-Rating                INT            -- 1-5 stars
-Comments              NVARCHAR(3850) -- AI-generated review text
-CommentsEmbedding     VARBINARY(MAX) -- Vector embedding (generated separately)
-ModifiedDate          DATETIME       -- Auto-set to GETDATE()
-```
+- Generated reviews are fictional demo content written in a deliberately playful tone.
+- Verified reviews need delivered orders; run the [order pipeline](../commerce/order-lifecycle.md) or [shopping simulator](../simulators/shopping-simulator.md) first.
+- New reviews are not searchable until review embeddings are generated.
 
-### Production.vReviewSearch View
+## Related code & docs
 
-Combines review data with product information for semantic search:
-
-- ProductReviewID
-- ProductID, ProductName, ProductNumber
-- ReviewerName, ReviewDate, Rating
-- Comments and CommentsEmbedding
-
-## Example Review Output
-
-For a mountain bike with enhanced description about "ultra-shiny frame" and "turbo-charged gears":
-
-**Positive Review (5 stars):**
-
-> "This bike is absolutely incredible! The ultra-shiny frame made me feel like I was riding a disco ball down the mountain trail. My friends couldn't stop staring, and neither could I! The turbo-charged gears shifted so smoothly I barely had to think about it. Best purchase ever! 🚴‍♂️✨"
-
-**Mixed Review (3 stars):**
-
-> "The shine is definitely there - maybe too much shine? I had to wear sunglasses even on cloudy days. Gears work well, but I was expecting actual turbo speeds from the description. Still a decent bike, just manage your expectations."
-
-**Negative Review (1 star):**
-
-> "I bought this expecting a magical experience based on the description, but all I got was a very shiny bike and sore legs. The 'turbo-charged' gears are just... regular gears? And the shine attracted so many birds thinking it was water. Would not recommend unless you like bird encounters."
-
-## Performance Considerations
-
-- **Processing Time**: ~30-60 minutes for all products (depends on product count)
-- **API Costs**: Uses Azure OpenAI tokens for each review
-- **Batch Processing**: 5 products at a time to manage API rate limits
-- **Embedding Generation**: Separate function, processes 10 reviews at a time
-
-## Integration with Frontend
-
-Reviews are displayed on product detail pages via:
-
-1. DAB GraphQL API exposing Production.ProductReview
-2. React component: `ProductReviews.tsx`
-3. Sorting options: newest, most helpful, highest/lowest rating
-4. Star ratings and review statistics
-
-## Tips
-
-- Run review generation before demos to populate realistic content
-- Sentiment ratios ensure varied product perceptions
-- Same reviewer names across products create realistic user profiles
-- Embeddings enable "find similar reviews" features
-- Reviews complement AI-enhanced product descriptions
-
-## Future Enhancements
-
-Potential improvements:
-
-- User voting on review helpfulness
-- Review response from "store"
-- Verified purchase badges
-- Image uploads in reviews
-- Review filtering by rating
-- Sentiment analysis display
-
-## Related docs
-
-- Review workflow details: [docs/REVIEW_GENERATION_WORKFLOW.md](REVIEW_GENERATION_WORKFLOW.md)
-- Shell scripts for running the flows: [docs/REVIEW_GENERATION_SCRIPTS.md](REVIEW_GENERATION_SCRIPTS.md)
-- Azure Functions implementation overview: [api-functions/README.md](../api-functions/README.md)
-- Semantic search and embeddings export scripts: [scripts/EMBEDDING_EXPORT.md](../scripts/EMBEDDING_EXPORT.md)
+- `app/src/hooks/useReviews.ts`
+- `api-functions/Functions/GenerateProductReviewsUsingAI.cs`, `GenerateVerifiedReviewsFunction.cs`, `GenerateReviewsWithRepliesFunction.cs`, `ReviewModerationQueueFunction.cs`, `ReviewAnalysisFunction.cs`, `ReviewJobWatchdog.cs`, `AIJobProcessorFunction.cs`
+- `api-functions/Services/ReviewService.cs`
+- [Semantic search](../search/semantic-search.md) · [AI content generation](../ai/ai-content-generation.md)

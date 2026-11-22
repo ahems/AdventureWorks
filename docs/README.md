@@ -1,180 +1,153 @@
-# AdventureWorks Documentation
+---
+title: AdventureWorks documentation hub
+summary: Index of all AdventureWorks demo documentation — overview, architecture, apps, features by business domain, security, services, operations, testing and reference — with a one-line description of each page.
+audience: [developer, operator, demo-presenter, security-reviewer, ai-agent]
+components: [app, app-admin, app-manufacturing, api, api-functions, api-mcp, mcp-inspector, manufacturing-agent, seed-job, infra]
+related: [../README.md, ../QUICKSTART.md, glossary.md, ../llms.txt]
+---
 
-This directory contains technical documentation for the AdventureWorks e-commerce application, organized by topic.
+# AdventureWorks documentation hub
 
-## 📁 Documentation Structure
+This hub lists every page of the AdventureWorks Azure AI e-commerce and manufacturing demo
+documentation. New to the project? Read the [project README](../README.md), deploy with the
+[Quickstart](../QUICKSTART.md), then follow the [demo walkthrough](overview/demo-walkthrough.md).
+Unfamiliar terms are defined in the [glossary](glossary.md).
 
-```
-docs/
-├── architecture/          # System design and architecture
-├── features/             # Feature-specific documentation
-│   ├── ai-agent/        # AI agent and MCP implementation
-│   ├── authentication/   # Password and authentication flows
-│   ├── email/           # Email and receipt generation
-│   ├── internationalization/  # Translation and localization
-│   ├── monitoring/      # Application Insights and telemetry
-│   ├── reviews/         # Product review generation
-│   ├── reporting/       # SQL-backed reporting charts (admin)
-│   ├── search/          # Semantic search and AI features
-│   └── seo/             # SEO implementation
-├── testing/             # Testing guides and results
-└── data-management/     # Data export and management
-```
+## 1. Start here
 
-## 🏗️ Architecture
+- [Project README](../README.md) — what the demo is, feature tour, architecture and quick deploy.
+- [Quickstart](../QUICKSTART.md) — deploy with `azd up`, wait for seeding, sign in and explore.
+- [Demo walkthrough](overview/demo-walkthrough.md) — scripted 15–30 minute tour across all three apps.
 
-**Location:** `architecture/`
+## 2. Overview
 
-![AdventureWorks Azure Reference Architecture](AdventureWorks-Reference-Architecture.svg)
+- [What the demo demonstrates](overview/what-it-demonstrates.md) — Azure patterns shown and simplifications accepted for a demo.
+- [Feature catalog](overview/feature-catalog.md) — every user-visible feature with app route, backend and doc link.
+- [Glossary](glossary.md) — definitions of DAB, OAuth, MCP, agent, manufacturing and deployment terms.
 
-_Production reference architecture showing all Azure components with enterprise networking (VNet, private endpoints, WAF, Firewall). Based on the [Baseline Microsoft Foundry Chat Reference Architecture](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat)._
+## 3. Architecture
 
-- [AdventureWorks-Reference-Architecture.svg](AdventureWorks-Reference-Architecture.svg) - Full Azure architecture diagram (ideal production state)
-- [AZD_DEPLOYER_PERMISSIONS.md](AZD_DEPLOYER_PERMISSIONS.md) - Administrator justification for the conditioned role-assignment role required alongside Contributor
-- [DAB_NAMING_CONVENTIONS.md](architecture/DAB_NAMING_CONVENTIONS.md) - Data API Builder naming patterns and GraphQL schema generation
+- [System overview](architecture/system-overview.md) — components, hosting and how they connect end to end.
+- [Request flows](architecture/request-flows.md) — sequence diagrams for sign-in, checkout, order processing and agent runs.
+- [Real-time eventing](architecture/realtime-eventing.md) — Web PubSub push, outbox listener and polling-free frontends.
+- [Data stores](architecture/data-stores.md) — Azure SQL schema, Storage queues/tables/blobs and Durable Functions state.
+- [Identity and authentication](architecture/identity-and-auth.md) — managed identities, OAuth tokens, scopes, roles and categories.
+- [AI architecture](architecture/ai-architecture.md) — Foundry models, prompt/workflow agents, hosted agent and MCP tools.
+- [Networking](architecture/networking.md) — virtual network, subnets, private endpoints and public ingress.
+- [DAB naming conventions](architecture/dab-naming-conventions.md) — how database tables map to GraphQL and REST names.
 
-## ✨ Features
+![AdventureWorks ideal production reference architecture](AdventureWorks-Reference-Architecture.svg)
 
-### AI Agent & MCP
+The diagram above shows the ideal production reference architecture; the media assets
+(`AdventureWorks-Reference-Architecture.svg`, `adventureworks-demo.gif`, `adventureworks-demo.webm`)
+live in this folder.
 
-**Location:** `features/ai-agent/`
+## 4. Apps
 
-- [AGENT_FRAMEWORK_MIGRATION.md](features/ai-agent/AGENT_FRAMEWORK_MIGRATION.md) - Migration to Microsoft Agent Framework
-- [AI_AGENT_AUTOMATION.md](features/ai-agent/AI_AGENT_AUTOMATION.md) - Agent automation and workflows
-- [AI_AGENT_DEPLOYMENT_SUMMARY.md](features/ai-agent/AI_AGENT_DEPLOYMENT_SUMMARY.md) - Deployment architecture
-- [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](features/ai-agent/AI_AGENT_TELEMETRY_IMPLEMENTATION.md) - Telemetry integration
+- [Storefront](apps/storefront.md) — public React shop on Static Web Apps: catalog, cart, checkout, AI.
+- [Admin portal](apps/admin-portal.md) — back-office React app on Container Apps for employees.
+- [Manufacturing portal](apps/manufacturing-portal.md) — seven-stage production and supply-chain app for manufacturing staff.
+- [MCP Inspector](apps/mcp-inspector.md) — hosted MCP Inspector for exploring api-mcp and DAB MCP tools.
 
-### MCP OAuth Authorization
+## 5. Features by domain
 
-**Location:** `features/mcp-oauth/`
+### Commerce
 
-- [README.md](features/mcp-oauth/README.md) - Self-contained OAuth 2.0 authorization server for the MCP resource: PKCE S256, resource-bound JWTs, Key Vault-backed signing (RBAC + managed identity), role-to-scope mapping, ownership checks, delegated token propagation, telemetry, security review, and end-to-end demonstration steps
-- [TOOL_SCOPE_MATRIX.md](features/mcp-oauth/TOOL_SCOPE_MATRIX.md) - Complete mapping of all 62 MCP tools to their required scope and access mode
+- [Catalog and browsing](features/commerce/catalog-and-browsing.md) — categories, product pages, sale, compare and recently viewed.
+- [Cart and checkout](features/commerce/cart-and-checkout.md) — guest and signed-in carts, merge, checkout and order creation.
+- [Order lifecycle](features/commerce/order-lifecycle.md) — simulated order statuses 1–7, pipeline timing and delivery.
+- [Receipts](features/commerce/receipts.md) — PDF receipt generation, private storage and download.
+- [Promotions](features/promotions/promotions.md) — special offers, AI-generated promotions and auto-promotions.
+- [SEO](features/seo/seo.md) — meta tags, structured data, robots.txt and sitemap.
 
-### Authentication
+### Customers
 
-**Location:** `features/authentication/`
+- [Accounts and sign-in](features/customers/accounts-and-sign-in.md) — consumer sign-up, sign-in, profile, addresses and payment methods.
+- [Passwords and reset](features/customers/passwords-and-reset.md) — password hashing, change and reset flow.
+- [Email notifications](features/email/email-notifications.md) — order confirmation, shipped/delivered and admin emails via ACS.
+- [Localization](features/i18n/localization.md) — 23 storefront languages, AI translation and currencies.
 
-- [End-to-end authentication assurance](features/authentication/END_TO_END_AUTHENTICATION.md) - User/workload identity paths, API coverage, RBAC, exceptions, executable validation and explicit remaining gaps
-- [Authenticated local Azure scripts](testing/AZURE_AUTHENTICATED_SCRIPTS.md) - Reusable azd-based helper for seeded internal-user OAuth, DAB/Functions/MCP calls, curl and rotating refresh sessions
-- [PASSWORD_IMPLEMENTATION.md](features/authentication/PASSWORD_IMPLEMENTATION.md) - Password hashing and storage
-- [PASSWORD_RESET_FLOW.md](features/authentication/PASSWORD_RESET_FLOW.md) - Password reset workflow
+### Content and AI
 
-### Email & Receipts
+- [Foundry agents](features/ai/foundry-agents.md) — catalog of Foundry agents, their tools and callers.
+- [AI chat](features/ai/ai-chat.md) — storefront shopping assistant and admin business assistant.
+- [AI content generation](features/ai/ai-content-generation.md) — AI product copy, images, customers, categories and translations.
+- [Product reviews](features/reviews/product-reviews.md) — reviews, AI generation, verified reviews and moderation.
+- [Semantic search](features/search/semantic-search.md) — vector search and suggestions over SQL embeddings.
+- [Help me choose](features/search/help-me-choose.md) — AI questionnaire that recommends products.
 
-**Location:** `features/email/`
+### Manufacturing and supply
 
-- [SEND_EMAIL_FUNCTION.md](features/email/SEND_EMAIL_FUNCTION.md) - Azure Communication Services email
-- [RECEIPT_GENERATION.md](features/email/RECEIPT_GENERATION.md) - PDF receipt generation
-- [RECEIPT_GENERATION_FLOW.md](features/email/RECEIPT_GENERATION_FLOW.md) - Receipt workflow
+- [Manufacturing overview](features/manufacturing/manufacturing-overview.md) — seven-stage model, products, BOMs and routings.
+- [Production simulation](features/manufacturing/production-simulation.md) — work-order operations, scrap, workforce and timing.
+- [Planning and feasibility](features/manufacturing/planning-and-feasibility.md) — demand, shortages, feasibility, costing and reorder advice.
+- [Manufacturing content](features/manufacturing/manufacturing-content.md) — instructions, diagrams and part sheets with illustrations.
+- [Manufacturing agent](features/manufacturing/manufacturing-agent.md) — agent modes, runs, proposals and approvals.
+- [Supply chain](features/supply-chain/supply-chain.md) — vendors, quotes, purchase orders and receiving.
+- [Warehouse operations](features/warehouse/warehouse-operations.md) — simulated store, retrieve and receive operations with damage.
 
-### Internationalization
+### Simulators and finance
 
-**Location:** `features/internationalization/`
+- [Shopping simulator](features/simulators/shopping-simulator.md) — AI-generated consumer and B2B orders with auto-stop.
+- [Simulator controls](features/simulators/simulator-controls.md) — start, stop, reset and tune the simulations.
+- [Bank simulator](features/finance/bank-simulator.md) — simulated accounts and transactions driven by orders and purchases.
+- [Reporting](features/finance/reporting.md) — sales, profitability, inventory and customer reports.
 
-- [LANGUAGE_FILE_TRANSLATION.md](features/internationalization/LANGUAGE_FILE_TRANSLATION.md) - UI translation process
-- [LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md](features/internationalization/LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md) - Translation automation
-- [EMOJI_IN_TRANSLATIONS.md](features/internationalization/EMOJI_IN_TRANSLATIONS.md) - Handling emojis in translations
-- [TRANSLATION_BLOB_STORAGE.md](features/internationalization/TRANSLATION_BLOB_STORAGE.md) - Blob storage integration
+## 6. Security and identity
 
-### Monitoring & Telemetry
+- [Identity and authentication](architecture/identity-and-auth.md) — overview of user OAuth and Azure workload identities.
+- [MCP OAuth](features/mcp-oauth/README.md) — api-mcp authorization server, clients, grants and resource tokens.
+- [MCP tool scope matrix](features/mcp-oauth/TOOL_SCOPE_MATRIX.md) — required scope and access rules for each MCP tool.
+- [Functions OAuth](features/functions-oauth/README.md) — how Functions validates tokens, scopes, categories and ownership.
+- [Functions route scope matrix](features/functions-oauth/ROUTE_SCOPE_MATRIX.md) — authorization tier and scope for every HTTP route.
+- [End-to-end authentication](features/authentication/END_TO_END_AUTHENTICATION.md) — trust model and executable validation across all services.
 
-**Location:** `features/monitoring/`
+## 7. Services
 
-- [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](features/monitoring/APP_INSIGHTS_CONNECTION_STRING_FLOW.md) - Connection string configuration
-- [APP_INSIGHTS_INTEGRATION.md](features/monitoring/APP_INSIGHTS_INTEGRATION.md) - Application Insights setup
-- [TELEMETRY_GENERATION.md](features/monitoring/TELEMETRY_GENERATION.md) - Telemetry generation for testing
-- [HEALTH_DIAGNOSTICS.md](features/monitoring/HEALTH_DIAGNOSTICS.md) - Storefront quick service/dependency diagnostics, optional capabilities, data readiness, and deployment/smoke tests
+- [Data API builder](services/dab-api.md) — DAB GraphQL, REST and MCP over Azure SQL with role permissions.
+- [Azure Functions](services/functions.md) — Flex Consumption app: triggers, scaling, configuration and structure.
+- [api-mcp](services/api-mcp.md) — OAuth authorization server and MCP server with 63 tools.
+- [Hosted Manufacturing agent](services/manufacturing-agent.md) — Foundry hosted agent, identity and MCP tool access.
+- [Seed job](services/seed-job.md) — Container Apps job that loads data, images and demo extensions.
 
-### Real-Time Updates
+## 8. Operations
 
-All three frontends use Web PubSub events instead of recurring network polling.
-Root dispatchers invalidate domain caches; admin status/job subscriptions batch
-events into authorized status reads. Initial loads, reconnections and visible-tab
-focus recover snapshots. A connection failure displays a stale-data notice;
-it does not enable a polling fallback. Local display clocks remain unchanged.
+- [Deployment](operations/deployment.md) — azd lifecycle, hooks and redeploying service changes.
+- [Deployer permissions](AZD_DEPLOYER_PERMISSIONS.md) — why Contributor is not enough and the conditioned role grant.
+- [CI/CD](operations/ci-cd.md) — GitHub Actions workflows for build checks and service-principal deployment.
+- [Dev container](operations/dev-container.md) — Codespaces / dev container tooling for deployment and development.
+- [WSL deployment](operations/wsl-deployment.md) — deploying from Windows Subsystem for Linux.
+- [Monitoring](operations/monitoring.md) — Application Insights telemetry across frontends, Functions and agents.
+- [Health diagnostics](features/monitoring/HEALTH_DIAGNOSTICS.md) — readiness endpoints and the storefront `/health` page.
+- [Seed data generation](operations/seed-data-generation.md) — exporting embeddings and translations into seed CSVs.
+- [Troubleshooting](operations/troubleshooting.md) — common deployment and runtime problems and their fixes.
 
-- [Real-time development policy](../.github/copilot-instructions.md#real-time-push-pattern-web-pubsub) - Groups, event batching, job identity filtering and adding live queries.
-- [Offline live-update regression tests](../tests/scripts/README.md#local-hook-tests) - Event bursts, in-flight follow-ups, reconnect/focus, cleanup, utility completion, socket errors and the no-network-polling source guard.
+## 9. Testing
 
-### Product Reviews
+- [Testing strategy](testing/testing-strategy.md) — test suites, what they cover and how to run them.
+- [Authenticated deployment scripts](testing/AZURE_AUTHENTICATED_SCRIPTS.md) — call protected APIs with `azure-auth.py` tokens.
+- [AI and MCP testing guide](testing/AI_AND_MCP_TESTING_GUIDE.md) — testing Foundry agents and MCP tools.
+- [AI chat MCP testing](testing/AI_CHAT_MCP_TESTING.md) — testing chat agents' delegated MCP calls.
+- [Test scripts](../tests/scripts/README.md) — prerequisites and commands for the shell and Node test scripts.
 
-**Location:** `features/reviews/`
+## 10. Reference
 
-- [REVIEW_GENERATION.md](features/reviews/REVIEW_GENERATION.md) - AI-powered review generation
-- [REVIEW_GENERATION_SCRIPTS.md](features/reviews/REVIEW_GENERATION_SCRIPTS.md) - Review generation scripts
-- [REVIEW_GENERATION_WORKFLOW.md](features/reviews/REVIEW_GENERATION_WORKFLOW.md) - Review workflow
+- [Functions routes](reference/functions-routes.md) — every Azure Function with trigger, route and authorization.
+- [DAB entities](reference/dab-entities.md) — all DAB entities, GraphQL names, roles and policies.
+- [Web PubSub events](reference/webpubsub-events.md) — groups, events, producers and consuming apps.
+- [Storage resources](reference/storage-resources.md) — queues, tables, blob containers and file shares.
+- [Environment variables](reference/environment-variables.md) — azd outputs and per-service runtime settings.
+- [Azure resources](reference/azure-resources.md) — every provisioned resource with SKU and identity.
+- [Scripts](reference/scripts.md) — every script, its purpose and safe use.
 
-### Search
+Component READMEs: [app](../app/README.md) · [app-admin](../app-admin/README.md) ·
+[app-manufacturing](../app-manufacturing/README.md) · [mcp-inspector](../mcp-inspector/README.md) ·
+[api](../api/README.md) · [api-functions](../api-functions/README.md) · [api-mcp](../api-mcp/README.md) ·
+[manufacturing-agent](../manufacturing-agent/mcp-tools/README.md) · [seed-job](../seed-job/README.md) ·
+[infra](../infra/README.md) · [scripts](../scripts/README.md) · [tests](../tests/README.md) ·
+[workflows](../.github/workflows/README.md).
 
-**Location:** `features/search/`
+## 11. For AI agents
 
-- [AI_SEARCH_TROUBLESHOOTING.md](features/search/AI_SEARCH_TROUBLESHOOTING.md) - Semantic search troubleshooting
-
-### Reporting
-
-**Location:** `features/reporting/`
-
-- [REPORTING.md](features/reporting/REPORTING.md) - Pre-aggregated SQL reports via Azure Functions + Recharts (bypasses DAB pagination)
-
-### SEO
-
-**Location:** `features/seo/`
-
-- [SEO_COMPONENTS_IMPLEMENTATION.md](features/seo/SEO_COMPONENTS_IMPLEMENTATION.md) - SEO React components
-- [SEO_IMPLEMENTATION.md](features/seo/SEO_IMPLEMENTATION.md) - Overall SEO strategy
-- [ROBOTS_SITEMAP_TESTING.md](features/seo/ROBOTS_SITEMAP_TESTING.md) - robots.txt and sitemap testing
-
-## 🧪 Testing
-
-**Location:** `testing/`
-
-- [AI_AND_MCP_TESTING_GUIDE.md](testing/AI_AND_MCP_TESTING_GUIDE.md) - Comprehensive AI and MCP testing guide
-- [AI_CHAT_MCP_TESTING.md](testing/AI_CHAT_MCP_TESTING.md) - AI chat testing procedures
-- Test results and analysis documents
-
-## 📊 Data Management
-
-**Location:** `data-management/`
-
-- [EMBEDDING_EXPORT.md](data-management/EMBEDDING_EXPORT.md) - Exporting vector embeddings
-- [EMBEDDING_EXPORT_LIMITATION.md](data-management/EMBEDDING_EXPORT_LIMITATION.md) - Known limitations
-- [TRANSLATION_EXPORT.md](data-management/TRANSLATION_EXPORT.md) - Exporting translations
-
-## 🎬 Media
-
-- `adventureworks-demo.gif` - Animated demo of the application
-- `adventureworks-demo.webm` - Video demo
-
-## 📝 Documentation Guidelines
-
-When adding new documentation:
-
-1. **Choose the right location:**
-   - `architecture/` - System-wide design decisions
-   - `features/<topic>/` - Feature-specific implementation
-   - `testing/` - Testing procedures and results
-   - `data-management/` - Data export/import procedures
-
-2. **Use clear titles and structure:**
-   - Start with overview/purpose
-   - Include prerequisites
-   - Provide step-by-step procedures
-   - Add troubleshooting section
-
-3. **Keep it up-to-date:**
-   - Update docs when implementation changes
-   - Archive outdated docs with date prefix
-   - Link related documents
-
-4. **Cross-reference:**
-   - Link to related code files
-   - Reference other documentation
-   - Include working examples
-
-## 🔗 Quick Links
-
-- [Main README](../README.md) - Project overview
-- [Quick Start Guide](../QUICKSTART.md) - Local development setup
-- [Scripts Documentation](../scripts/README.md) - Automation scripts
-- [Test Scripts](../tests/scripts/README.md) - API and integration tests
+- [llms.txt](../llms.txt) — machine-readable index of every documentation page with summaries.
+- [Copilot instructions](../.github/copilot-instructions.md) — repository conventions and demo environment policy for coding agents.

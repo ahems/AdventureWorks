@@ -127,7 +127,7 @@ public class TranslateLanguageFile
 
             _logger.LogInformation("Started translation orchestration with ID = '{instanceId}'", instanceId);
 
-            // Return simple response with instance ID for custom polling
+            // Return the instance ID and this app's status URL (no Durable management URLs)
             var response = req.CreateResponse(HttpStatusCode.Accepted);
 
             // The hosted Function App terminates TLS before forwarding requests to the worker.

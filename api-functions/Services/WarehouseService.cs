@@ -1346,6 +1346,7 @@ public class WarehouseService
             FROM Production.Product p
             LEFT JOIN Production.ProductSubcategory ps
                 ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+                AND RTRIM(ps.CultureID) = 'en'
             WHERE p.ProductID = @ProductId
             ORDER BY ps.ProductSubcategoryID",
             new { ProductId = productId });

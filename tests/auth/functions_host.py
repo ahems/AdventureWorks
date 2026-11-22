@@ -17,6 +17,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
 
 from validate import function_surface_inventory, route_path
 
@@ -463,6 +464,21 @@ def isolated_run(inventory, metadata, app, work, func, azurite, output):
         issuer.close()
 
 
+def linked_sources(project=None):
+    """Repository-relative files the worker project compiles from outside api-functions/."""
+    project = project or ROOT / "api-functions/api-functions.csproj"
+    linked = []
+    for element in ET.parse(project).getroot().iter():
+        include = element.get("Include") if element.tag.rsplit("}", 1)[-1] == "Compile" else None
+        if not include or not include.startswith(".."):
+            continue
+        path = (project.parent / include.replace("\\", "/")).resolve()
+        if not path.is_relative_to(ROOT) or not path.is_file():
+            raise HostFailure("A linked Functions source file is outside the repository or missing")
+        linked.append(path.relative_to(ROOT).as_posix())
+    return tuple(linked)
+
+
 def prepare(inventory, output, func, azurite):
     function_surface_inventory(inventory)
     with tempfile.TemporaryDirectory(prefix="functions-auth-host-") as directory:
@@ -471,8 +487,7 @@ def prepare(inventory, output, func, azurite):
         app = work / "app"
         shutil.copytree(ROOT / "api-functions", source / "api-functions",
                         ignore=shutil.ignore_patterns("bin", ".env*", "local.settings*.json", "TestResults"))
-        for relative in ("global.json", "api-mcp/AdventureWorks/Services/PromotionProductData.cs",
-                         "tests/auth/FunctionsHostProbes.cs"):
+        for relative in ("global.json", *linked_sources()):
             target = source / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)

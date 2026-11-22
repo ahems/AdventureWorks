@@ -1,11 +1,13 @@
 -- =============================================================================
 -- Stored Procedure: Sales.usp_GetTotalProfit
--- Description    : Approximates total profit across all non-cancelled orders.
+-- Description    : Approximates total profit across finished goods on all
+--                  non-rejected, non-cancelled orders.
 --                  Revenue = SalesOrderDetail.LineTotal
 --                            (UnitPrice * (1 - UnitPriceDiscount) * OrderQty)
 --                  Cost    = Production.Product.StandardCost * OrderQty
 --                  Profit  = Revenue - Cost
---                  Cancelled orders (SalesOrderHeader.Status = 6) are excluded.
+--                  Rejected (Status = 4) and Cancelled (Status = 6) orders
+--                  are excluded; only FinishedGoodsFlag = 1 products count.
 -- =============================================================================
 
 IF OBJECT_ID('Sales.usp_GetTotalProfit', 'P') IS NOT NULL

@@ -1,367 +1,175 @@
-# Language File Translation Function
+---
+title: Localization and translation (i18n)
+summary: How the storefront serves 23 locales with react-i18next, localized product names and currencies, and how AI translation workflows produce language files, product descriptions, category names and promotions.
+audience: [developer, demo-presenter]
+components: [app, app-admin, api-functions, api, api-mcp]
+related:
+  - ../ai/ai-content-generation.md
+  - ../ai/foundry-agents.md
+  - ../../operations/seed-data-generation.md
+  - ../../reference/functions-routes.md
+  - ../../reference/storage-resources.md
+  - ../../apps/storefront.md
+---
 
-## Overview
+# Localization and translation (i18n)
 
-The `TranslateLanguageFile` Azure Function translates i18n (internationalization) language files from English to 15 different languages using AI. It's specifically designed for the AdventureWorks e-commerce demo application and maintains the fun, adventurous vibe of the original content while ensuring regional appropriateness.
+## What it does
 
-## Endpoint
+- The storefront UI is available in **23 locales**: `ar`, `de`, `en`, `en-au`, `en-ca`, `en-gb`, `en-ie`, `en-nz`, `es`, `fr`, `he`, `id`, `it`, `ja`, `ko`, `nl`, `pt`, `ru`, `th`, `tr`, `vi`, `zh`, `zh-cht`.
+- Product names and descriptions are shown in the selected culture when a translation exists in the database; administrators can also translate category names and promotion text.
+- Prices are converted to a currency associated with the selected language using the AdventureWorks `CurrencyRate` data; units of measure are localized through `UnitMeasureContext`.
+- Administrators can generate new translations with Microsoft Foundry agents: whole UI language files (a Durable Functions orchestration), product descriptions, category names and promotions.
+- Emoji in translated strings render consistently across platforms as Twemoji SVGs.
 
-**HTTP POST** `/api/TranslateLanguageFile`
+## Try it
 
-## Supported Languages
-
-The function supports translation to the following 15 languages:
-
-| Language Code | Language Name                   |
-| ------------- | ------------------------------- |
-| `es`          | Spanish                         |
-| `fr`          | French                          |
-| `de`          | German                          |
-| `pt`          | Portuguese                      |
-| `it`          | Italian                         |
-| `nl`          | Dutch                           |
-| `ru`          | Russian                         |
-| `zh`          | Chinese (Mandarin)              |
-| `ja`          | Japanese                        |
-| `ko`          | Korean                          |
-| `ar`          | Arabic (Modern Standard Arabic) |
-| `tr`          | Turkish                         |
-| `vi`          | Vietnamese                      |
-| `th`          | Thai                            |
-| `id`          | Indonesian                      |
-
-## Request Format
-
-```json
-{
-  "targetLanguage": "es",
-  "languageData": {
-    "header": {
-      "signIn": "Sign In",
-      "cart": "Cart"
-    }
-  }
-}
-```
-
-### Parameters
-
-- **targetLanguage** (string, required): The language code from the supported languages list
-- **languageData** (object, required): The English language JSON object to translate
-
-## Response Format
-
-The function returns the translated JSON with the same structure as the input, but with all values translated:
-
-```json
-{
-  "header": {
-    "signIn": "Iniciar Sesión",
-    "cart": "Carrito"
-  }
-}
-```
-
-### Error Responses
-
-**400 Bad Request**
-
-```json
-{
-  "error": "Unsupported language: xx. Supported languages: es (Spanish), fr (French), ..."
-}
-```
-
-**500 Internal Server Error**
-
-```json
-{
-  "error": "Internal server error: [error details]"
-}
-```
-
-## Translation Features
-
-### 1. **Maintains Structure**
-
-- All JSON keys remain in English
-- Only values are translated
-- Nested objects and arrays are preserved
-
-### 2. **Preserves Special Formatting**
-
-- Placeholder variables: `{{count}}`, `{{percent}}`, `{{name}}`, etc.
-- HTML tags and markup
-- Special characters and punctuation
-
-### 3. **Regional Localization**
-
-- **Email addresses**: Uses regional domain suffixes
-  - Example: `your@email.com` → `juan@email.es` (Spanish)
-- **Street addresses**: Creates culturally appropriate, fun addresses
-  - Example: "123 Adventure Lane, Seattle" → "Calle Aventura 123, Madrid"
-- **City names**: Uses real cities from the target language region
-
-### 4. **Content Guidelines**
-
-- Maintains the fun, adventurous tone
-- Preserves brand names and product codes in English
-- Keeps technical terms (API, GraphQL) unchanged
-- Ensures cultural appropriateness
-
-## Examples
-
-### Example 1: Translate to Spanish
-
-**Request:**
+1. Open the storefront (`azd env get-value APP_URL --no-prompt`) and choose a language from the header selector. The choice is saved in `localStorage` (`selectedLanguage`); on first visit the browser language is detected.
+2. Browse a category: product names switch to the selected culture and prices use the matching currency.
+3. Translate a UI language file to French with the admin identity (an AI call — run intentionally):
 
 ```bash
-curl -X POST http://localhost:7071/api/TranslateLanguageFile \
-  -H "Content-Type: application/json" \
-  -d '{
-    "targetLanguage": "es",
-    "languageData": {
-      "hero": {
-        "badge": "Adventure Awaits!",
-        "title": "Gear Up for Your Adventure"
-      }
-    }
-  }'
+python3 scripts/utilities/azure-auth.py request \
+  --identity admin --resource functions \
+  --path /api/TranslateLanguageFile_HttpStart --method POST \
+  --data "{\"targetLanguage\":\"fr\",\"sourceFilename\":\"footer\",\"languageData\":$(cat app/src/locales/en/footer.json)}"
+
+# Check progress with the returned instance ID
+python3 scripts/utilities/azure-auth.py request \
+  --identity admin --resource functions \
+  --path '/api/TranslateLanguageFile_Status?instanceId=<id>'
 ```
 
-**Response:**
+To translate every namespace into every supported language, use [batch-translate-language-file.sh](../../../scripts/utilities/batch-translate-language-file.sh).
 
-```json
-{
-  "hero": {
-    "badge": "¡La Aventura Te Espera!",
-    "title": "Equípate Para Tu Aventura"
-  }
-}
+## How it works
+
+### Storefront rendering
+
+[app/src/i18n.ts](../../../app/src/i18n.ts) bundles all locale JSON files at build time and initializes react-i18next with `en` as the default and fallback language. [LanguageContext.tsx](../../../app/src/context/LanguageContext.tsx) owns the selected language and keeps i18next, product names and currency in step.
+
+| Namespace | Content |
+|-----------|---------|
+| `common` | Header, navigation, shared labels |
+| `product` | Product and category pages |
+| `cart` | Cart and checkout |
+| `account` | Sign-in, profile, orders |
+| `footer` | Footer, newsletter |
+| `chat` | AI chat assistant |
+| `helpme` | Help Me Choose wizard (English only; other languages fall back to `en`) |
+
+Data-driven text comes from DAB GraphQL:
+
+- `ProductNamesContext` queries `productNames` filtered by `CultureID` for the selected language.
+- `CurrencyContext` maps each language to a currency code and converts prices with `currencyRates`.
+- Product descriptions are read from `productModelProductDescriptionCultures` and their descriptions for the selected culture.
+
+`Production.ProductCategory` and `Production.ProductSubcategory` hold one row per culture; their primary key is the ID plus `CultureID`, which defaults to `en`. Server-side SQL in Functions and api-mcp that reads category or subcategory names (the order, Help Me Choose, warehouse, product and promotion queries) filters `CultureID = 'en'`, so each category appears once instead of once per language. [`tests/scripts/test_localized_catalog_queries.py`](../../../tests/scripts/test_localized_catalog_queries.py) checks that new queries keep this filter.
+
+### Language-file translation (Durable Functions)
+
+```mermaid
+sequenceDiagram
+  participant C as Admin script / caller
+  participant F as TranslateLanguageFile_HttpStart
+  participant O as Orchestrator (push-v1)
+  participant A as TranslateSectionActivity
+  participant T as Translation agent (Foundry)
+  participant B as Blob container "locales"
+  participant P as Web PubSub "utilities"
+  C->>F: POST targetLanguage, sourceFilename, languageData
+  F->>O: Schedule orchestration
+  F-->>C: 202 + instance ID
+  O->>P: utility-status-changed (running)
+  loop Each top-level section
+    O->>A: Translate section
+    A->>T: Section JSON + target language
+    T-->>A: Translated JSON (keys preserved)
+  end
+  O->>B: Save {lang}/{file}.json
+  O->>P: utility-status-changed (completed)
+  C->>F: GET TranslateLanguageFile_Status?instanceId=...
 ```
 
-### Example 2: Translate Newsletter Section to French
+1. The HTTP starter validates the target language against the 22 supported translation targets (`es`, `fr`, `de`, `pt`, `it`, `nl`, `ru`, `zh`, `zh-cht`, `ja`, `ko`, `ar`, `he`, `tr`, `vi`, `th`, `id`, `en-gb`, `en-ca`, `en-au`, `en-nz`, `en-ie`) and starts a `push-v1` orchestration.
+2. The orchestrator splits the JSON into top-level sections and calls `TranslateSectionActivity` for each, so a failure retries only one section. Keys and structure are preserved; only values are translated.
+3. Each activity calls the translation agent (`AI_AGENT_TRANSLATION_ID`) through `TranslationAgentService`.
+4. The merged result is uploaded to the `locales` blob container as `{languageCode}/{sourceFilename}.json`, matching the `app/src/locales` layout. The batch script downloads these into the repository so they are bundled with the next storefront build.
+5. Lifecycle changes are published through `UtilityLifecycleNotifications` so the admin Utilities status views update without polling.
 
-**Request:**
+### Catalog translations
 
-```bash
-curl -X POST http://localhost:7071/api/TranslateLanguageFile \
-  -H "Content-Type: application/json" \
-  -d '{
-    "targetLanguage": "fr",
-    "languageData": {
-      "newsletter": {
-        "title": "Join the Adventure Club!",
-        "emailPlaceholder": "your@email.com",
-        "disclaimer": "No spam, just good vibes. Unsubscribe anytime!"
-      }
-    }
-  }'
+| Route | Scope | Behaviour |
+|-------|-------|-----------|
+| `POST /api/TranslateProductDescriptions_HttpStart` | `admin.write` | Enqueues one `translation` job per product model on `ai-job-chat-queue`; the AI job worker writes culture-specific descriptions |
+| `POST /api/TranslateCategoryName` | `admin.write` | Returns AI translations of a category name for every culture; the admin UI saves them |
+| `POST /api/TranslatePromotion` | `admin.write` | Returns AI translations of a promotion's text for the admin UI to save |
+| `POST /api/TranslateLanguageFile_HttpStart` | `admin.write` | Starts the language-file orchestration |
+| `GET /api/TranslateLanguageFile_Status` | `admin.read` | Orchestration status and output |
+| `GET`/`POST /api/TranslateLanguageFile_Terminate` | `admin.write` | Stops a running orchestration |
+
+The admin `/cultures` page uses `LocalizationDialog` to review and edit translated values. Seed data already includes AI-generated translations (`*-ai.csv`) produced by the `scripts/generators/generate-*-translations.sh` scripts; see [Seed data generation](../../operations/seed-data-generation.md).
+
+### Emoji in translations
+
+Translation files can contain emoji either directly (recommended) or as Unicode escapes. Wrap translated strings that may contain emoji in `TwemojiText`, which replaces them with Twemoji SVGs:
+
+```tsx
+import { TwemojiText } from "@/components/TwemojiText";
+
+<TwemojiText text={t("auth.demoHint")} size="1em" />
 ```
 
-**Response:**
+For a standalone emoji use the `Twemoji` component; [useEmojiTranslation.tsx](../../../app/src/hooks/useEmojiTranslation.tsx) provides a hook variant.
 
-```json
-{
-  "newsletter": {
-    "title": "Rejoignez le Club Aventure !",
-    "emailPlaceholder": "marie@email.fr",
-    "disclaimer": "Pas de spam, que de bonnes vibrations. Désabonnez-vous à tout moment !"
-  }
-}
-```
+## Data & storage
 
-### Example 3: Translate Address Placeholders to Japanese
+| Store | Content |
+|-------|---------|
+| `app/src/locales/{lang}/{namespace}.json` | UI strings bundled into the storefront build |
+| Blob container `locales` | Output of language-file translations, `{lang}/{file}.json` |
+| `Production.ProductModelProductDescriptionCulture`, `Production.ProductDescription` | Localized product descriptions |
+| `Production.ProductName` (DAB `productNames`), `Production.Culture` | Localized product names and the culture list |
+| `Sales.CurrencyRate` (DAB `currencyRates`) | Exchange rates for price display |
+| Queue `ai-job-chat-queue` | Product-description translation jobs |
+| Durable Functions task hub | Orchestration state for language-file translation |
 
-**Request:**
+See [Storage resources](../../reference/storage-resources.md).
 
-```json
-{
-  "targetLanguage": "ja",
-  "languageData": {
-    "account": {
-      "placeholders": {
-        "addressLine1": "123 Adventure Lane",
-        "city": "Seattle"
-      }
-    }
-  }
-}
-```
+## Events (Web PubSub)
 
-**Response:**
+| Group | Event | Producer | Consumer |
+|-------|-------|----------|----------|
+| `utilities` | `utility-status-changed` | `UtilityLifecycleNotifications` (`translate-language-file`) | Admin utility status views, filtered by `instanceId` |
 
-```json
-{
-  "account": {
-    "placeholders": {
-      "addressLine1": "冒険通り123番地",
-      "city": "東京"
-    }
-  }
-}
-```
+The storefront does not subscribe to translation events; new UI strings appear after the next storefront build.
 
-## Testing
+## Security
 
-### Using the Test Script
+- All translation routes require a Functions-audience token with the `admin.write` scope (status reads need `admin.read`) and an internal category; see [Functions OAuth](../functions-oauth/README.md).
+- Language selection and localized catalog reads are anonymous storefront operations.
+- Blob access uses the Functions managed identity; storage account keys are not used.
 
-A test script is provided for easy testing:
+## Configuration
 
-```bash
-# Test with Spanish (default)
-./test-translate-language-file.sh
+| Setting | Purpose |
+|---------|---------|
+| `AI_AGENT_TRANSLATION_ID` | Foundry translation agent used by all translation workflows |
+| `AzureWebJobsStorage__*` | Identity-based storage for queues, blobs and Durable state |
 
-# Test with French
-./test-translate-language-file.sh fr
+See [Environment variables](../../reference/environment-variables.md).
 
-# Test with custom endpoint
-./test-translate-language-file.sh es http://your-function-app.azurewebsites.net/api/TranslateLanguageFile
-```
+## Limits
 
-### Using curl
+- Arabic and Hebrew strings are translated, but the storefront layout is left-to-right.
+- The `helpme` namespace exists only in English.
+- UI language files are bundled at build time; translated files must be committed and the storefront redeployed before they appear.
+- Translation quality depends on the model; review output before committing.
 
-```bash
-curl -X POST http://localhost:7071/api/TranslateLanguageFile \
-  -H "Content-Type: application/json" \
-  -d @app/src/locales/en/common.json
-```
+## Related code & docs
 
-Note: You'll need to wrap the file content in the proper request format:
-
-```bash
-jq -n --slurpfile data app/src/locales/en/common.json \
-  '{targetLanguage: "es", languageData: $data[0]}' | \
-  curl -X POST http://localhost:7071/api/TranslateLanguageFile \
-    -H "Content-Type: application/json" \
-    -d @-
-```
-
-## Regional Information by Language
-
-The function uses the following regional configurations:
-
-| Language        | Email Suffix | Example Cities                                              |
-| --------------- | ------------ | ----------------------------------------------------------- |
-| Spanish (es)    | `.es`        | Madrid, Barcelona, Valencia, Sevilla, Bilbao                |
-| French (fr)     | `.fr`        | Paris, Lyon, Marseille, Toulouse, Nice                      |
-| German (de)     | `.de`        | Berlin, Munich, Hamburg, Frankfurt, Cologne                 |
-| Portuguese (pt) | `.pt`        | Lisbon, Porto, Braga, Coimbra, Faro                         |
-| Italian (it)    | `.it`        | Rome, Milan, Naples, Turin, Florence                        |
-| Dutch (nl)      | `.nl`        | Amsterdam, Rotterdam, Utrecht, The Hague, Eindhoven         |
-| Russian (ru)    | `.ru`        | Moscow, Saint Petersburg, Novosibirsk, Yekaterinburg, Kazan |
-| Chinese (zh)    | `.cn`        | Beijing, Shanghai, Guangzhou, Shenzhen, Chengdu             |
-| Japanese (ja)   | `.jp`        | Tokyo, Osaka, Kyoto, Yokohama, Sapporo                      |
-| Korean (ko)     | `.kr`        | Seoul, Busan, Incheon, Daegu, Daejeon                       |
-| Arabic (ar)     | `.sa`        | Riyadh, Dubai, Cairo, Jeddah, Abu Dhabi                     |
-| Turkish (tr)    | `.tr`        | Istanbul, Ankara, Izmir, Bursa, Antalya                     |
-| Vietnamese (vi) | `.vn`        | Hanoi, Ho Chi Minh City, Da Nang, Hai Phong, Can Tho        |
-| Thai (th)       | `.th`        | Bangkok, Chiang Mai, Phuket, Pattaya, Krabi                 |
-| Indonesian (id) | `.id`        | Jakarta, Surabaya, Bandung, Bali, Yogyakarta                |
-
-## Integration with Application
-
-### Batch Translation Workflow
-
-To translate all language files for the application:
-
-```bash
-#!/bin/bash
-LANGUAGES=("es" "fr" "de" "pt" "it" "nl" "ru" "zh" "ja" "ko" "ar" "tr" "vi" "th" "id")
-SOURCE_FILE="app/src/locales/en/common.json"
-
-for lang in "${LANGUAGES[@]}"; do
-  echo "Translating to $lang..."
-
-  jq -n --slurpfile data "$SOURCE_FILE" \
-    "{targetLanguage: \"$lang\", languageData: \$data[0]}" | \
-    curl -X POST http://localhost:7071/api/TranslateLanguageFile \
-      -H "Content-Type: application/json" \
-      -d @- > "app/src/locales/$lang/common.json"
-
-  echo "✓ Saved to app/src/locales/$lang/common.json"
-done
-```
-
-## Architecture
-
-### Function Components
-
-1. **TranslateLanguageFile.cs**: HTTP trigger function
-   - Validates input
-   - Handles HTTP request/response
-   - Calls AIService for translation
-
-2. **AIService.cs**: Translation logic
-   - `TranslateLanguageFileAsync()`: Main translation method
-   - `GetRegionalInfo()`: Regional configuration helper
-   - Uses Azure OpenAI chat completion with JSON mode
-
-### AI Prompt Engineering
-
-The function uses a carefully crafted system prompt that:
-
-- Instructs the AI to maintain JSON structure
-- Preserves placeholders and special formatting
-- Provides regional examples for emails and addresses
-- Ensures cultural appropriateness
-- Maintains the adventurous, fun tone
-
-## Requirements
-
-- Azure OpenAI endpoint configured in `AZURE_OPENAI_ENDPOINT` environment variable
-- Chat model deployment named "chat"
-- .NET 10 Azure Functions runtime
-- Managed Identity for Azure OpenAI authentication
-
-## Performance
-
-- **Temperature**: 0.7 (moderate creativity for natural, fun translations)
-- **Max Tokens**: 16,000 (supports large language files)
-- **Response Format**: JSON mode (ensures valid output)
-- **Processing Time**: Varies by file size; typically 5-30 seconds for a complete language file
-
-## Error Handling
-
-The function includes comprehensive error handling:
-
-- Invalid JSON input
-- Missing parameters
-- Unsupported languages
-- AI service errors
-- JSON parsing failures
-
-All errors return appropriate HTTP status codes and descriptive error messages.
-
-## Best Practices
-
-1. **Start Small**: Test with a subset of your language file first
-2. **Review Translations**: AI translations should be reviewed by native speakers
-3. **Consistent Terminology**: Use the same source file for all languages to ensure consistency
-4. **Version Control**: Track translated files in git to see changes over time
-5. **Batch Processing**: For multiple languages, use a script to automate the process
-
-## Limitations
-
-- Maximum file size limited by Azure Functions request size (100MB)
-- Maximum output tokens: 16,000 (very large files may be truncated)
-- AI translations are high quality but should be reviewed by native speakers for production use
-- Regional information is generic and may not reflect all regional variations
-
-## Future Enhancements
-
-Potential improvements:
-
-- Support for additional languages
-- Custom regional configuration per request
-- Translation memory/cache to avoid re-translating unchanged content
-- Diff-based translation (only translate changed keys)
-- Batch processing endpoint for multiple language files
-- Quality scoring and validation
-
-## Related docs
-
-- Durable Functions orchestration backing this endpoint: [LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md](LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md)
-- Blob storage usage for translated assets: [TRANSLATION_BLOB_STORAGE.md](TRANSLATION_BLOB_STORAGE.md)
-- Emoji handling and localization notes: [EMOJI_IN_TRANSLATIONS.md](EMOJI_IN_TRANSLATIONS.md)
-- Functions project where this endpoint lives: [../api-functions/README.md](../api-functions/README.md)
+- [app/src/i18n.ts](../../../app/src/i18n.ts), [LanguageContext.tsx](../../../app/src/context/LanguageContext.tsx), [CurrencyContext.tsx](../../../app/src/context/CurrencyContext.tsx), [ProductNamesContext.tsx](../../../app/src/context/ProductNamesContext.tsx)
+- [TwemojiText.tsx](../../../app/src/components/TwemojiText.tsx), [Twemoji.tsx](../../../app/src/components/Twemoji.tsx)
+- [TranslateLanguageFile.cs](../../../api-functions/Functions/TranslateLanguageFile.cs), [TranslateProductDescriptions.cs](../../../api-functions/Functions/TranslateProductDescriptions.cs), [TranslateCategoryNames.cs](../../../api-functions/Functions/TranslateCategoryNames.cs), [TranslatePromotionDescriptions.cs](../../../api-functions/Functions/TranslatePromotionDescriptions.cs)
+- [CulturesPage.tsx](../../../app-admin/src/pages/CulturesPage.tsx)
+- [AI content generation](../ai/ai-content-generation.md) · [Foundry agents](../ai/foundry-agents.md) · [Functions routes](../../reference/functions-routes.md)

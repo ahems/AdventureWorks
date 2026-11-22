@@ -397,18 +397,11 @@ output APP_ADMIN_URL string = containerAppAdmin.outputs.appAdminUrl
 output APP_MANUFACTURING_URL string = containerAppManufacturing.outputs.appManufacturingUrl
 
 // Expose values needed for local debugging / .env population
-// Application Insights connection string (need to reference component resource id after module deployment)
-// The module doesn't output it directly, so recreate the name and reference the implicit resource symbol in the module via existing name
-// appinsights module uses name appInsightsName; we can read its properties via symbolic name 'appinsights'.
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = containerApp.outputs.applicationInsightsConnectionString
 output APPINSIGHTS_INSTRUMENTATIONKEY string = appinsights.outputs.instrumentationKey
 output APPINSIGHTS_CONNECTIONSTRING string = appinsights.outputs.connectionString
 
-// API URL (GraphQL endpoint) - constructed similarly to what aca module sets inside env values
-// The middle tier container app FQDN is not surfaced directly; derive using known naming convention from aca module parameters
-// We add an output in aca module instead would be cleaner, but for now replicate pattern: apiName = 'av-api-${resourceToken}'
-// Since containerApp module internal resource name uses apiName param, we cannot access its properties here without an output. TODO: add output in aca module.
-// Placeholder output (empty) until module is updated; avoids breaking template. Next change will add actual output from aca module.
+// API URL (DAB GraphQL endpoint) from the API Container App module
 output API_URL string = containerAppApi.outputs.apiUrl
 
 // Azure Client Id of the user-assigned managed identity

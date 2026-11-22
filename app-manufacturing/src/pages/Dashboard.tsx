@@ -95,8 +95,6 @@ const Dashboard = () => {
     retry: 1,
   });
 
-  // (shortage forecast removed — using feasibility-based materialBlocked from fgCatalog instead)
-
   // Supply chain orders
   const { data: supplyOrders } = useQuery<PurchaseOrder[]>({
     queryKey: ["supply-orders-dashboard"],

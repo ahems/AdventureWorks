@@ -1,3 +1,15 @@
+---
+title: Authenticated local scripts against the Azure deployment
+summary: Use scripts/utilities/azure-auth.py to sign in as a seeded AdventureWorks user and call deployed DAB, Functions or MCP endpoints with correctly audience-bound tokens.
+audience: [developer, operator, ai-agent]
+components: [api-mcp, api, api-functions, scripts]
+related:
+  - docs/testing/testing-strategy.md
+  - docs/features/mcp-oauth/README.md
+  - docs/features/functions-oauth/README.md
+  - docs/testing/AI_AND_MCP_TESTING_GUIDE.md
+---
+
 # Authenticated local scripts against the Azure deployment
 
 Use [azure-auth.py](../../scripts/utilities/azure-auth.py) to authenticate as a
@@ -15,20 +27,23 @@ Microsoft Entra ID. It verifies email/password against `Person.EmailAddress` and
 Managed identity protects backend access to Azure SQL and other infrastructure;
 it is distinct from application-user authorization.
 
-The [seed job](../../seed-job/seed-database.ps1) sets these public demo credentials:
+The [seed job](../../seed-job/seed-database.ps1) creates two canned demo
+identities. The helper already knows their sign-in details, so you only choose one:
 
-| Helper identity | Account | Demo password | Expected role | Use for |
-| --- | --- | --- | --- | --- |
-| `manufacturing` | peter0@adventure-works.com | Factory1234! | manufacturing-engineer | Manufacturing, work orders, inventory and supply-chain work |
-| `admin` | ken0@adventure-works.com | Admin1234! | executive-admin | Administration, customers, orders, reporting and broader internal operations |
+| Helper identity | Seeded user | Expected role | Use for |
+| --- | --- | --- | --- |
+| `manufacturing` | Peter | manufacturing-engineer | Manufacturing, work orders, inventory and supply-chain work |
+| `admin` | Ken | executive-admin | Administration, customers, orders, reporting and broader internal operations |
 
 Prefer Peter when his permissions suffice; do not automatically escalate a denied
-request to Ken. Ken has broad internal permissions, but neither identity bypasses
+request to Ken. Ken has broad internal permissions but not `manufacturing.write`,
+so manufacturing writes belong to Peter. Neither identity bypasses
 business rules, ownership checks, self-only password routes, or consumer portal
 gating. Use a disposable consumer account for consumer-specific authorization tests.
 These are demo accounts, **not a production identity pattern**.
-If a canned password changed, supply `AZURE_AUTH_PASSWORD` via a secure environment
-or a hidden prompt; never pass it as a command-line argument or commit it.
+If a canned password changed, export `AZURE_AUTH_PASSWORD` in the current shell
+from a secure source. The helper has no password prompt or command-line option;
+never pass the password as an argument or commit it.
 
 ## Quick start
 
@@ -42,7 +57,7 @@ without changing the default.
 # Read manufacturing Functions data as Peter.
 python3 scripts/utilities/azure-auth.py request \
   --identity manufacturing --resource functions \
-  --path /api/manufacturing/status
+  --path /api/manufacturing/scrap-events
 
 # DAB REST: the helper adds Bearer and X-MS-API-ROLE.
 # Quote $first so the shell does not expand it; DAB does not support $top/$skip.
@@ -59,6 +74,11 @@ python3 scripts/utilities/azure-auth.py request \
 python3 scripts/utilities/azure-auth.py request \
   --identity admin --resource functions --path /api/ai-job-queue/status
 ```
+
+Some Functions `GET` routes change state, including `manufacturing/status`,
+`manufacturing/agent-config`, `bank/*` and `orders/delivery/trigger`. Do not use them
+as read-only checks; see the
+[side-effecting GET routes](../../tests/scripts/README.md#side-effecting-get-routes).
 
 `request` logs in anew each invocation, keeps credentials/cookies/tokens in memory,
 prints the API response to stdout, and returns nonzero on transport/HTTP errors
@@ -82,7 +102,7 @@ FUNCTIONS_URL=$(azd env get-value API_FUNCTIONS_URL --environment "$ENVIRONMENT"
 printf 'Authorization: Bearer %s\n' "$FUNCTIONS_TOKEN" |
   curl --silent --show-error --fail-with-body \
     --connect-timeout 15 --max-time 180 --header @- \
-    "${FUNCTIONS_URL%/}/api/manufacturing/status"
+    "${FUNCTIONS_URL%/}/api/manufacturing/scrap-events"
 unset FUNCTIONS_TOKEN
 ```
 
@@ -203,12 +223,18 @@ Live verification uses the four read-only `request` examples above. Neither logi
 nor those reads modifies business data; writes, simulator starts and AI calls
 require deliberate selection and may mutate data/incur costs.
 
-Related: [OAuth server guide](../features/mcp-oauth/README.md),
-[Functions OAuth guide](../features/functions-oauth/README.md),
-[existing auth smoke tests](../../tests/scripts/auth-smoke-tests.sh).
-# Cross-solution validation
+## Cross-solution validation
 
 For reflected inventory, unit tests, deployed configuration checks and safe live
 probes, use the [end-to-end authentication assurance guide](../features/authentication/END_TO_END_AUTHENTICATION.md)
-and `bash tests/scripts/validate-auth.sh --all`. Unverified identity paths and
+and the [test scripts catalog](../../tests/scripts/README.md#authentication-tests).
+Start with the read-only `bash tests/scripts/validate-auth.sh --infra`; the `--live`
+and `--all` profiles create controlled fixtures. Unverified identity paths and
 unreviewed exceptions remain nonzero results, not successes.
+
+## Related
+
+- [OAuth server guide](../features/mcp-oauth/README.md)
+- [Functions OAuth guide](../features/functions-oauth/README.md)
+- [Auth smoke tests](../../tests/scripts/README.md#deployed-smoke-and-health-checks)
+- [Testing strategy](testing-strategy.md)

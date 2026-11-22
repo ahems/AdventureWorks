@@ -1,3 +1,14 @@
+---
+title: Deploying from Windows with WSL
+summary: Prepare Ubuntu in WSL on a Windows laptop with the tools needed to clone the LFS-enabled repository and run azd for the AdventureWorks demo.
+audience: [developer, operator]
+components: [azd, infra, scripts]
+related:
+  - docs/operations/deployment.md
+  - docs/operations/dev-container.md
+  - docs/operations/troubleshooting.md
+---
+
 # Local AdventureWorks Deployment from Windows Using WSL
 
 This guide documents how to prepare a Windows laptop to clone and deploy the LFS-enabled AdventureWorks repository using Ubuntu 22.04 in Windows Subsystem for Linux (WSL).
@@ -58,13 +69,13 @@ gh repo clone <reponame>/AdventureWorks
 cd AdventureWorks
 ```
 
-## 6. Hydrate the Git LFS Content
+## 5. Hydrate the Git LFS Content
 
 ```bash
 git lfs pull
 ```
 
-## 7. Install Azure CLI
+## 6. Install Azure CLI
 
 ```bash
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
@@ -82,7 +93,7 @@ If required, select the target subscription:
 az account set --subscription "<subscription-name-or-id>"
 ```
 
-## 8. Install Azure Developer CLI
+## 7. Install Azure Developer CLI
 
 ```bash
 curl -fsSL https://aka.ms/install-azd.sh | bash
@@ -94,7 +105,7 @@ Sign in:
 azd auth login
 ```
 
-## 9. Install .NET 10 SDK
+## 8. Install .NET 10 SDK
 
 The `api-functions` project targets `net10.0`. The repository's `global.json` specifies SDK `10.0.100` with `rollForward` set to `latestFeature`.
 
@@ -108,7 +119,7 @@ sudo apt install dotnet-sdk-10.0 -y
 
 A compatible later .NET 10 SDK can be selected because of the repository's roll-forward policy. This procedure was validated with SDK `10.0.112`.
 
-## 10. Install PowerShell 7+
+## 9. Install PowerShell 7+
 
 Parts of the deployment require the `pwsh` executable, so PowerShell 7+ must also be installed **inside Ubuntu/WSL**. Installing PowerShell on the Windows host is not sufficient.
 
@@ -126,6 +137,16 @@ sudo apt-get install -y powershell
 ```
 
 PowerShell is invoked on Linux with `pwsh`.
+
+## 10. Install Node.js 22 LTS
+
+The storefront (`app`) service runs `npm install` and a Vite build on the deploying machine before it is uploaded to Azure Static Web Apps, so Node.js and npm are required inside WSL. The dev container and the GitHub deployment workflow both use Node.js 22.
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version && npm --version
+```
 
 ## 11. Create and Configure the AZD Environment
 
@@ -150,4 +171,12 @@ azd up --no-prompt
 
 The repository's `azure.yaml` requires the Foundry agents extension (`azure.ai.agents`). With `--no-prompt`, AZD automatically installs required extensions and their dependencies rather than waiting for interactive confirmation.
 
-The repository runs from Ubuntu/WSL. Bash scripts execute under Linux, and any PowerShell-based deployment steps use the Linux `pwsh` installation. Application builds run remotely, so Docker is not required locally for this workflow.
+The repository runs from Ubuntu/WSL. Bash scripts execute under Linux, and any PowerShell-based deployment steps use the Linux `pwsh` installation. Container images build remotely in Azure Container Registry and the Functions app is published directly, so Docker is not required locally for this workflow. Only the storefront is built locally with Node.js.
+
+`azd up` creates infrastructure and is a user-run command. The seed job keeps loading data for roughly 15 minutes after it returns; see [Deployment lifecycle](deployment.md#after-azd-up-returns).
+
+## Related
+
+- [Deployment lifecycle](deployment.md)
+- [Dev container setup](dev-container.md)
+- [Troubleshooting](troubleshooting.md)

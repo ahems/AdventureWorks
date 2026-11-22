@@ -154,6 +154,11 @@ class HostedAgentMcpTrustTests(unittest.TestCase):
         self.assertIn('redirect_env_pairs+=("MCP_HOSTED_MANUFACTURING_PRINCIPAL_ID=$hosted_principal")', hook)
         self.assertIn('--set-env-vars "${redirect_env_pairs[@]}"', hook)
         self.assertNotIn("--replace-env-vars", hook)
+        # Service-scoped deploys must not silently drop the hosted principal from MCP trust.
+        published = hook.index('get_azd_value "AGENT_MANUFACTURING_AGENT_RESPONSES_ENDPOINT"')
+        fallback = hook.index('manufacturing_endpoint=$(get_azd_value "MANUFACTURING_AGENT_ENDPOINT")')
+        self.assertLess(published, fallback)
+        self.assertLess(fallback, hook.index("principal_profiles=$(python3"))
         self.assertLess(hook.index('redirect_env_pairs+=("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS='),
                         hook.index("bash scripts/hooks/api-functions-postdeploy.sh"))
 

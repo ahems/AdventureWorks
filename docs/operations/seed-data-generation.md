@@ -1,136 +1,81 @@
-# Embedding Export Scripts
+---
+title: Seed data generation
+summary: Where the AI-augmented seed CSVs come from, which generator and export scripts produced them, how vector columns are encoded, and why regeneration is an offline, maintainer-only activity.
+audience: [developer]
+components: [seed-job, scripts, api-functions, api]
+related:
+  - docs/services/seed-job.md
+  - docs/reference/scripts.md
+  - docs/features/search/semantic-search.md
+  - docs/features/i18n/localization.md
+  - docs/features/manufacturing/manufacturing-content.md
+  - docs/features/reviews/product-reviews.md
+---
 
-This directory contains scripts to export embeddings from the Azure SQL database to CSV files compatible with VECTOR columns.
+# Seed data generation
 
-## Overview
+The seed job loads the AdventureWorks sample data and a set of checked-in **AI-augmented** CSV files from [`seed-job/sql/`](../../seed-job/sql/). These files contain translations, embeddings, generated reviews and manufacturing content. Deployments load the files as they are and never regenerate them. The scripts on this page show how the files were produced, and maintainers use them to refresh data offline.
 
-After migrating from VARBINARY(MAX) to VECTOR(1536) columns, embeddings need to be exported in JSON array format rather than hex/base64-encoded binary format.
+## AI-augmented seed files
 
-## Scripts
+Files named `*-ai*.csv` are generated or augmented. The original AdventureWorks CSVs sit alongside them.
 
-### `export-product-description-embeddings.js`
+| Area | Files |
+| --- | --- |
+| Translations and cultures | `ProductDescription-ai-translations.csv`, `ProductModelProductDescriptionCulture-ai.csv`, `ProductNames-ai.csv`, `Culture-ai.csv`, `Currency-ai.csv`, `CountryRegionCurrency-ai.csv`, `StateProvince-ai.csv`, `SalesTaxRate-ai.csv` |
+| Embeddings | `ProductDescription-ai-embeddings.csv`, `ProductReview-ai-Embeddings.csv` |
+| Products and reviews | `Product-ai.csv`, `ProductDescription-ai.csv`, `ProductProductPhoto-ai.csv`, `ProductCostHistory-ai.csv`, `ProductReview-ai.csv`, `ProductReview-ai-UserID.csv` |
+| Manufacturing content | `Illustration-ai.csv`, `ProductModelIllustration-ai.csv`, `ProductModelInstructions-ai.csv`, `Document-ai.csv`, `ProductDocument-ai.csv`, `BillOfMaterials-ai.csv` |
+| Warehouse staff | `BusinessEntity-warehouse-ai.csv`, `Person-warehouse-ai.csv`, `Employee-warehouse-ai.csv`, `EmployeeDepartmentHistory-warehouse-ai.csv`, `EmployeePayHistory-warehouse-ai.csv` |
 
-Exports product description embeddings to `sql/ProductDescription-ai.csv`.
+The load order, delimiters and per-file options are defined in the seed job. See [Seed job](../services/seed-job.md).
 
-**Output format:**
+## Vector columns
 
-```
-ProductDescriptionID    Description    rowguid    ModifiedDate    DescriptionEmbedding
-3                       Text...        GUID...    2025-12-17...   "[0.1,0.2,0.3,...]"
-```
+Embedding columns are `VECTOR(1536)`. In the CSVs, each embedding is stored as a JSON array of floats, for example `"[0.0123,-0.0456,...]"`. The seed job casts the array into the vector column during import. A file with the wrong dimension or a non-JSON value fails to load for that table.
 
-### `export-product-review-embeddings.js`
+DAB GraphQL cannot serialize `VECTOR` columns. DAB REST returns them as arrays when the column is requested explicitly with `$select`. [`scripts/utilities/export-product-description-embeddings-from-source-api.sh`](../../scripts/utilities/export-product-description-embeddings-from-source-api.sh) uses that behavior to export description embeddings from a source DAB deployment.
 
-Exports product review embeddings to `sql/ProductReview-ai.csv`.
+## Generators
 
-**Output format:**
+The generators live in [`scripts/generators/`](../../scripts/generators/).
 
-```
-ProductReviewID    ProductID    ReviewerName    ReviewDate    EmailAddress    Rating    Comments    ModifiedDate    CommentsEmbedding    Approved
-5                  680          Emily C...      2014-10-20... email@...       5         "Text..."   2026-01-03...   "[0.1,0.2,...]"     1
-```
+| Script | Output | Notes |
+| --- | --- | --- |
+| `generate-category-translations.sh`, `generate-subcategory-translations.sh`, `generate-product-name-translations.sh`, `generate-special-offer-translations.sh` | Translation CSVs; some update non-`-ai` files such as `ProductCategory.csv` and `SpecialOffer.csv` | Call Azure OpenAI with an Entra token from `az account get-access-token --resource https://cognitiveservices.azure.com` |
+| `generate-original-review-embeddings.sh` | Review embeddings | Uses Azure OpenAI in the same way |
+| `generate-reviews-with-embeddings.sh` | Reviews generated through Functions | Posts to the Functions review endpoints. Protected routes need a Functions-audience token from [`azure-auth.py`](../testing/AZURE_AUTHENTICATED_SCRIPTS.md). |
+| `generate-component-costs.js` | `Product-ai.csv` (updated costs and prices) and generated cost-history rows | Runs offline from the existing CSVs |
 
-### `export-all-embeddings.sh`
+These scripts call Azure OpenAI or deployed APIs, which can incur cost. Run them only on purpose.
 
-Master script that runs both export scripts in sequence.
+## Exporters
 
-## Usage
+The exporters in [`scripts/data-management/`](../../scripts/data-management/) read a populated database and write CSVs to a `sql/` folder next to the script. You then copy reviewed files into `seed-job/sql/`.
 
-### Prerequisites
+| Script | Exports | Client |
+| --- | --- | --- |
+| `export-ai-translations.sh` | Translation tables | `sqlcmd` |
+| `export-ai-product-descriptions.sh` | AI product descriptions | `sqlcmd` |
+| `export-product-description-embeddings.js` | `ProductDescription` embeddings | `mssql` npm package |
+| `export-product-review-embeddings.js` | Review embeddings | `mssql` npm package |
+| `export-product-reviews.js` | Reviews (without vectors) | DAB GraphQL at `API_URL`, unauthenticated |
+| `export-all-embeddings.sh` | Runs both embedding exporters | — |
 
-- Node.js installed
-- `mssql` npm package (will be auto-installed by export-all-embeddings.sh)
-- SQL Server credentials set in environment or using defaults:
-  - `SQL_SERVER` (default: av-sql-ewphuc52etkbc.database.windows.net)
-  - `SQL_DATABASE` (default: AdventureWorks)
-  - `SQL_USER` (default: CloudSA7d3784da)
-  - `SQL_PASSWORD` (default: TempP@ssw0rd123!)
+The SQL-based exporters connect to SQL directly with credentials supplied through environment variables. Deployed SQL servers are private and use Entra-only authentication, so the exporters cannot reach a deployed demo database. They are kept for offline or historic maintenance against a database you control. `export-product-reviews.js` sends no token and relies on the `ProductReview` entity's anonymous read permission in `api/dab-config.json`. Never commit or print SQL credentials.
 
-### Export All Embeddings
+The related utility `scripts/utilities/generate-product-review-userids.js` builds `ProductReview-ai-UserID.csv`, which links reviews to seeded users. The manufacturing content pipeline (illustrations, instructions, documents and diagrams) has its own scripts and is documented in [Manufacturing content](../features/manufacturing/manufacturing-content.md).
 
-```bash
-cd /workspaces/AdventureWorks/scripts
-./export-all-embeddings.sh
-```
+## Refreshing seed data
 
-### Export Individual Files
+1. Regenerate or export the files offline and review the diff, paying particular attention to row counts, delimiters and encoding.
+2. Commit the CSVs. Large files are stored in Git LFS.
+3. Ask the user to [recreate the environment](deployment.md#recreating-the-environment). The seed job runs only during provisioning and uses `SEED_SKIP_EXISTING=true`, so `azd deploy` does not reload data.
 
-```bash
-# Product descriptions only
-node export-product-description-embeddings.js
+## Related
 
-# Reviews only
-node export-product-review-embeddings.js
-```
-
-## Integration with Deployment
-
-The exported CSV files in `seed-job/sql/` are containerized and loaded during Azure deployment:
-
-1. **AdventureWorks-AI.sql** creates tables with VECTOR(1536) columns
-2. The **seed-job** Container App Job imports CSV files during `azd up`:
-   - `ProductDescription-ai.csv` with DescriptionEmbedding vectors
-   - `ProductReview-ai.csv` with CommentsEmbedding vectors
-
-3. The seed-job's `seed-database.ps1` script imports these files with vector column handling:
-
-   ```powershell
-   @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv';
-      VectorColumns=@('DescriptionEmbedding') }
-
-   @{ Table='Production.ProductReview'; File='ProductReview-ai.csv';
-      VectorColumns=@('CommentsEmbedding') }
-   ```
-
-4. VECTOR columns are imported using:
-   ```sql
-   CAST('[0.1,0.2,...]' AS VECTOR(1536))
-   ```
-
-## When to Re-Export
-
-Re-run these scripts whenever:
-
-- Embeddings are regenerated with new models
-- Embedding dimensions change (requires updating CAST statements)
-- Setting up a new environment with pre-populated embeddings
-
-## VECTOR vs VARBINARY
-
-| Aspect     | Old (VARBINARY)          | New (VECTOR)                  |
-| ---------- | ------------------------ | ----------------------------- |
-| Storage    | Hex/Base64 encoded bytes | JSON float array              |
-| Size       | ~6KB per embedding       | ~12KB per embedding           |
-| Queries    | Binary comparison        | Native VECTOR_DISTANCE        |
-| CSV Format | `0xBEA6213D...`          | `"[0.12,-0.05,...]"`          |
-| SQL Cast   | Not needed               | `CAST(@Json AS VECTOR(1536))` |
-
-## Troubleshooting
-
-### "Cannot connect to database"
-
-- Verify SQL credentials
-- Check firewall rules allow your IP
-- Ensure database exists
-
-### "No embeddings found"
-
-- Run embedding generation functions first
-- Check `WHERE DescriptionEmbedding IS NOT NULL`
-- Verify VECTOR columns exist (not VARBINARY)
-
-### "CSV file too large"
-
-- Normal - VECTOR JSON format is ~2x larger than binary
-- Product descriptions: ~5-10 MB
-- Reviews: ~15-20 MB
-- Use git-lfs if committing to repository
-
-## Related Files
-
-- `../seed-job/sql/AdventureWorks-AI.sql` - Schema with VECTOR columns
-- `../seed-job/seed-database.ps1` - Database seeding script in container
-- `../seed-job/README.md` - Complete seed-job documentation
-- `../scripts/hooks/postprovision.sh` - Deploys seed-job Container App Job
-- `../api-functions/Services/ProductService.cs` - Embedding generation
-- `../api-functions/Services/ReviewService.cs` - Embedding generation
+- [Seed job](../services/seed-job.md)
+- [Scripts reference](../reference/scripts.md)
+- [Semantic search](../features/search/semantic-search.md)
+- [Localization](../features/i18n/localization.md)
+- [Product reviews](../features/reviews/product-reviews.md)

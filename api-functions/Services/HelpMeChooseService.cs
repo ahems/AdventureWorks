@@ -94,6 +94,8 @@ public class HelpMeChooseService
                 FROM Production.ProductCategory pc
                 LEFT JOIN Production.ProductSubcategory ps
                     ON ps.ProductCategoryID = pc.ProductCategoryID
+                    AND RTRIM(ps.CultureID) = 'en'
+                WHERE RTRIM(pc.CultureID) = 'en'
                 ORDER BY pc.Name, ps.Name";
 
             using var conn = new SqlConnection(_sqlConnectionString);
@@ -163,6 +165,7 @@ public class HelpMeChooseService
                 JOIN Production.ProductCategory pc
                     ON ps.ProductCategoryID = pc.ProductCategoryID
                 WHERE pc.Name = 'Bikes'
+                  AND RTRIM(pc.CultureID) = 'en'
                   AND p.Size IS NOT NULL
                   AND p.Size != ''
                 ORDER BY p.Size";
@@ -223,7 +226,7 @@ public class HelpMeChooseService
                 structuredInputs: structuredInputs,
                 toolChoice: "auto",
                 mcpServiceScopes: [McpServiceTokenProvider.ProductsReadScope],
-                requirePublicCatalogTools: true);
+                requirePublicCatalogTools: true, retryTransientResponses: true);
 
             var raw = agentResponse.ResponseText.Trim();
 
@@ -382,7 +385,7 @@ Culture/language for responses: {cultureId ?? "en-US"}";
             var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage,
                 toolChoice: "required",
                 mcpServiceScopes: [McpServiceTokenProvider.ProductsReadScope],
-                requirePublicCatalogTools: true);
+                requirePublicCatalogTools: true, retryTransientResponses: true);
             string raw = agentResponse.ResponseText;
 
             _telemetryClient.TrackEvent("HelpMeChoose.AgentToolsUsed", new Dictionary<string, string>

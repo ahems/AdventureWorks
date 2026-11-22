@@ -71,7 +71,9 @@ public class GenerateProductEmbeddings
         }
     }
 
-    // ── Durable Activity functions kept for reuse by TranslateProductDescriptions ──
+    // ── Durable orchestrator and activities ──
+    // HttpStart above queues an AI job instead of starting this orchestrator. The embedding
+    // activities are also called by the TranslateProductDescriptions orchestrator.
 
     [Function(nameof(GenerateProductEmbeddings_Orchestrator))]
     public async Task<string> GenerateProductEmbeddings_Orchestrator(

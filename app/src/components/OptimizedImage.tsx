@@ -8,7 +8,7 @@ interface OptimizedImageProps extends ImgHTMLAttributes<HTMLImageElement> {
 }
 
 /**
- * Optimized image component with lazy loading, blur-up effect, and proper SEO attributes
+ * Optimized image component with lazy loading, a fade-in with pulse placeholder, and proper SEO attributes
  */
 export function OptimizedImage({
   src,

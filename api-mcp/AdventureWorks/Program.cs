@@ -1,5 +1,6 @@
 using AdventureWorks.Auth;
 using AdventureWorks.Services;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.ApplicationInsights.DataContracts;
@@ -14,8 +15,15 @@ builder.Logging.AddConsole(consoleLogOptions =>
 	consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-// Add Application Insights telemetry
-builder.Services.AddApplicationInsightsTelemetry();
+// Add Application Insights telemetry. Adaptive sampling is reinstalled without custom events or
+// exceptions so authorization and identity evidence events are never sampled out.
+builder.Services.AddApplicationInsightsTelemetry(options => options.EnableAdaptiveSampling = false);
+builder.Services.Configure<Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration>(configuration =>
+{
+	var chain = configuration.DefaultTelemetrySink.TelemetryProcessorChainBuilder;
+	chain.UseAdaptiveSampling(maxTelemetryItemsPerSecond: 20, excludedTypes: "Event;Exception");
+	chain.Build();
+});
 builder.Services.AddSingleton<Microsoft.ApplicationInsights.Extensibility.ITelemetryInitializer, CloudRoleNameTelemetryInitializer>();
 
 // Configure localization (Microsoft.Extensions.Localization is actively used by services below)
@@ -24,6 +32,12 @@ builder.Services.AddLocalization();
 
 // Get database connection string from configuration
 var connectionString = builder.Configuration.GetConnectionString("AdventureWorks");
+
+builder.Services.AddSingleton(sp => new AdventureWorks.Telemetry.SqlPrincipalTelemetry(
+	sp.GetRequiredService<TelemetryClient>(),
+	sp.GetRequiredService<ILogger<AdventureWorks.Telemetry.SqlPrincipalTelemetry>>(),
+	"api-mcp", connectionString, builder.Configuration["AZURE_CLIENT_ID"]));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AdventureWorks.Telemetry.SqlPrincipalTelemetry>());
 
 // Get OpenAI endpoint from configuration
 var openAiEndpoint = builder.Configuration["AZURE_OPENAI_ENDPOINT"]
@@ -143,6 +157,7 @@ builder.Services
 			   var telemetry = context.Services.GetRequiredService<TelemetryClient>();
 			   var toolName = context.Params?.Name ?? "unknown";
 			   using var operation = telemetry.StartOperation<RequestTelemetry>($"MCP_{toolName}");
+			   using var sqlScope = AdventureWorks.Telemetry.SqlPrincipalTelemetry.EnterScope("tool:" + toolName);
 
 			   if (context.Params?.Arguments is { } args)
 			   {

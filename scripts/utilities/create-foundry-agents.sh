@@ -6,17 +6,11 @@
 # Usage:
 #   bash scripts/utilities/create-foundry-agents.sh
 #
-# To deploy a single agent without running all, run its script directly:
+# To deploy a single agent without running all, run its script directly
+# (one script per agent in scripts/utilities/agents/; see agent_scripts below), e.g.:
 #   bash scripts/utilities/agents/eshop-chat-agent.sh
-#   bash scripts/utilities/agents/admin-chat-agent.sh
-#   bash scripts/utilities/agents/admin-order-agent.sh
-#   bash scripts/utilities/agents/admin-promotion-agent.sh
-#   bash scripts/utilities/agents/admin-cart-recovery-agent.sh
-#   bash scripts/utilities/agents/admin-customer-agent.sh
-#   bash scripts/utilities/agents/eshop-help-me-choose-agent.sh
-#   bash scripts/utilities/agents/eshop-workflow-agent.sh
-#   bash scripts/utilities/agents/admin-promotion-workflow-agent.sh
 #   bash scripts/utilities/agents/admin-order-workflow-agent.sh
+# Workflow agents reference their base agents, so deploy those first.
 #
 # Prerequisites:
 #   - azd environment populated (run after `azd provision`)

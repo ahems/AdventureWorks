@@ -6,18 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace api_functions.Services;
 
 /// <summary>
-/// Autonomously invokes the AdventureWorks Manufacturing Agent in Azure AI Foundry
-/// whenever a new sales order is detected via the SQL change-tracking trigger.
-///
-/// The agent is called fire-and-forget: the SQL trigger function returns immediately
-/// and the agent run continues asynchronously in the background. Errors are caught
-/// and logged to Application Insights — they do not propagate to the trigger.
-///
-/// Current behaviour: stub — the agent acknowledges the order trigger and logs
-/// the order context. No manufacturing or supply-chain actions are taken yet.
-///
-/// Future behaviour: the agent will call ManufacturingMcpTools and SupplyChainMcpTools
-/// to check inventory levels and kick off manufacturing runs or supply orders as needed.
+/// Unused: this class is not registered in Program.cs. New orders are queued to
+/// <c>manufacturing-agent-queue</c> by <c>OrderPlacedSqlTrigger</c>, and
+/// <c>ManufacturingAgentQueueTrigger</c> invokes the hosted Manufacturing agent.
 /// </summary>
 public class ManufacturingAgentService
 {

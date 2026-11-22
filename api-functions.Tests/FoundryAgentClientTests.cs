@@ -122,6 +122,29 @@ public class FoundryAgentClientTests
             item => item.Name == "Foundry.Responses.Completed");
     }
 
+    [Fact]
+    public async Task Rejected_foundry_response_logs_only_identifier_shaped_error_fields()
+    {
+        using var handler = new FoundryHandler
+        {
+            ResponseStatus = HttpStatusCode.Forbidden,
+            CustomResponse = """{"error":{"code":"permission_denied","type":"rate limit with spaces","message":"echoed private prompt"}}"""
+        };
+        var logger = new CapturingLogger<FoundryAgentClient>();
+        var client = new FoundryAgentClient(logger, new TelemetryClient(new TelemetryConfiguration()),
+            new TestCredential(), "https://foundry.test/api/projects/demo",
+            new TestHttpClientFactory(handler));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.InvokeAsync("agent", "Use supplied data", toolChoice: "none"));
+
+        var logged = Assert.Single(logger.Messages, message => message.StartsWith("Foundry Responses API returned 403"));
+        Assert.Contains("error code permission_denied, type other", logged);
+        Assert.Contains("remaining tokens none", logged);
+        Assert.Contains("structured inputs 0)", logged);
+        Assert.DoesNotContain("echoed private prompt", string.Join("\n", logger.Messages));
+    }
+
     [Theory]
     [InlineData(true, "eshop-help-me-choose-agent:1")]
     [InlineData(false, "unknown")]

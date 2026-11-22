@@ -313,8 +313,8 @@ public class OrderService
             FROM Sales.SalesOrderHeader soh
             INNER JOIN Sales.SalesOrderDetail sod ON soh.SalesOrderID = sod.SalesOrderID
             INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
-            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID AND RTRIM(psc.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             WHERE soh.CustomerID = @CustomerId
             AND pc.ProductCategoryID IS NOT NULL
             GROUP BY pc.ProductCategoryID, pc.Name
@@ -331,8 +331,8 @@ public class OrderService
             SELECT TOP {limit} p.ProductID, p.Name, p.ListPrice, pc.Name as CategoryName,
                    COALESCE(p.Color, 'N/A') as Color
             FROM Production.Product p
-            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID AND RTRIM(psc.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             WHERE pc.ProductCategoryID IN @CategoryIds
             AND p.ProductID NOT IN (
                 SELECT DISTINCT sod.ProductID

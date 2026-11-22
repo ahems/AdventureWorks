@@ -1,61 +1,69 @@
-# Data API Builder (DAB) Naming Conventions
+---
+title: Data API Builder (DAB) GraphQL and REST naming conventions
+summary: How Data API Builder turns AdventureWorks tables and views into GraphQL query names, REST paths and list response shapes, and how to discover and paginate them.
+audience: [developer, ai-agent]
+components: [api, app, app-admin, app-manufacturing]
+related: [../reference/dab-entities.md, ../services/dab-api.md, ../../api/README.md, data-stores.md]
+---
 
-## Overview
-Microsoft Data API Builder automatically generates GraphQL schemas from database tables. Understanding its naming conventions is crucial for querying the API correctly.
+# Data API Builder (DAB) GraphQL and REST naming conventions
 
-## Entity Naming Rules
+Data API Builder (DAB) generates GraphQL field names and REST paths from the entity
+names in [`api/dab-config.json`](../../api/dab-config.json). This page explains those
+rules so you can write correct queries without guessing. The full list of the 69
+entities (66 tables + 3 views) and their role permissions is in the
+[DAB entity reference](../reference/dab-entities.md).
 
-### Standard Pluralization
-Most entities follow simple pluralization rules:
-- **Product** → `products` (list query), `product_by_pk` (single record)
-- **Customer** → `customers` (list query), `customer_by_pk` (single record)
-- **Category** → `productCategories` (list query), `productCategory_by_pk` (single record)
+## Entity naming rules
 
-### Irregular Plurals
-DAB respects English grammar for irregular plurals:
-- **Person** → `people` (list query), `person_by_pk` (single record)
+No entity overrides its `rest` or `graphql` settings, so every entity uses the DAB
+defaults:
 
-### camelCase Conversion
-Database table names are converted to camelCase:
-- **ProductCategory** → `productCategories`
-- **SalesOrderHeader** → `salesOrderHeaders`
-- **BusinessEntity** → `businessEntities`
+| Item | Rule | Example (`Person`) |
+| ---- | ---- | ------------------ |
+| GraphQL list query | camelCase plural (English pluralisation) | `people` |
+| GraphQL single record | camelCase singular + `_by_pk` | `person_by_pk` |
+| GraphQL mutations | `create<Entity>`, `update<Entity>`, `delete<Entity>` | `createPerson` |
+| REST collection | `/api/<EntityName>` (PascalCase, case-sensitive) | `/api/Person` |
+| REST single record | `/api/<EntityName>/<pk-name>/<pk-value>` | `/api/Person/BusinessEntityID/1` |
 
-### Compound Names
-For multi-word table names, DAB maintains the case:
-- **SalesPerson** → `salesPeople` (irregular plural)
-- **EmailAddress** → `emailAddresses`
+### Standard and irregular plurals
 
-## Query Response Structure
+- `Product` → `products`, `product_by_pk`
+- `ProductCategory` → `productCategories`, `productCategory_by_pk`
+- `SalesOrderHeader` → `salesOrderHeaders`
+- `BusinessEntity` → `businessEntities`
+- `EmailAddress` → `emailAddresses`
+- `Person` → `people` (not `persons`)
+- `SalesPerson` → `salesPeople`
 
-All list queries return data in a consistent structure:
-```graphql
-{
-  entityName {
-    items {
-      field1
-      field2
-    }
-  }
-}
-```
+### Relationship fields
 
-Example:
+DAB adds relationship fields for relationships declared in the configuration, for
+example `personPhones` and `personCreditCards` on a person.
+
+## Response shapes
+
+GraphQL list queries always wrap results in `items`:
+
 ```graphql
 query {
-  people {
+  people(first: 10) {
     items {
       BusinessEntityID
       FirstName
       LastName
     }
+    hasNextPage
+    endCursor
   }
 }
 ```
 
-## Primary Key Queries
+REST collections return `{ "value": [...], "nextLink": "..." }`.
 
-Single record queries use the `_by_pk` suffix:
+Single-record GraphQL queries return the object directly:
+
 ```graphql
 query {
   person_by_pk(BusinessEntityID: 1) {
@@ -65,119 +73,61 @@ query {
 }
 ```
 
-## Relationship Fields
+## Pagination
 
-DAB generates relationship fields based on foreign keys:
-- **personPhones** - One-to-many relationship
-- **personCreditCards** - One-to-many relationship
-- **salesPerson_by_pk** - Related entity
+DAB returns **100 items per page by default**. This is a page size, not a total count.
 
-## Reserved Words & Special Cases
+- GraphQL: pass `first` and `after`, and follow `hasNextPage` / `endCursor`.
+- REST: use `$first` and `$after`, or follow the returned `nextLink`. DAB uses
+  `$first`, not `$top`, and does not support `$skip`.
 
-### Person Entity
-The `Person` table in AdventureWorks is particularly interesting:
-- List query: `people` (not `persons`)
-- Single query: `person_by_pk`
-- Related queries: `personPhones`, `personCreditCards`
+## Discovering field names
 
-This follows English grammar where "person" → "people" is the correct plural.
+GraphQL introspection is enabled. Use the authenticated helper so the request
+carries a DAB-audience token and the `X-MS-API-ROLE` header:
 
-## Common Patterns
-
-### Entity Name Discovery
-To find the correct GraphQL field name for an entity:
-
-1. **Use Introspection Query:**
 ```bash
-curl -X POST https://your-api.com/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query": "{ __schema { queryType { fields { name } } } }"}'
+python3 scripts/utilities/azure-auth.py request \
+  --identity admin --resource dab --path /graphql --method POST \
+  --data '{"query":"{ __schema { queryType { fields { name } } } }"}'
 ```
 
-2. **Search for Entity Name:**
+A quick REST check:
+
 ```bash
-# Find all fields containing "person"
-curl -s -X POST https://your-api.com/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query": "{ __schema { queryType { fields { name } } } }"}' \
-  | python3 -c "import sys, json; data = json.load(sys.stdin); print([f['name'] for f in data['data']['__schema']['queryType']['fields'] if 'person' in f['name'].lower()])"
+python3 scripts/utilities/azure-auth.py request \
+  --identity manufacturing --resource dab --path '/api/Product?$first=5'
 ```
 
-## Entity Configuration Issues
+See [Authenticated local scripts](../testing/AZURE_AUTHENTICATED_SCRIPTS.md) for
+identities and token handling.
 
-### Entities with Invalid Column Names
-DAB cannot generate GraphQL schemas for tables with columns containing spaces or special characters:
+## Tables that are not DAB entities
 
-**Problem Entities Removed:**
-- `AWBuildVersion` - Column `Database Version` has space
-- `DatabaseLog` - Column `Post Time` has space
-- `ErrorLog` - Incompatible data types
+DAB can only expose tables whose columns and types it supports. These AdventureWorks
+objects are deliberately not in the configuration:
 
-These were removed from `dab-config.json` to prevent API startup errors.
-
-## Testing GraphQL Endpoints
-
-Use the test script to verify all endpoints:
-```bash
-cd api
-bash test-graphql-endpoints.sh
-```
-
-This will test:
-- All entity list queries
-- Primary key lookups
-- Relationship queries
-- Query response structure
-
-## Reference
-
-### Full List of Query Fields
-Run introspection to see all available queries:
-```bash
-curl -s -X POST https://your-api.com/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query": "{ __schema { queryType { fields { name } } } }"}' \
-  | python3 -m json.tool
-```
-
-### Common Entity Mappings
-| Database Table | List Query | Single Query |
-|---------------|------------|--------------|
-| Product | `products` | `product_by_pk` |
-| ProductCategory | `productCategories` | `productCategory_by_pk` |
-| Customer | `customers` | `customer_by_pk` |
-| Person | `people` | `person_by_pk` |
-| SalesOrderHeader | `salesOrderHeaders` | `salesOrderHeader_by_pk` |
-| SalesPerson | `salesPeople` | `salesPerson_by_pk` |
-
-## Best Practices
-
-1. **Always use introspection** to discover field names rather than guessing
-2. **Test queries** with the test script after configuration changes
-3. **Handle irregular plurals** (person → people, not persons)
-4. **Remove problematic entities** with invalid column names from config
-5. **Use camelCase** for all GraphQL queries (DAB converts automatically)
+| Object | Reason | Alternative |
+| ------ | ------ | ----------- |
+| `Person.Address` | `SpatialLocation` uses the SQL `geography` type | `AddressFunctions` in [api-functions](../services/functions.md) |
+| `HumanResources.Employee` | `hierarchyid` columns | `Employee` entity backed by the `HumanResources.vEmployee` view |
+| `Production.Document`, `Production.ProductDocument` | `hierarchyid` column | Not exposed |
+| `Sales.GuestCartSession` | Guest cart state owned by Functions | Cart routes in api-functions |
+| `dbo.RealtimeNotificationOutbox` | Internal Web PubSub outbox | See [real-time eventing](realtime-eventing.md) |
+| `dbo.AWBuildVersion`, `dbo.DatabaseLog`, `dbo.ErrorLog` | Column names with spaces or unsupported types | Not exposed |
 
 ## Troubleshooting
 
-### Query Field Not Found
-**Error:** `Cannot query field "persons" on type "Query"`
+| Symptom | Fix |
+| ------- | --- |
+| `Cannot query field "persons" on type "Query"` | Use the generated plural (`people`). Check with introspection. |
+| HTTP 200 with an `errors` array | Read the GraphQL `errors`; for `AUTH_NOT_AUTHENTICATED` or permission errors check the token audience and the `X-MS-API-ROLE` header. |
+| Fewer rows than expected | Follow pagination; 100 is only the default page size. |
+| Entity missing from the schema | Check the entity exists in `dab-config.json` and the role has `read` permission. |
 
-**Solution:** Use introspection to find the correct field name:
-- The entity `Person` uses `people` not `persons`
-- Check for irregular plurals in English grammar
+## Related documentation
 
-### Entity Not Available
-**Error:** Entity defined in dab-config.json but not in GraphQL schema
-
-**Possible Causes:**
-1. Column names with spaces or special characters
-2. Incompatible data types
-3. Missing permissions in entity configuration
-
-**Solution:** Check API logs and remove problematic entities from config.
-
-## Related Documentation
-- [GRAPHQL_INTEGRATION.md](./GRAPHQL_INTEGRATION.md) - Overall integration guide
-- [API_CONFIGURATION.md](./API_CONFIGURATION.md) - DAB configuration details
-- [../api/test-graphql-endpoints.sh](../api/test-graphql-endpoints.sh) - Endpoint testing script
+- [DAB entity reference](../reference/dab-entities.md) – all entities, roles and policies
+- [DAB API service](../services/dab-api.md) – hosting, startup and configuration
+- [Identity and authentication](identity-and-auth.md) – how DAB validates tokens and roles
+- [`api/README.md`](../../api/README.md)

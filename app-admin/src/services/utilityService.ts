@@ -683,7 +683,7 @@ export const generatePromotionWithAI = async (
 // ── Status management for Durable Functions ────────────────────────────────
 
 /**
- * Poll the status of a running Durable orchestration.
+ * Read the current status of a Durable orchestration (one request).
  * @param statusQueryGetUri — the URL returned by the HttpStart response
  */
 export const getOrchestrationStatus = async (

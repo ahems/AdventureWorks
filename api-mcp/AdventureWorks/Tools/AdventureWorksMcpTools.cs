@@ -6,7 +6,7 @@ namespace AdventureWorks.Tools;
 
 /// <summary>
 /// AdventureWorks MCP Tools - Provides AI agents with tools to query AdventureWorks data
-/// Implements standard MCP protocol with SSE transport support
+/// Exposed over the MCP Streamable HTTP transport
 /// </summary>
 [McpServerToolType]
 public class AdventureWorksMcpTools

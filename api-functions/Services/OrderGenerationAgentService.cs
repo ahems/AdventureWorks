@@ -202,7 +202,9 @@ public class OrderGenerationAgentService
                     McpServiceTokenProvider.OrdersReadScope,
                     McpServiceTokenProvider.AdminWriteScope,
                 ],
-                requireOrderGenerationTools: true);
+                requireOrderGenerationTools: true,
+                // Planning tools are read-only or pure generators, so a throttled round is safe to resend.
+                retryTransientResponses: true);
             rawResponse = agentResponse.ResponseText ?? string.Empty;
 
             if (agentResponse.ToolsUsed?.Count > 0)

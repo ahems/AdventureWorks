@@ -58,6 +58,15 @@ trap {
 # Now set strict error handling
 $ErrorActionPreference = 'Stop'
 
+$seedMode = if ($GuestCartsOnly) { 'guest-carts' } elseif ($RealtimeNotificationsOnly) { 'realtime-notifications' }
+    elseif ($VerifyOnly) { 'manufacturing-overlays-verify' } elseif ($ManufacturingOverlaysOnly) { 'manufacturing-overlays' } else { 'full' }
+try {
+    Import-Module (Join-Path $PSScriptRoot 'SeedTelemetry.psm1') -Force -ErrorAction Stop
+    $seedTelemetryEnabled = Initialize-SeedTelemetry $env:APPLICATIONINSIGHTS_CONNECTION_STRING
+} catch {
+    $seedTelemetryEnabled = $false
+}
+
 # Capture start time for duration tracking
 $scriptStartTime = Get-Date
 $script:seedSuccess = $false  # Set to $true only on successful completion
@@ -418,8 +427,10 @@ catch {
 
 # -----------------------------------------------------------------------------
 # Connect to SQL Database and perform seeding operations
-# Fresh infrastructure makes this job's dedicated UAMI the Entra SQL administrator.
-# Legacy deployments may instead retain the roles granted by postprovision.sh.
+# This job connects as its dedicated seed UAMI, which the database module makes the
+# Entra SQL administrator. The runtime identity's database grants are applied below by
+# RuntimeDatabaseAccess.psm1; the postprovision.sh role script is a legacy path that
+# runs only when SQL public network access is enabled.
 # -----------------------------------------------------------------------------
 
 # server FQDN
@@ -441,6 +452,9 @@ try {
     $accessTokenProp.SetValue($conn, $plainToken)
     $conn.Open()
     Write-Log "  ✓ Successfully connected to SQL Database"
+    if ($seedTelemetryEnabled) {
+        $null = Send-SeedSqlPrincipalEvent -Connection $conn -Scope "seed:$seedMode" -ExpectedClientId $env:AZURE_CLIENT_ID
+    }
     $cmd = $conn.CreateCommand()
 
     if ($GuestCartsOnly) {
@@ -2692,4 +2706,9 @@ catch {
     Write-Log "Finished at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     Write-Log "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
     Write-Log "=========================================="
+    if ($seedTelemetryEnabled) {
+        $null = Send-SeedTelemetryEvent 'Seed.Completed' ([ordered]@{
+            Mode = $seedMode; Outcome = $(if ($script:seedSuccess) { 'succeeded' } else { 'failed' })
+            DurationSeconds = [string][math]::Floor($scriptDuration.TotalSeconds); ScriptVersion = $ScriptVersion })
+    }
 }

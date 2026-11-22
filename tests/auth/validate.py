@@ -33,6 +33,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS = Path(__file__).with_name("contracts.json")
 STATUSES = {"PASS", "FAIL", "BLOCKED", "ACCEPTED_EXCEPTION", "NOT_APPLICABLE"}
+TELEMETRY_QUERY_OFFSET = "30d"
+FOUNDRY_THROTTLE_MESSAGE = "Foundry Responses API failed (429)"
+FOUNDRY_THROTTLE_DELAYS = (0, 30, 60, 90)
 
 
 class EvidenceError(Exception):
@@ -3267,6 +3270,9 @@ class Deployment:
             if args == expected:
                 return {"defaultHostname": self.runtime["storefrontHostname"]}
             raise EvidenceError("ARM inspection belongs to the local deployer, not the private runtime identity")
+        if args[:3] == ("monitor", "app-insights", "query") and "--offset" not in args:
+            # The CLI silently caps queries to the last hour; each query bounds itself with ago().
+            args = (*args, "--offset", TELEMETRY_QUERY_OFFSET)
         return json_command(["az", *args, "--subscription", self.subscription,
                              "--only-show-errors", "--output", "json"],
                             allow_empty=args[:3] == ("containerapp", "job", "delete"))
@@ -8915,21 +8921,22 @@ def admin_chat_flow(report, deployment, token, *, allow_agent_canary=False):
                "The model did not select the business dashboard tool; narrative alone is not execution evidence.")
 
 
-def report_admin_chat_tool_observations(report):
+def report_admin_chat_tool_observations(report, expected_tools=ADMIN_CHAT_SALES_TOOLS):
     observations = report.inventory.get("adminChatCorrelatedTools", [])
     controls = [item for item in report.checks if item["id"] == "agent:admin-chat:correlated-tool"]
     correlated = len(controls) == 1 and controls[0]["group"] == "agents" and controls[0]["status"] == "PASS"
     tools = {item["tool"] for item in observations} if correlated and isinstance(observations, list) else set()
-    for tool in sorted(ADMIN_CHAT_SALES_TOOLS):
+    for tool in sorted(expected_tools):
         report.add("agent:admin-chat:tool:" + tool, "agents", "PASS" if tool in tools else "BLOCKED",
-                   "Current-run trace correlated this sales tool to the loaded version and delegated employee."
+                   "Current-run trace correlated this tool to the loaded version and delegated employee."
                    if tool in tools else
-                   "This sales tool was not observed on an authorized current-run trace.")
+                   "This tool was not observed on an authorized current-run trace.")
 
 
-def admin_chat_live(report, deployment, *, allow_agent_canary=False):
+def admin_chat_live(report, deployment, *, allow_agent_canary=False, allow_tool_sweep=False):
     if not allow_agent_canary:
         return
+    expected_tools = ADMIN_CHAT_TOOLS if allow_tool_sweep else ADMIN_CHAT_SALES_TOOLS
     report.add("scope:admin-chat", "scope", "PASS",
                "One opt-in admin chat request and read-only MCP controls; Foundry may perform multiple "
                "paid inference/tool rounds. No orders, email or simulator mutations.")
@@ -8939,7 +8946,7 @@ def admin_chat_live(report, deployment, *, allow_agent_canary=False):
     if len(definitions) != 1 or definitions[0]["status"] != "PASS":
         report.add("agent:admin-chat:canary", "agents", "BLOCKED",
                    "The selected admin agent definition is not verified; no inference was sent.")
-        report_admin_chat_tool_observations(report)
+        report_admin_chat_tool_observations(report, expected_tools)
         return
     tokens = {}
 
@@ -8953,7 +8960,7 @@ def admin_chat_live(report, deployment, *, allow_agent_canary=False):
     if set(tokens) != {"admin", "manufacturing"}:
         report.add("agent:admin-chat:canary", "agents", "BLOCKED",
                    "Both internal controls are required; no inference was sent.")
-        report_admin_chat_tool_observations(report)
+        report_admin_chat_tool_observations(report, expected_tools)
         return
     report.guarded("agent:admin-chat:direct-controls", "agents", lambda: admin_chat_direct_controls(
         report, deployment, tokens["admin"], tokens["manufacturing"]))
@@ -8963,10 +8970,17 @@ def admin_chat_live(report, deployment, *, allow_agent_canary=False):
         report, deployment, lambda: tokens["admin"], "admin-chat"))
     report.guarded("agent:admin-chat:foundry-identity", "agents",
                    lambda: foundry_response_identity(report, deployment, "admin-chat"))
-    report_admin_chat_tool_observations(report)
+    if allow_tool_sweep:
+        agent_sweep = load_agent_sweep()
+        report.guarded("agent:admin-chat:tool-sweep-evidence", "agents", lambda: agent_sweep.chat_sweep(
+            report, deployment, "admin-chat", lambda: tokens["admin"], agent_sweep.admin_prompts(),
+            ADMIN_CHAT_TOOLS, agent_key="AI_AGENT_ADMIN_CHAT_ID", category="employee",
+            client_app="adventureworks-admin", inventory_key="adminChatCorrelatedTools"))
+    report_admin_chat_tool_observations(report, expected_tools)
 
 
-def customer_chat_live(report, deployment, consumers, available_products, *, allow_agent_canary=False):
+def customer_chat_live(report, deployment, consumers, available_products, *, allow_agent_canary=False,
+                       allow_tool_sweep=False):
     if not allow_agent_canary:
         report.add("agent:customer-chat:canary", "agents", "BLOCKED",
                    "Customer-chat inference is opt-in after deploying the matching MCP and Functions guards.")
@@ -8984,6 +8998,13 @@ def customer_chat_live(report, deployment, consumers, available_products, *, all
                    lambda: customer_chat_correlated_tool(report, deployment, consumer))
     report.guarded("agent:customer-chat:foundry-identity", "agents",
                    lambda: foundry_response_identity(report, deployment, "customer-chat"))
+    if allow_tool_sweep:
+        agent_sweep = load_agent_sweep()
+        report.guarded("agent:customer-chat:tool-sweep-evidence", "agents", lambda: agent_sweep.chat_sweep(
+            report, deployment, "customer-chat", lambda: consumer.token("mcp", "mcp.access products.read"),
+            agent_sweep.customer_prompts(available_products.get(consumer.label)),
+            CUSTOMER_CHAT_TOOLS, agent_key="AI_AGENT_CHAT_ID", category="consumer",
+            client_app="adventureworks-eshop", inventory_key="customerChatCorrelatedTools"))
 
 
 def help_me_choose_agent_definition(report, deployment):
@@ -9083,6 +9104,7 @@ def help_me_choose_public_flow(report, deployment, *, allow_agent_canary=False):
         f"Anonymous questions returned HTTP {status}, five four-option questions, and no Foundry response ID",
     )
     if not valid_questions:
+        classify_foundry_throttle(report, deployment, "agent:helpme-choose:anonymous-questions", traces["questions"])
         report.add("agent:helpme-choose:anonymous-recommendations", "agents", "BLOCKED",
                    "Question response failed its safety contract; no recommendation request sent")
         return
@@ -9120,6 +9142,52 @@ def help_me_choose_public_flow(report, deployment, *, allow_agent_canary=False):
         "agent:helpme-choose:anonymous-recommendations", "agents", valid_recommendations,
         f"Anonymous recommendations returned HTTP {status}, live search terms, and no caller identity or Foundry ID",
     )
+    if not valid_recommendations:
+        classify_foundry_throttle(report, deployment, "agent:helpme-choose:anonymous-recommendations",
+                                  traces["recommendations"])
+
+
+def foundry_throttled(deployment, trace, *, sleep=time.sleep):
+    """True only when telemetry proves the Functions Foundry call on this exact trace failed with HTTP 429."""
+    if not isinstance(trace, str) or re.fullmatch(r"[a-f0-9]{32}", trace) is None:
+        raise EvidenceError("A valid canary trace is required for throttling evidence")
+    resources = deployment.azure("resource", "list", "--resource-group", deployment.required("AZURE_RESOURCE_GROUP"),
+                                 "--resource-type", "Microsoft.Insights/components", "--query", "[].id")
+    if not isinstance(resources, list) or len(resources) != 1 or not isinstance(resources[0], str):
+        raise EvidenceError("A unique selected-environment telemetry resource is required")
+    query = ("exceptions | where timestamp > ago(2h) "
+             f"| where operation_Id == '{trace}' and outerMessage == '{FOUNDRY_THROTTLE_MESSAGE}' "
+             "| summarize Throttled=count()")
+    for delay in FOUNDRY_THROTTLE_DELAYS:
+        if delay:
+            sleep(delay)
+        result = deployment.azure("monitor", "app-insights", "query", "--app", resources[0],
+                                  "--analytics-query", query)
+        try:
+            (table,) = result["tables"]
+            ((count,),) = table["rows"]
+        except (KeyError, TypeError, ValueError) as error:
+            raise EvidenceError("Throttling telemetry returned an unsupported shape") from error
+        if type(count) is not int or count < 0:
+            raise EvidenceError("Throttling telemetry returned an unsupported count")
+        if count:
+            return True
+    return False
+
+
+def classify_foundry_throttle(report, deployment, check_id, trace, *, sleep=time.sleep):
+    """Model-capacity throttling is not an authorization result, so a proven 429 turns the FAIL into BLOCKED."""
+    matches = [check for check in report.checks if check["id"] == check_id]
+    if len(matches) != 1 or matches[0]["status"] != "FAIL":
+        return
+    try:
+        throttled = foundry_throttled(deployment, trace, sleep=sleep)
+    except (EvidenceError, RuntimeError, subprocess.SubprocessError):
+        return
+    if throttled:
+        matches[0]["status"] = "BLOCKED"
+        matches[0]["detail"] += (" Telemetry on this trace shows Foundry returned HTTP 429 after the service's "
+                                 "transient retries: model capacity throttling, not an authorization result.")
 
 
 def email_content_operation_selector(report):
@@ -9628,11 +9696,11 @@ def reconcile_customer_chat_tool_paths(report, deployment):
         if len(checks) != 1 or checks[0]["group"] != group or checks[0]["status"] != "PASS":
             raise EvidenceError("Current-run customer-chat definition, response and correlation evidence are required")
     reconcile_correlated_agent_tool_paths(
-        report, deployment, deployment.required("AI_AGENT_CHAT_ID"), {"get_product_availability"},
+        report, deployment, deployment.required("AI_AGENT_CHAT_ID"), CUSTOMER_CHAT_TOOLS,
         "customerChatCorrelatedTools",
-        "This version's customer availability call returned a completed MCP result and joined an "
-        "allowed products.read decision for the delegated consumer on the same trace. "
-        "Other caller modes and downstream SQL identity remain separate obligations.",
+        "This version's customer-chat call returned a completed MCP result and joined an allowed "
+        "decision at the tool's registry scope for the delegated consumer on the same trace. "
+        "Downstream SQL identity is reported separately under sql-identity.",
         "agent:customer-chat:inventory-reconciliation",
     )
 
@@ -9651,13 +9719,41 @@ def reconcile_admin_chat_tool_paths(report, deployment):
         if len(checks) != 1 or checks[0]["group"] != group or checks[0]["status"] != "PASS":
             raise EvidenceError("Current-run admin chat definition, controls and correlation evidence are required")
     reconcile_correlated_agent_tool_paths(
-        report, deployment, deployment.required("AI_AGENT_ADMIN_CHAT_ID"), ADMIN_CHAT_SALES_TOOLS,
+        report, deployment, deployment.required("AI_AGENT_ADMIN_CHAT_ID"), ADMIN_CHAT_TOOLS,
         "adminChatCorrelatedTools",
-        "This version's sales-analysis call returned a completed MCP result and joined an "
-        "allowed sales.read decision for the delegated employee on the same trace. "
-        "Other caller modes and downstream SQL identity remain separate obligations.",
+        "This version's admin-chat call returned a completed MCP result and joined an allowed "
+        "decision at the tool's registry scope for the delegated employee on the same trace. "
+        "Downstream SQL identity is reported separately under sql-identity.",
         "agent:admin-chat:inventory-reconciliation",
     )
+
+
+GENERATION_RECONCILIATION = {
+    "admin-customer": ("AI_AGENT_CUSTOMER_ID", "customerGenerationCorrelatedTools", "customer generation"),
+    "admin-order": ("AI_AGENT_ORDER_ID", "orderGenerationCorrelatedTools", "order generation"),
+}
+
+
+def reconcile_generation_tool_paths(report, deployment, label):
+    agent_sweep = load_agent_sweep()
+    agent_key, observations_key, name = GENERATION_RECONCILIATION[label]
+    for check_id in (f"agent:{label}:generate", f"agent:{label}:correlated-tools"):
+        checks = [item for item in report.checks if item["id"] == check_id]
+        if len(checks) != 1 or checks[0]["group"] != "agents" or checks[0]["status"] != "PASS":
+            raise EvidenceError(f"Current-run {name} response and correlation evidence are required")
+    tools = agent_sweep.CUSTOMER_GENERATION_TOOLS if label == "admin-customer" else agent_sweep.ORDER_GENERATION_TOOLS
+    reconcile_correlated_agent_tool_paths(
+        report, deployment, deployment.required(agent_key), tools, observations_key,
+        f"This version's {name} call returned a completed MCP result and joined an allowed decision at the "
+        "tool's registry scope for the Functions runtime service identity on the same trace. "
+        "Downstream SQL identity is reported separately under sql-identity.",
+        f"agent:{label}:inventory-reconciliation",
+    )
+
+
+def run_customer_generation(report, deployment):
+    load_agent_sweep().customer_generation_canary(
+        report, deployment, internal_token(deployment, "admin", "functions"))
 
 
 def reconcile_browser_auth_requirement(report):
@@ -9709,20 +9805,29 @@ def reconcile_mcp_task_requirement(report):
     })
 
 
-def run_order_canary(report, deployment, allow_orders):
+def load_agent_sweep():
+    # Helper modules import this module by name; share one instance so EvidenceError matches.
+    sys.modules.setdefault("validate", sys.modules[__name__])
+    import agent_sweep
+    return agent_sweep
+
+
+def run_order_canary(report, deployment, allow_orders, *, agent_sweep=False, generation=False):
     # The canary imports this module by name; share one instance so EvidenceError matches.
     sys.modules.setdefault("validate", sys.modules[__name__])
     import order_canary
     run_id = uuid.uuid4().hex[:16]
     report.provenance["orderCanaryRunId"] = run_id
-    order_canary.OrderCanary(report, deployment, run_id).run(allow_orders)
+    order_canary.OrderCanary(report, deployment, run_id, agent_sweep=agent_sweep, generation=generation).run(allow_orders)
 
 
 def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_canary=False,
          allow_admin_agent_canary=False, allow_email_content_agent_canary=False,
          allow_product_content_agent_canary=False, allow_promotion_agent_canary=False,
-         allow_order_canary=False):
+         allow_order_canary=False, allow_tool_sweep=False, allow_generation_canary=False,
+         allow_hosted_agent_canary=False):
     d = deployment
+    started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     functions_base = https_url(d.required("API_FUNCTIONS_URL"))
     mcp_base = origin(d.required("API_MCP_URL"))
     dab_base = origin(d.required("API_URL"))
@@ -9984,9 +10089,14 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
         # Runs after the shared ten-minute tokens are no longer needed and renews its own.
         report.guarded("dab:write-role:matrix", "live-denials", lambda: dab_write_role_matrix(
             report, d, *renewing_internal_tokens(d, ["admin", "manufacturing"], "dab"), consumers))
-    customer_chat_live(report, d, consumers, available_products, allow_agent_canary=allow_customer_agent_canary)
-    admin_chat_live(report, d, allow_agent_canary=allow_admin_agent_canary)
-    if allow_email_content_agent_canary:
+    customer_chat_live(report, d, consumers, available_products, allow_agent_canary=allow_customer_agent_canary,
+                       allow_tool_sweep=allow_tool_sweep)
+    admin_chat_live(report, d, allow_agent_canary=allow_admin_agent_canary, allow_tool_sweep=allow_tool_sweep)
+    if allow_generation_canary:
+        report.add("scope:generation-agents", "scope", "PASS",
+                   "One AI customer generation (retained, ID inventoried) and, with the order canary, one AI order "
+                   "for a disposable customer that an admin cancels. Fixture email domains suppress delivery.")
+        report.guarded("agent:admin-customer:evidence", "agents", lambda: run_customer_generation(report, d))
         email_content_agent_tests(report, d, allow_agent_canary=True)
     if allow_product_content_agent_canary:
         product_content_agent_tests(report, d, allow_agent_canary=True)
@@ -9994,6 +10104,10 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
                    lambda: help_me_choose_correlated_tools(report, d))
     report.guarded("agent:helpme-choose:foundry-identity", "agents",
                    lambda: foundry_response_identity(report, d, "helpme-choose"))
+    if allow_order_canary:
+        report.guarded("order:scenario", "orders", lambda: run_order_canary(
+            report, d, True, agent_sweep=allow_tool_sweep and allow_customer_agent_canary,
+            generation=allow_generation_canary))
     if "agentDependencyEdges" in report.inventory:
         report.guarded("agent:helpme-choose:inventory-reconciliation", "agents",
                        lambda: reconcile_help_me_choose_tool_paths(report, d))
@@ -10003,6 +10117,10 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
         if allow_admin_agent_canary:
             report.guarded("agent:admin-chat:inventory-reconciliation", "agents",
                            lambda: reconcile_admin_chat_tool_paths(report, d))
+        for label in ("admin-customer", "admin-order"):
+            if any(item["id"] == f"agent:{label}:correlated-tools" for item in report.checks):
+                report.guarded(f"agent:{label}:inventory-reconciliation", "agents",
+                               lambda label=label: reconcile_generation_tool_paths(report, d, label))
     report.add("live:simulator-budget", "mutations", "BLOCKED",
                "No simulator started: server-enforced 100-order/run, two-run, rolling 30/minute combined budget, "
                "60-minute expiry, retry-safe creation and no-email lineage remain unverified")
@@ -10012,14 +10130,24 @@ def live(report, deployment, *, allow_agent_canary=False, allow_customer_agent_c
     report.add("live:dab-native-mcp", "live-allows", "BLOCKED",
                "Native handshake/read/role/audience/origin checks have individual evidence; "
                "complete entity/action/field/owner policies and mutation tool dispatch remain required")
-    if allow_order_canary:
-        report.guarded("order:scenario", "orders", lambda: run_order_canary(report, d, True))
     reconcile_browser_auth_requirement(report)
     reconcile_mcp_task_requirement(report)
     reconcile_dab_operation_requirement(report)
     reconcile_customer_profile_substitutes(report)
     reconcile_ownership_handlers_requirement(report)
     reconcile_session_transition_requirement(report)
+    agent_sweep = load_agent_sweep()
+    if allow_hosted_agent_canary:
+        report.add("scope:hosted-manufacturing-agent", "scope", "PASS",
+                   "One paid direct ReadOnly no-tool call to the hosted Manufacturing agent; no order, tool or action.")
+        report.guarded("agent:manufacturing-agent:hosted-evidence", "agents",
+                       lambda: agent_sweep.hosted_manufacturing_canary(report, d))
+    report.guarded("telemetry:exercise-evidence", "telemetry",
+                   lambda: agent_sweep.exercise_telemetry_producers(report, d))
+    report.guarded("telemetry:producers-evidence", "telemetry",
+                   lambda: agent_sweep.report_telemetry_producers(report, d, started))
+    report.guarded("telemetry:seed-evidence", "telemetry", lambda: agent_sweep.report_seed_telemetry(report, d))
+    report.guarded("telemetry:seed-module-evidence", "telemetry", lambda: agent_sweep.seed_module_probe(report, d))
 
 
 def browser_tests(report, deployment):
@@ -10041,7 +10169,8 @@ def browser_tests(report, deployment):
                                                   consumers[1] if len(consumers) > 1 else None))
 
 
-def customer_chat_tests(report, deployment, *, allow_agent_canary=False, allow_admin_agent_canary=False):
+def customer_chat_tests(report, deployment, *, allow_agent_canary=False, allow_admin_agent_canary=False,
+                        allow_tool_sweep=False):
     report.add("scope:customer-chat", "scope", "PASS",
                "Retained-consumer MCP reads only; no new accounts, orders or email. "
                "One chat request is opt-in; its normal Foundry response is stored and it may "
@@ -10053,8 +10182,10 @@ def customer_chat_tests(report, deployment, *, allow_agent_canary=False, allow_a
     if consumers:
         report.guarded("mcp-consumer:owner-denials", "live-denials",
                        lambda: available_products.update(consumer_mcp_owner_denials(report, deployment, consumers)))
-    customer_chat_live(report, deployment, consumers, available_products, allow_agent_canary=allow_agent_canary)
-    admin_chat_live(report, deployment, allow_agent_canary=allow_admin_agent_canary)
+    customer_chat_live(report, deployment, consumers, available_products, allow_agent_canary=allow_agent_canary,
+                       allow_tool_sweep=allow_tool_sweep)
+    admin_chat_live(report, deployment, allow_agent_canary=allow_admin_agent_canary,
+                    allow_tool_sweep=allow_tool_sweep)
 
 
 def catalog_agent_tests(report, deployment, *, allow_agent_canary=False):
@@ -10328,6 +10459,15 @@ def main(argv=None):
     parser.add_argument("--order-cancellation-canary", action="store_true",
                         help="With --order-canary or --all, create one storefront and one store order and "
                              "cancel both via the admin DAB path")
+    parser.add_argument("--agent-tool-sweep", action="store_true",
+                        help="With a chat canary or the order cancellation canary, prompt each reviewed chat tool "
+                             "not yet correlated and prove its MCP authorization and SQL identity in telemetry")
+    parser.add_argument("--generation-agent-canary", action="store_true",
+                        help="Run the AI customer generator (--live/--all) and, with the order cancellation "
+                             "canary, one AI order for a disposable customer that an admin cancels")
+    parser.add_argument("--hosted-agent-canary", action="store_true",
+                        help="With --live or --all, send one paid no-tool ReadOnly probe to the hosted Manufacturing "
+                             "agent and correlate its telemetry and api-mcp token exchange")
     parser.add_argument("--functions-host", action="store_true",
                         help="Also test the actual Functions worker in a loopback-only local namespace")
     args = parser.parse_args(argv)
@@ -10343,12 +10483,21 @@ def main(argv=None):
         parser.error("--email-content-agent-canary requires --email-content-agent, --live or --all")
     if args.product_content_agent_canary and not (args.live or args.all or args.product_content_agent):
         parser.error("--product-content-agent-canary requires --product-content-agent, --live or --all")
+    if args.hosted_agent_canary and not (args.live or args.all):
+        parser.error("--hosted-agent-canary requires --live or --all")
     if args.manufacturing_content_agent_canary and not args.manufacturing_content_agent:
         parser.error("--manufacturing-content-agent-canary requires --manufacturing-content-agent")
     if args.analysis_agent_canary and not args.analysis_agent:
         parser.error("--analysis-agent-canary requires --analysis-agent")
     if args.order_cancellation_canary and not (args.order_canary or args.all):
         parser.error("--order-cancellation-canary requires --order-canary or --all")
+    order_orders = args.order_canary and args.order_cancellation_canary
+    if args.agent_tool_sweep and not (args.customer_agent_canary or args.admin_agent_canary or order_orders):
+        parser.error("--agent-tool-sweep requires --customer-agent-canary, --admin-agent-canary "
+                     "or --order-canary with --order-cancellation-canary")
+    if args.generation_agent_canary and not (args.live or args.all or order_orders):
+        parser.error("--generation-agent-canary requires --live, --all "
+                     "or --order-canary with --order-cancellation-canary")
     if args.functions_host and not (args.offline or args.all):
         parser.error("--functions-host requires --offline or --all")
     output = (args.output or ROOT / ".auth-results" / str(uuid.uuid4())).resolve()
@@ -10370,7 +10519,9 @@ def main(argv=None):
         deployment = runtime or Deployment(args.environment)
         report.provenance["azdEnvironment"] = deployment.values.get("AZURE_ENV_NAME")
         report.guarded("order:scenario", "orders",
-                       lambda: run_order_canary(report, deployment, args.order_cancellation_canary))
+                       lambda: run_order_canary(report, deployment, args.order_cancellation_canary,
+                                                agent_sweep=args.agent_tool_sweep,
+                                                generation=args.generation_agent_canary))
         return report.save()
     if (args.browsers or args.chat or args.mcp_functions or args.catalog_agent or args.promotion_agent or
             args.email_content_agent or args.product_content_agent or args.manufacturing_content_agent):
@@ -10381,7 +10532,8 @@ def main(argv=None):
             browser_tests(report, deployment)
         elif args.chat:
             customer_chat_tests(report, deployment, allow_agent_canary=args.customer_agent_canary,
-                                allow_admin_agent_canary=args.admin_agent_canary)
+                                allow_admin_agent_canary=args.admin_agent_canary,
+                                allow_tool_sweep=args.agent_tool_sweep)
         elif args.mcp_functions:
             report.guarded("mcp-functions:scenario", "live-allows",
                            lambda: mcp_functions_proxy_tests(report, deployment))
@@ -10435,7 +10587,10 @@ def main(argv=None):
                      allow_email_content_agent_canary=args.email_content_agent_canary,
                      allow_product_content_agent_canary=args.product_content_agent_canary,
                      allow_promotion_agent_canary=args.promotion_agent_canary,
-                     allow_order_canary=args.all and args.order_cancellation_canary)
+                     allow_order_canary=args.all and args.order_cancellation_canary,
+                     allow_tool_sweep=args.agent_tool_sweep,
+                     allow_generation_canary=args.generation_agent_canary,
+                     allow_hosted_agent_canary=args.hosted_agent_canary)
     except (EvidenceError, KeyError, ValueError) as error:
         # Only known, non-sensitive discovery/shape errors. Unexpected programming errors remain visible.
         detail = str(error) if isinstance(error, EvidenceError) else "Unsupported inventory/configuration shape"

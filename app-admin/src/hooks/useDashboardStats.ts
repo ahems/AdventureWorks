@@ -34,7 +34,7 @@ export interface DashboardStats {
 }
 
 // Map numeric SalesOrderHeader.Status to display string
-// 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled
+// 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled, 7=Delivered
 export const ORDER_STATUS_LABELS: Record<number, string> = {
   1: "In Process",
   2: "Approved",

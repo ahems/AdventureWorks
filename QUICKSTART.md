@@ -1,329 +1,192 @@
-# Quickstart: Deploy the AdventureWorks Azure Demo
+---
+title: Deploy and explore AdventureWorks
+summary: Step-by-step guide to deploying the AdventureWorks Azure demo with the Azure Developer CLI (`azd up`), waiting for the asynchronous seed job, signing in with the demo identities and removing the environment afterwards.
+audience: [operator, demo-presenter]
+components: [app, app-admin, app-manufacturing, api, api-functions, api-mcp, mcp-inspector, manufacturing-agent, seed-job, infra]
+related: [README.md, docs/operations/deployment.md, docs/overview/demo-walkthrough.md, docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md, seed-job/README.md, docs/AZD_DEPLOYER_PERMISSIONS.md]
+---
 
-This guide covers deploying, exploring, and tearing down the Azure-hosted demo with **Azure Developer CLI (`azd`)**. It does not require running the application or its tests locally. A GitHub Codespace can be used as the deployment terminal.
+# Deploy and explore AdventureWorks
 
-Deploying from a local terminal or Codespace with `azd up` is the primary
-path. If your subscription only permits deployment from GitHub, the optional
+This quickstart deploys the whole AdventureWorks demo — three web apps, the APIs, the OAuth/MCP
+server, Microsoft Foundry agents and all supporting Azure resources — into your own subscription with
+one Azure Developer CLI (azd) command, then shows you how to sign in and explore it. You do not need to
+run anything locally.
+
+> **Demo / proof-of-concept only.** Each environment is disposable. Change the source or Bicep and
+> redeploy rather than repairing resources by hand, and delete the environment when you are done.
+
+For the full hook-by-hook explanation, see [Deployment](docs/operations/deployment.md). If your
+subscription only allows deployment from GitHub, the optional
 [GitHub Actions service-principal workflow](.github/workflows/README.md#azd-up-service-principalyml)
-uses the same `azd up` hooks and requires administrator setup first.
+runs the same `azd up` hooks after administrator setup.
 
-> **What you're deploying:** See the [architecture diagram](docs/AdventureWorks-Reference-Architecture.svg) for a visual map of all Azure components provisioned by `azd up`.
+## 1. Prerequisites
 
----
+| Requirement | Notes |
+| --- | --- |
+| Azure subscription | With quota for Azure SQL, Container Apps, Flex Consumption Functions and Foundry models in your chosen regions |
+| Deployer permissions | Contributor plus a conditioned role-assignment role — see [Deployer permissions](docs/AZD_DEPLOYER_PERMISSIONS.md) and [infra/README.md](infra/README.md) |
+| Azure Developer CLI (azd) 1.39.1 or later | Plus the `azure.ai.agents` extension (`azd extension install azure.ai.agents`), used to deploy the hosted Manufacturing agent |
+| Azure CLI (`az`) | Used by the deployment hooks |
+| Node.js and npm | Builds the storefront |
+| .NET 10 SDK | Publishes the Functions app and hosted agent |
+| Git LFS | Pulls the seed data and product images used by the seed job |
+| Docker | Optional; container images are built remotely in Azure Container Registry |
 
-## 1. Fork the Repository
+The repository's GitHub Codespace / dev container already includes these tools — see
+[Dev container](docs/operations/dev-container.md). On Windows, see
+[WSL deployment](docs/operations/wsl-deployment.md).
 
-Fork this repository on GitHub so you can create a Codespace and deploy resources into your own Azure subscription.
+## 2. Create an azd environment
 
----
-
-## 2. Open a deployment terminal
-
-The repository's GitHub Codespace includes the deployment tools (Azure CLI, azd, .NET, Node.js, and PowerShell). It is used here only to run the Azure deployment; there is no need to start the app locally.
-
-1. From your fork on GitHub, click **Code → Codespaces → Create codespace on main**.
-2. Wait for the container to build and VS Code (web or desktop) to connect.
-3. Once the container is ready, you should see the repo under `/workspaces/AdventureWorks` and the Azure CLI (`az`) and Azure Developer CLI (`azd`) available in the integrated terminal.
-
-> If you use another deployment terminal, install Azure CLI (`az`), azd, PowerShell 7+ (`pwsh`), .NET 10, Node.js/npm, and Git LFS. The post-provision hook uses these tools to configure Azure SQL and build the frontend and seed-job.
-
----
-
-## 3. Create an Environment and Log in to Azure
-
-Inside the Codespace terminal:
-
-```bash
-azd env new <your-environment-name>
-```
-
-The value you use to name your environment will be prepended with 'rg-' and this will be the name of the resource group used to deploy to.
-
-(Optional) If you need to set the Tenant ID or SUBSCRIPTION ID when logging in to Azure, you can do so first like so:
-
-```bash
-azd env set TENANT_ID "<your-tenant-id>"
-azd env set AZURE_SUBSCRIPTION_ID "<your-subscription-id>"
-```
-
-Also ensure `azd` is pointed at the correct subscription:
-
-```bash
-azd config set defaults.subscription <your-subscription-id>
-```
-
-Login to Azure:
+Fork or clone the repository, open a terminal at the repository root and sign in:
 
 ```bash
 az login --tenant <your-tenant-id>
+azd auth login
+azd env new <your-environment-name>
+azd env set AZURE_SUBSCRIPTION_ID <your-subscription-id>
+azd env set AZURE_LOCATION eastus2
+azd env set FOUNDRY_LOCATION swedencentral
 ```
 
-Note: If you encounter problems signing in to Azure due to multi-factor authentication enabled on your account, you may need to launch the codespace in Visual Studio Code on your desktop instead of in a browser.
+The resource group is named `rg-<your-environment-name>`. `AZURE_LOCATION` hosts the application
+resources and `FOUNDRY_LOCATION` hosts Microsoft Foundry and its model deployments.
 
-Set the Azure regions you want to deploy services to:
+### Optional: choose the AI models
 
-```bash
-azd env set AZURE_LOCATION "eastus2"
-azd env set FOUNDRY_LOCATION "swedencentral"
-```
+By default the `preup` hook discovers which chat, embedding and image models have quota in
+`FOUNDRY_LOCATION` and picks one of each. You can steer chat-model selection with:
 
-Optional: Set the OpenAI model parameters to use for chat, embeddings and image generation (example values shown):
+| Setting | Effect |
+| --- | --- |
+| `CHAT_MODEL_COST_TIER` | `economy`, `balanced` (default) or `premium` |
+| `CHAT_MODEL_NAME_REGEX` | Restrict candidates to matching model names |
+| `CHAT_MODEL_MIN_CAPACITY` | Minimum deployable capacity (default `1`) |
 
-```bash
-azd env set availableChatGptDeploymentCapacity 4500
-azd env set availableEmbeddingDeploymentCapacity 754
-azd env set availableImageDeploymentCapacity 1
-azd env set chatGptDeploymentVersion "2025-04-14"
-azd env set chatGptModelName "gpt-4.1-mini"
-azd env set chatGptSkuName "Standard"
-azd env set embeddingDeploymentModelName "text-embedding-3-small"
-azd env set embeddingDeploymentSkuName "GlobalStandard"
-azd env set embeddingDeploymentVersion 1
-azd env set imageDeploymentModelName "gpt-image-2"
-azd env set imageDeploymentSkuName "GlobalStandard"
-azd env set imageDeploymentVersion "2026-04-21"
-azd env set imageModelFormat "OpenAI"
-```
+For example, `azd env set CHAT_MODEL_COST_TIER economy` before `azd up`. Let the hook discover
+the model versions, SKUs and capacities rather than setting them by hand: the hook also prepares
+other environment values on a fresh environment.
 
-## 4. Provision and Deploy with `azd up`
+The image model is optional: when no image quota is available the demo deploys without AI image
+generation.
 
-The deploying account needs Contributor plus the scoped role-assignment
-permissions documented in [infra/README.md](infra/README.md). The subscription-
-specific custom role definition is [azd-deployer-role.json](infra/azd-deployer-role.json);
-assign it only with the allowlist condition described there. If your subscription
-administrator needs a justification and grant commands, share
-[Deployer Permissions: Why Contributor Is Not Enough](docs/AZD_DEPLOYER_PERMISSIONS.md).
-
-From the repo root inside the Codespace:
+## 3. Deploy with `azd up`
 
 ```bash
-cd /workspaces/AdventureWorks
 azd up --no-prompt
 ```
 
-> **Important:** Always use `--no-prompt` to avoid interactive prompts that can stall the deployment. The `azd` preflight validation may warn about AI model catalog entries and prompt for confirmation — `--no-prompt` auto-accepts non-destructive warnings and ensures the deployment runs end-to-end without hanging.
+Always pass `--no-prompt` so the run is unattended. Deployment time varies with region and quota;
+infrastructure provisioning alone takes around 20 minutes.
 
-`azd up` will:
+`azd up` provisions the Bicep templates in `infra/` and deploys eight services defined in `azure.yaml`:
+`app` (Static Web App), `app-admin`, `app-manufacturing`, `mcp-inspector`, `api` (Data API Builder) and
+`api-mcp` (Container Apps), `api-functions` (Flex Consumption) and `manufacturing-agent` (Foundry hosted
+agent). Bash lifecycle hooks in `scripts/hooks/` run around those steps:
 
-1. Execute the **preup** hook to create an AI Foundry and discover available model quotas for chat, embeddings, and image generation in your subscription.
-2. Run `azd provision` to deploy Bicep infrastructure templates under `infra/` (Container Apps, Azure SQL, Storage, OpenAI, etc.) — **~21 minutes**.
-3. Execute **postprovision.sh** to temporarily allow the deployment host's IPv4 address through the SQL firewall, configure managed-identity permissions, and deploy the seed-job Container App Job. The seed job runs asynchronously and may take several minutes to create the database schema and import AdventureWorks data.
-4. Run `azd deploy` to build Container Apps images via ACR remote build, publish the .NET Functions project to Flex Consumption, and deploy the frontend to Static Web Apps.
-5. Execute the **postdeploy** hook to configure runtime CORS settings and environment variables on the API Container App.
-6. Execute the **postup** hook to disable public SQL network access and print the demo URLs.
-
-The deployment host's address is discovered automatically for temporary SQL setup access. After deployment, public SQL access is disabled; the application reaches SQL through Private Link.
-
-Deployment time varies with Azure region, model quota, and resource provisioning. The seed job runs asynchronously and may continue after provisioning finishes.
-
-At the end, the deployment prints browser-ready URLs for the storefront, admin portal, manufacturing dashboard, service health page, and API explorers.
-
-Open the **service and seed-data status** URL first. Wait until the seed job reports completed before exploring the demo data. The Admin and Manufacturing Container Apps may take a moment to wake from scale-to-zero.
-
-### Important: what happens when the demo is idle
-
-The SQL Database is configured as General Purpose serverless with a 60-minute auto-pause delay. This does not mean the database will pause whenever the frontends and Container Apps are idle. `api-functions` keeps one Flex Consumption instance always ready for `OrderPlacedSqlTrigger`, which polls SQL Change Tracking on `Sales.SalesOrderHeader` so new orders can be processed reliably. That listener maintains SQL activity and prevents the zero-session condition required for auto-pause. The hourly delivery timer and weekly transaction-history archive are additional, intermittent SQL callers.
-
-Azure resources are not automatically shut down when the demo is idle. When the demo is finished, delete the deployment to stop ongoing costs:
-
-```bash
-azd down --no-prompt
+```mermaid
+sequenceDiagram
+    participant You
+    participant azd
+    participant Hooks as scripts/hooks
+    participant Azure
+    You->>azd: azd up --no-prompt
+    azd->>Hooks: preup.sh
+    Hooks->>Azure: Create resource group and Foundry account, select models
+    azd->>Azure: provision (Bicep)
+    azd->>Hooks: postprovision.sh
+    Hooks->>Azure: RBAC, signing certificate, start seed job (async), create Foundry agents
+    azd->>Hooks: predeploy.sh
+    Hooks->>Hooks: Generate storefront build configuration
+    azd->>Azure: deploy 8 services (remote builds, publish, SWA, hosted agent)
+    azd->>Hooks: postdeploy.sh
+    Hooks->>Azure: OAuth redirects, hosted-agent trust, Functions agent settings
+    azd->>Hooks: postup.sh
+    Hooks->>Azure: Disable public SQL access
+    Hooks-->>You: Print application URLs
 ```
 
-This deletes the deployed Azure resources. To run the demo again later, use `azd up --no-prompt`.
+| Hook | What it does |
+| --- | --- |
+| `preup.sh` | Persists your subscription and identity, creates the resource group and Foundry account, and selects AI models with available quota. |
+| `postprovision.sh` | Reconciles runtime role assignments, creates the OAuth signing certificate in Key Vault, builds the seed-job image and starts the seed job asynchronously, grants Foundry permissions and creates the Foundry agents. |
+| `predeploy.sh` | Writes `app/.env.production` (API, Functions, MCP and Application Insights URLs) and renders the Static Web App configuration. |
+| Service hooks | Configure DAB, Functions and the storefront after each deploys. |
+| `postdeploy.sh` | Publishes the hosted Manufacturing agent endpoint, trusts its identity in api-mcp, configures OAuth redirect URIs and refreshes Functions agent settings. |
+| `postup.sh` | Ensures the hosted agent exists, disables public network access to Azure SQL and removes the temporary client firewall rule, then prints the URLs. |
 
----
+Database users and permissions for the runtime identity are created by the seed job, which connects
+over the private network. Details: [Deployment](docs/operations/deployment.md).
 
-## 5. Files Used by `azd`
+## 4. Wait for the seed job
 
-### 5.1 `azure.yaml`
+The seed job is a Container Apps job that loads the AdventureWorks schema and data, around 1,800
+AI-generated product images and the demo extensions (vector embeddings, translations, manufacturing
+content and real-time triggers). It starts during `postprovision` and keeps running after `azd up`
+finishes — usually 8–15 minutes.
 
-`azure.yaml` is the **central configuration file** for Azure Developer CLI.
+Check progress in either of these ways:
 
-Key sections:
+- Open the storefront **`/health`** page (printed by `postup`). Its data section shows the seed status
+  reported by the Functions endpoint `GET /api/seed/status`.
+- List job executions with the Azure CLI:
 
-- **`name`**
-  - Logical application name: `adventureworks`.
+  ```bash
+  az containerapp job execution list \
+    --name "$(azd env get-value SERVICE_SEED_JOB_NAME --no-prompt)" \
+    --resource-group "$(azd env get-value AZURE_RESOURCE_GROUP --no-prompt)" \
+    --output table
+  ```
 
-- **`hooks`**
-  - Defines lifecycle scripts that run at specific `azd` phases (see below).
+Wait for the job to succeed before exploring data-backed features. See
+[seed-job/README.md](seed-job/README.md) for what it loads.
 
-- **`services`**
-  - Lists application services that `azd` will deploy:
-    - `api-mcp`: MCP server (host: `containerapp`, language: `docker`, remote ACR build).
-    - `api`: Data API Builder (`containerapp`, `docker`, remote build).
-    - `api-functions`: .NET isolated Azure Functions (`function`, `csharp`, direct project publish to Flex Consumption).
-    - `app`: React frontend (`staticwebapp`, `js`), custom `buildCommand` and `dist` output.
-    - `app-admin`: Admin portal (`containerapp`, `docker`, remote ACR build).
-    - `mcp-inspector`: MCP Inspector UI (`containerapp`, `docker`, remote ACR build).
+## 5. Sign in and explore
 
-- **`infra`**
-  - Points at the Bicep templates in `infra/` for infrastructure provisioning.
-
-`azd` reads this file to know **what to deploy**, **how to build it**, and **which hooks to run**.
-
----
-
-## 5.2 azd Lifecycle Hooks and Scripts
-
-The hooks configured in `azure.yaml` live under `scripts/` and are invoked automatically by `azd`.
-
-### Hook Overview
-
-Defined hooks:
-
-- `preup` → `scripts/hooks/preup.sh`
-- `postprovision` → `scripts/hooks/postprovision.sh`
-- `predeploy` → `scripts/hooks/predeploy.sh`
-- `postup` → `scripts/hooks/postup.sh`
-- root `postdeploy` → `scripts/hooks/postdeploy.sh`
-- service `postdeploy` hooks → API, Functions, and Static Web App configuration scripts
-
-#### Execution Order Around `azd up`
-
-1. `preup` (before anything else)
-2. `azd provision` (deploy infra)
-3. `postprovision`
-4. `azd deploy` (build + deploy app services)
-5. `predeploy` and `postdeploy` (around deployment, especially frontend)
-6. `postup` (final message display after `azd up` completes)
-
----
-
-### 5.2.1 `scripts/hooks/preup.sh`
-
-**Hook:** `preup`
-
-**When it runs:** Before `azd up` begins provisioning or deployment.
-
-**Purpose:** Create an AI Foundry and discover available AI model quotas for the application.
-
-Key responsibilities:
-
-- Provides helper functions to read and write `azd` environment values (`Get-AzdValue`, `Set-AzdValue`).
-- Ensures you are logged into Azure with the correct tenant and subscription.
-- Creates an **AI Foundry** in your subscription.
-- Discovers and validates available model quotas for:
-  - Chat models (e.g., GPT-4, GPT-5x, etc.)
-  - Embedding models (e.g., text-embedding-ada-002, gpt-x, etc.)
-  - Image generation models (e.g., gpt-image-x)
-- Sets or updates `azd` environment values with discovered model names and availability for later stages.
-
-This script is responsible for the **AI infrastructure preparation** that the rest of the app depends on.
-
-Chat selection defaults to the `balanced` policy, ranking model family and version
-ahead of available capacity. Optional `azd` settings are `CHAT_MODEL_NAME_REGEX`,
-`CHAT_MODEL_COST_TIER` (`economy`, `balanced`, or `premium`), and
-`CHAT_MODEL_MIN_CAPACITY` (default `1`). A valid policy with no matching candidates
-uses the general-chat fallback; policy evaluation errors abort with jq diagnostics
-instead of being reported as a no-match. Complete existing model selections are
-preserved and skip discovery on subsequent runs.
-
----
-
-### 5.2.2 `scripts/hooks/postup.sh`
-
-**Hook:** `postup`
-
-**When it runs:** After `azd up` completes successfully.
-
-**Purpose:** Finish the deployment and show the URLs for using the Azure-hosted demo.
-
-The hook disables public access to Azure SQL, prints the storefront and service-health URLs, and includes links to the API explorers and optional MCP Inspector. Use the service-health page to confirm the seed job has completed before exploring database-backed features.
-
----
-
-### 5.2.3 `scripts/hooks/postprovision.sh`
-
-**Hook:** `postprovision`
-
-**When it runs:** After `azd provision` (infrastructure deployment) but **before** app services are built and deployed.
-
-**Duration:** Varies by Azure environment. It launches an asynchronous seed job that may take several minutes to finish.
-
-**Purpose:** Finalize infrastructure configuration, especially around Azure SQL, managed identity, and database seeding.
-
-Key responsibilities:
-
-- Prepares frontend build endpoints and the MCP OAuth signing certificate.
-  - Temporarily allows the deployment host's public IPv4 address through the Key
-    Vault firewall for certificate lookup/creation, then removes only the rule
-    added by this run, including on failure. Existing client rules are preserved.
-    IP discovery can be overridden with `KEY_VAULT_CLIENT_IP` (or `SQL_CLIENT_IP`).
-    The vault's default-deny firewall remains enabled throughout.
-- Checks whether the deployer has effective write access to the Container Apps
-  environment for Aspire Dashboard use. Existing Contributor access is used;
-  the hook does not create an additional role assignment.
-- Ensures the user‑assigned managed identity has the correct database permissions:
-  - Connects to Azure SQL using the current user's Azure CLI credentials.
-  - Executes `seed-job/sql/assign-database-roles.sql` to grant db_datareader, db_datawriter, and db_ddladmin roles to the managed identity.
-- Enables SQL Change Tracking for order processing and assigns project-scoped Azure AI permissions.
-- Creates or updates the Azure AI agents used by the demo.
-- Deploys the **seed-job** Container App Job:
-  - Builds the seed-job container image using Azure Container Registry (`az acr build`).
-  - Updates the Container App Job with the new image.
-  - Starts the seed-job asynchronously to populate the database with schema and data from `seed-job/sql/`.
-- Refreshes the azd environment with the deployment outputs.
-
-The seed-job runs as a containerized Azure Container App Job that:
-
-- Executes `seed-database.ps1` inside the container.
-- Loads SQL scripts (`AdventureWorks.sql`, `AdventureWorks-AI.sql`) and CSV files (both original and AI-enhanced).
-- Populates product images from the `seed-job/images/` directory.
-- **Takes approximately 8 minutes** to complete database seeding.
-
-In short, `postprovision` wires up the **database and identity layer**, then triggers an asynchronous job to populate the database so the app can talk to SQL using managed identity with a fully seeded dataset.
-
-**Note:** You can monitor seed-job execution with:
+Print the application URLs at any time:
 
 ```bash
-az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
+bash scripts/utilities/list-app-urls.sh
 ```
 
-For complete details on the seed-job architecture, components, and data loading process, see [seed-job/README.md](../seed-job/README.md).
+| App | Who signs in | Demo identity |
+| --- | --- | --- |
+| Storefront | Shoppers — browse anonymously or create an account with **Sign up** | Your own new consumer account |
+| Admin portal | Employees | Ken Sánchez, `ken0@adventure-works.com` (role `executive-admin`) |
+| Manufacturing portal | Manufacturing staff | Peter Krebs, `peter0@adventure-works.com` (role `manufacturing-engineer`) |
+| MCP Inspector | Developers exploring MCP tools | Signs in through api-mcp OAuth with a demo identity |
 
----
+Ken and Peter are the seeded demo sign-ins; the admin and manufacturing login pages offer them as
+click-to-fill demo identities. Container Apps scale to zero, so the first request after an idle period
+can take a few seconds.
 
-### 5.2.4 `scripts/hooks/predeploy.sh`
+Next steps:
 
-**Hook:** `predeploy`
+- Follow the [demo walkthrough](docs/overview/demo-walkthrough.md) for a guided 15–30 minute tour.
+- Call protected APIs from scripts with
+  [authenticated deployment scripts](docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md)
+  (`scripts/utilities/azure-auth.py`).
+- Browse the [feature catalog](docs/overview/feature-catalog.md) or the
+  [documentation hub](docs/README.md).
 
-**When it runs:** Before `azd deploy` builds and deploys app services (especially the Static Web App).
+## 6. Update, recreate and remove
 
-**Purpose:** Prepare the frontend build with the correct runtime API endpoints.
+- **Deploy code changes** to the existing environment with `azd deploy --no-prompt` (optionally naming
+  a service, for example `azd deploy api-functions --no-prompt`).
+- **Recreate the environment** when a change needs new infrastructure or a fresh database. This is a
+  user-run operation that permanently deletes the current environment and its data; the exact command
+  is in [.github/copilot-instructions.md](.github/copilot-instructions.md#azure-environment-policy-demopoc-only).
+  AI coding agents must not run it.
+- **Idle cost:** resources are not shut down automatically. Two always-ready Functions instances run
+  the SQL change listeners, which also keep the serverless database (60-minute auto-pause) from
+  pausing. Remove everything when finished:
 
-What it does:
+  ```bash
+  azd down --no-prompt
+  ```
 
-- Reads `API_URL`, `API_FUNCTIONS_URL`, and `APPINSIGHTS_CONNECTIONSTRING` from `azd env`.
-- Exports them as `VITE_API_URL`, `VITE_API_FUNCTIONS_URL`, and `VITE_APPINSIGHTS_CONNECTIONSTRING` so they’re available during `npm run build`.
-- Writes `app/.env.production` with these Vite variables to drive the production build.
-- Cleans `app/dist` to ensure a fresh build.
-- Generates `app/staticwebapp.config.json` from `staticwebapp.config.template.json` by substituting `{{API_FUNCTIONS_URL}}` with the actual Functions endpoint.
+  Add `--purge` to also purge soft-deleted Key Vault and Foundry resources.
 
-This ensures the deployed Static Web App is built **against the correct backend URLs and telemetry settings**.
-
----
-
-### 5.2.5 `scripts/hooks/postdeploy.sh`
-
-**Hook:** `postdeploy`
-
-**When it runs:** After `azd deploy` has deployed services (Container Apps, Static Web App, etc.).
-
-**Purpose:** Final runtime configuration for OAuth redirects, CORS, and the Azure Functions app settings.
-
-What it does:
-
-- Configures the API Container App's CORS origin.
-- Sets OAuth callback URLs on the MCP service after all frontend URLs are available.
-- Injects Foundry agent configuration into the Azure Functions app.
-
-Together, the hooks prepare Azure resources, deploy the app, and print the links needed to use it. No local app startup or local tests are part of this demo workflow.
-
----
-
-## 6. Next Steps
-
-After `azd up` completes, open the storefront URL printed by the deployment. Visit its `/health` page and wait for the seed job to report completed before exploring database-backed features. The Admin and Manufacturing apps may take a moment to wake from scale-to-zero.
-
-When the demo is finished, run `azd down --no-prompt` from the project directory to delete the Azure resources and stop ongoing costs. Run `azd up --no-prompt` later to deploy the demo again.
+If something fails, see [Troubleshooting](docs/operations/troubleshooting.md).

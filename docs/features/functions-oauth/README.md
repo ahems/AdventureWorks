@@ -1,17 +1,24 @@
+---
+title: Functions API OAuth resource server
+summary: How the api-functions worker middleware validates api-mcp-issued, Functions-audience JWTs and applies per-route tier, scope, category and ownership policy to all 200 HTTP functions, with FUNCTIONS_OAUTH_MODE=enforced.
+audience: [developer, security-reviewer, ai-agent]
+components: [api-functions, api-mcp, app, app-admin, app-manufacturing, infra]
+related: [../authentication/END_TO_END_AUTHENTICATION.md, ../../architecture/identity-and-auth.md, ROUTE_SCOPE_MATRIX.md, ../mcp-oauth/README.md, ../../testing/AZURE_AUTHENTICATED_SCRIPTS.md]
+---
+
 # Functions API OAuth Authorization
 
-For cross-solution coverage, executable validation and known gaps, see
-[end-to-end authentication assurance](../authentication/END_TO_END_AUTHENTICATION.md).
-Route counts reflect the latest source inventory; use the runner's reflected
-inventory to detect later changes.
+For cross-solution coverage and executable validation, see
+[end-to-end authentication assurance](../authentication/END_TO_END_AUTHENTICATION.md);
+for a short overview see [identity and authentication](../../architecture/identity-and-auth.md).
+Use the assurance runner's reflected inventory to detect route changes.
 
-> Extends the self-contained AdventureWorks OAuth demo — already protecting the **MCP**
+> Extends the self-contained AdventureWorks OAuth demo — which also protects the **MCP**
 > server ([`docs/features/mcp-oauth`](../mcp-oauth/README.md)) and the **DAB** GraphQL/REST
 > API (JWT config in [`api/dab-config.json`](../../../api/dab-config.json), see
-> [`api/README.md`](../../../api/README.md)) — to the previously-anonymous
-> **`api-functions`** HTTP surface.
+> [`api/README.md`](../../../api/README.md)) — to the **`api-functions`** HTTP surface.
 >
-> **Status: Enforced.** The `api-functions` resource server validates api-mcp-issued bearer
+> The `api-functions` resource server validates api-mcp-issued bearer
 > tokens and applies per-route scope/category/ownership checks, with `FUNCTIONS_OAUTH_MODE=enforced`.
 > All three first-party apps attach per-user Functions tokens minted silently from their sign-in
 > refresh token, and api-mcp attaches a self-minted **service token** to the calls its MCP tools
@@ -21,7 +28,7 @@ inventory to detect later changes.
 ## Contents
 
 - [What this covers](#what-this-covers)
-- [Current state](#current-state)
+- [Trigger inventory](#trigger-inventory)
 - [Relationship to the MCP and DAB OAuth work](#relationship-to-the-mcp-and-dab-oauth-work)
 - [Caller topology (who calls api-functions)](#caller-topology-who-calls-api-functions)
 - [Authorization tiers](#authorization-tiers)
@@ -32,7 +39,7 @@ inventory to detect later changes.
 - [Resource identifier / audience design](#resource-identifier--audience-design)
 - [Route-to-scope matrix](#route-to-scope-matrix)
 - [Enforcement modes](#enforcement-modes)
-- [Implementation roadmap](#implementation-roadmap)
+- [Deployment wiring](#deployment-wiring)
 - [Remaining limitations](#remaining-limitations)
 - [Source map](#source-map)
 
@@ -59,14 +66,14 @@ Structurally invalid JWTs are rejected before metadata retrieval. Well-formed to
 still require normal signing-key, issuer, audience and lifetime validation and fail
 closed if OAuth metadata is unavailable.
 
-An earlier matrix passed **733 cases over 196 policies**, and that complete Functions
-suite now passes **1,053 tests**, including 22 address ownership handler cases and
-six private fixture-identity cases. The assurance runner reconciles exact current-run TRX
-case names against its reflected inventory: missing/skipped/duplicated/new-policy
-evidence cannot pass. It retains a separate BLOCKED obligation for a complete real
-host/route-binding and mutation-side-effect matrix and for SQL-backed ownership.
-The middleware challenge now trims the issuer's trailing slash before advertising
-`/.well-known/oauth-protected-resource`.
+The middleware matrix and `FunctionAuthorizationRegistryTests` together cover every
+classified policy; there is no startup coverage check in the Functions host, but in
+enforced mode an unclassified HTTP function is denied. The assurance runner
+reconciles exact current-run TRX case names against its reflected inventory:
+missing/skipped/duplicated/new-policy evidence cannot pass. It keeps a separate
+BLOCKED obligation for a complete real host/route-binding and mutation-side-effect
+matrix and for SQL-backed ownership. The middleware challenge trims the issuer's
+trailing slash before advertising `/.well-known/oauth-protected-resource`.
 
 Run locally with existing restored dependencies:
 
@@ -88,15 +95,14 @@ valid-token ownership and side effects.
 provides custom business logic for the e-shop, admin, and manufacturing frontends, plus AI
 agent hosting and simulators. Every one of its **200 HTTP-triggered Functions is declared
 `AuthorizationLevel.Anonymous`** at the platform level; authorization is applied by the OAuth
-middleware instead. This work decides — for each route — whether it should stay
-anonymous or become an OAuth-protected resource, and with which scope and access mode, reusing
-the exact same authorization server, scope catalog, and validation approach already shipped for
-MCP and DAB.
+middleware instead. Each route is either explicitly public or an OAuth-protected resource with
+a scope and access mode, using the same authorization server, scope catalog and validation
+approach as MCP and DAB.
 
 Non-HTTP queue, SQL, timer and Durable triggers are internal and not externally
 reachable; their Azure dependency identities still require separate assurance.
 
-## Current state
+## Trigger inventory
 
 | Trigger kind | Count | In scope for OAuth? |
 | ------------ | ----- | ------------------- |
@@ -106,14 +112,12 @@ reachable; their Azure dependency identities still require separate assurance.
 | Timer (`TimerTrigger`) | 6 | No — internal |
 | Durable activity / orchestration | 17 / 5 | No — internal |
 
-All HTTP routes were anonymous before this work. `Program.cs` uses
-`ConfigureFunctionsWebApplication()` (ASP.NET Core integration), so a JWT-validation
-**middleware** (`IFunctionsWorkerMiddleware`,
+`Program.cs` uses `ConfigureFunctionsWebApplication()` (ASP.NET Core integration), so a
+JWT-validation **middleware** (`IFunctionsWorkerMiddleware`,
 [`FunctionsAuthorizationMiddleware`](../../../api-functions/Auth/FunctionsAuthorizationMiddleware.cs))
-is now the enforcement point — the same signature/issuer/audience/lifetime/subject/scope checks
+is the enforcement point — the same signature/issuer/audience/lifetime/subject/scope checks
 used by the MCP and DAB resource servers, validating against the api-mcp JWKS. Enforcement is
-gated by [mode](#enforcement-modes). Every first-party client supplies a Functions token, so the
-deployed mode is `enforced`.
+gated by [mode](#enforcement-modes); the deployed mode is `enforced`.
 
 ## Relationship to the MCP and DAB OAuth work
 
@@ -138,7 +142,7 @@ flowchart LR
     MFG[app-manufacturing<br/>manufacturing staff only]
   end
   MCP[api-mcp<br/>MCP tools]
-  FUNC[api-functions<br/>199 HTTP Functions]
+  FUNC[api-functions<br/>200 HTTP Functions]
 
   ESHOP -->|catalog, addresses, receipts,<br/>agent/chat, pre-auth| FUNC
   ADMIN -->|reporting, simulators, reviews,<br/>B2B store, AI generation| FUNC
@@ -165,16 +169,15 @@ Every route is assigned exactly one tier (full list in
 | ---- | ---- | ------- | ----- |
 | **P** | Anonymous | No token. Public catalog, discovery, health, password-reset pre-auth, consumer signup, and bounded cart capability handlers. | 20 |
 | **A** | Authenticated (group-scoped) | Valid Functions token + `realtime.connect`; group grants also require the mapped domain scope/category. | 1 |
-| **C** | Consumer (ownership) | Valid token + business scope; consumers are restricted to their **own** records. Some handlers also constrain internal callers. | 16 |
+| **C** | Consumer (ownership) | Valid token + business scope; consumers are restricted to their **own** records. Some handlers also constrain internal callers. | 17 |
 | **I** | Internal-only | Valid token + business scope + **non-consumer category** (defense-in-depth). Includes the 40 MCP-proxied routes. | 162 |
-| | | **Total** | **199** |
+| | | **Total** | **200** |
 
 ## MCP-proxied routes — api-mcp service token
 
-The 40 endpoints the four proxy services call were originally left anonymous ("Tier M") because
-api-mcp had no way to obtain a Functions-audience token. They are now ordinary **Internal-only**
-routes. api-mcp *is* the authorization server, so it mints its own token in-process — no client
-secret, no extra grant, no network round-trip:
+The 40 endpoints the four proxy services call are ordinary **Internal-only** routes.
+api-mcp *is* the authorization server, so it mints its own Functions-audience token
+in-process — no client secret, no extra grant, no network round-trip:
 
 ```mermaid
 sequenceDiagram
@@ -211,24 +214,24 @@ widens what a user can do; browsers reach the same routes only with their **own*
 Reuses the shared business-domain catalog in
 [`OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs). Distribution across the protected Function policies (Tier A/C/I):
 
-| Scope | Routes | New? |
-| ----- | -----: | ---- |
-| `admin.write` | 42 | existing |
-| `manufacturing.read` | 43 | existing |
-| `sales.read` | 23 | existing |
-| `manufacturing.write` | 27 | existing |
-| `admin.read` | 19 | existing |
-| `orders.write` | 7 | existing |
-| `customers.write` | 5 | existing |
-| `orders.read` | 5 | existing |
-| `customers.read` | 4 | existing |
-| **`realtime.connect`** | 1 | **new — added by this work** |
+| Scope | Routes |
+| ----- | -----: |
+| `manufacturing.read` | 43 |
+| `admin.write` | 42 |
+| `manufacturing.write` | 27 |
+| `sales.read` | 23 |
+| `admin.read` | 19 |
+| `orders.write` | 9 |
+| `orders.read` | 6 |
+| `customers.write` | 5 |
+| `customers.read` | 5 |
+| `realtime.connect` | 1 |
 
 `realtime.connect` is required to negotiate a browser Web PubSub capability. It does
 not grant arbitrary group membership: the caller also needs each group's mapped
 business scope, and internal groups require a recognized internal category.
-The group-to-scope map is implemented and tested in `WebPubSubService`; the
-seeded role grants and frontend scope requests are included in this work. The
+The group-to-scope map is implemented and tested in `WebPubSubService`, and every
+seeded role and frontend requests `realtime.connect`. The
 `customers.write` scope remains required for self-owned address changes through
 Functions. Scope assignments align with the sibling MCP matrix wherever a
 parallel capability exists.
@@ -244,43 +247,38 @@ Tier C routes require the scope **and** record ownership. Ownership is resolved 
 from the validated token's subject/owner claims (`customer_id` / `business_entity_id`), never from
 a client-supplied identifier. Address endpoints overwrite consumer-supplied owner identifiers
 with the signed owner, and id-addressed operations check the address link before reading or
-mutating it. Consumer listings now filter the SQL query by that owner before pagination,
-rather than filtering an already fetched global page. Internal roles (with the same scope)
-retain unrestricted pagination.
+mutating it. Consumer listings filter the SQL query by that owner before pagination.
+Internal roles (with the same scope) retain unrestricted pagination.
 
 The [address handler tests](../../../api-functions.Tests/AddressOwnershipTests.cs) exercise
-22 two-owner, missing-owner, supplied-owner override and internal-compatibility cases with
+two-owner, missing-owner, supplied-owner override and internal-compatibility cases with
 the production camelCase serializer. Denied operations make no fake persistence reads or
 mutations. Offline/all requires all exact current-run TRX cases to pass once; this handler
 seam is not a SQL or running-host mutation proof.
 
 Live/all uses GET-only address/person-address reads with the two retained consumers.
-Nonempty fixtures must prove own-record success and the exact other-owner 403 error.
-The targeted deployed run records **4 PASS, 2 BLOCKED** because both retained fixtures
-have no addresses. Empty lists do not establish record ownership or nonempty pagination.
+Nonempty fixtures must prove own-record success and the exact other-owner 403 error;
+empty lists do not establish record ownership or nonempty pagination.
 The standalone opt-in `--address-only` mode creates run-scoped fixtures through
 Functions and DAB, records requests in an ephemeral test table, and verifies state
 with read-only SQL. Exact owner/reference checks gate API cleanup; uncertain writes
-or probes stop cleanup and are reported. This revised path has not yet been run
-against the deployment. An earlier **29 PASS** private run used direct SQL fixtures
-and does not verify the revised lifecycle or shared-address coverage. See the
-[authentication guide](../authentication/END_TO_END_AUTHENTICATION.md#target-and-assurance-status).
+or probes stop cleanup and are reported. See the
+[authentication guide](../authentication/END_TO_END_AUTHENTICATION.md#target-and-assurance-status)
+for current assurance results.
 
 The [password handler tests](../../../api-functions.Tests/PasswordOwnershipTests.cs)
-add 30 two-owner/customer-type cases using `IPasswordService`. Consumer set/verify
+add two-owner/customer-type cases using `IPasswordService`. Consumer set/verify
 is self-only; internal resets check the target is an individual customer before
 writing, and internal verification is still self-only. Missing/unrecognized
 identity context fails closed before storage. Worker token/scope enforcement
 remains separate; signup stays public. Every exact current-run TRX case must pass
-once in offline/all. Full Functions tests: **1,094 PASS**; Python regressions:
-**102 PASS**. Normal targeted Functions deployment succeeded.
+once in offline/all.
 
 Live/all also uses the retained consumers for verification-only calls: correct
 and incorrect own passwords, plus the exact other-owner denial in both
-directions. The targeted deployed report has **9 PASS** (six verification calls,
-two fixture logins and the handler-evidence gate). No passwords are changed or
-accounts created. Customer-only reset mutations and SQL persistence are not
-proven by these fake-write tests or read-only host requests.
+directions. No passwords are changed or accounts created. Customer-only reset
+mutations and SQL persistence are not proven by these fake-write tests or
+read-only host requests.
 
 ## Resource identifier / audience design
 
@@ -296,21 +294,22 @@ proven by these fake-write tests or read-only host requests.
 
 ## Route-to-scope matrix
 
-The complete, authoritative source classification of all 199 Functions is in
+The complete, authoritative source classification of all 200 HTTP Functions is in
 **[`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md)** — grouped by functional area, with method,
 route, tier, required scope, access mode, and ownership key for every endpoint. It is the source of
-truth the resource server enforces. Completeness is guaranteed by a reflection test
-(`FunctionAuthorizationRegistryTests`) that fails closed if any HTTP-triggered `[Function]` is not
-classified in the registry — exactly as `McpAuthorizationExtensions` does for MCP tools.
+truth the resource server enforces. Completeness is checked by a reflection test
+(`FunctionAuthorizationRegistryTests`) that fails if any HTTP-triggered `[Function]` is not
+classified in the registry, and in enforced mode the middleware denies any unclassified
+function. (api-mcp goes further for MCP tools and fails startup on an unclassified tool.)
 
 ## Enforcement modes
 
 The resource server reads `FUNCTIONS_OAUTH_MODE`
 ([`FunctionsOAuthOptions`](../../../api-functions/Auth/FunctionsOAuthOptions.cs)). Enforcement is
 only possible when the issuer, audience, and OIDC metadata address are all resolved from
-configuration. Explicit `enforced` or `audit` with incomplete configuration now fails
+configuration. Explicit `enforced` or `audit` with incomplete configuration fails
 startup; invalid mode strings also fail instead of silently disabling protection.
-An unset mode still defaults to `disabled` for local development.
+An unset mode defaults to `disabled` for local development.
 
 | Mode | Token absent | Token present | Blocks? | Purpose |
 | ---- | ------------ | ------------- | ------- | ------- |
@@ -318,7 +317,8 @@ An unset mode still defaults to `disabled` for local development.
 | `audit` | allowed | validated; allow/deny logged to App Insights | never | Shadow mode for diagnosing a new client before enforcing. |
 | `enforced` *(deployed)* | protected routes → `401` | validated + scope/category/ownership enforced | yes | Full enforcement. |
 
-Infrastructure wires the mode in [`infra/main.bicep`](../../../infra/main.bicep) as `enforced`.
+Infrastructure sets the mode to `enforced` in
+[`infra/modules/flex-api-functions.bicep`](../../../infra/modules/flex-api-functions.bicep).
 Tier P routes bypass middleware. `agent/chat` then validates an MCP-audience token
 inside its handler; it is not an anonymous business endpoint.
 
@@ -332,39 +332,35 @@ inside its handler; it is not an anonymous business endpoint.
 | api-mcp proxy tools | In-process service token ([`FunctionsServiceTokenHandler`](../../../api-mcp/AdventureWorks/Auth/FunctionsServiceTokenHandler.cs)). |
 | AI agent chat | `agent/chat` is Tier P and receives the user's **MCP**-audience token, which it forwards to `/mcp`. |
 
-## Implementation roadmap
+## Deployment wiring
 
-The original OAuth integration phases are implemented; end-to-end assurance and
-source/deployment reconciliation remain incomplete.
-
-- **Phase A — Classification:** this document + the route matrix.
-- **Phase B — Authorization server:** `functions` resource identifier + protected-resource
-  metadata; `customers.write` scope and role grants; `FunctionsResourceTokenTests`.
-- **Phase C — Resource server in `api-functions`:** JWT-validation middleware
+- **Authorization server:** api-mcp allows the `{issuer}/functions` resource, publishes
+  protected-resource metadata and grants `customers.write` and `realtime.connect` to the
+  relevant roles (`FunctionsResourceTokenTests`).
+- **Resource server:** JWT-validation middleware
   ([`FunctionsAuthorizationMiddleware`](../../../api-functions/Auth/FunctionsAuthorizationMiddleware.cs))
-  + a visible per-route policy registry
+  plus a visible per-route policy registry
   ([`FunctionAuthorizationRegistry`](../../../api-functions/Auth/FunctionAuthorizationRegistry.cs),
-  mirroring the MCP tool registry) + Tier-C ownership checks
+  mirroring the MCP tool registry) and Tier-C ownership checks
   ([`AddressFunctions`](../../../api-functions/Functions/AddressFunctions.cs),
-  [`PasswordFunctions`](../../../api-functions/Functions/PasswordFunctions.cs)); structured App
-  Insights authz telemetry.
-- **Phase D — Frontends:** the e-shop, admin and manufacturing apps attach per-user Functions tokens
-  silently after sign-in. Admin and manufacturing sign-in is performed solely by the api-mcp
+  [`PasswordFunctions`](../../../api-functions/Functions/PasswordFunctions.cs)), with structured
+  App Insights authorization telemetry.
+- **Frontends:** the e-shop, admin and manufacturing apps attach per-user Functions tokens
+  silently after sign-in. Admin and manufacturing sign-in is performed by the api-mcp
   authorization server, which rejects users whose category does not match the portal.
-- **Phase E — api-mcp service token:** the proxied endpoints graduated from anonymous to
-  Internal-only.
-- **Phase F — Infrastructure/AZD:** inject `FUNCTIONS_JWT_ISSUER` / `FUNCTIONS_JWT_AUDIENCE` /
-  `FUNCTIONS_OAUTH_MODE=enforced` into the Function App settings from the deployed api-mcp FQDN.
-- **Phase G — Docs & tests:** offline unit tests
-  ([`api-functions.Tests`](../../../api-functions.Tests/)) covering registry completeness/no-stale
-  entries, enforcement-mode resolution, and token-claim projection; portal category gating tests in
+- **api-mcp proxy:** proxied endpoints are Internal-only and receive the in-process service token.
+- **Infrastructure:** `flex-api-functions.bicep` sets `FUNCTIONS_JWT_ISSUER`,
+  `FUNCTIONS_JWT_AUDIENCE` and `FUNCTIONS_OAUTH_MODE=enforced` from the deployed api-mcp FQDN.
+- **Tests:** offline unit tests ([`api-functions.Tests`](../../../api-functions.Tests/)) cover
+  registry completeness/no-stale entries, enforcement-mode resolution and token-claim projection;
+  portal category gating tests are in
   [`api-mcp/AdventureWorks.Tests`](../../../api-mcp/AdventureWorks.Tests/PortalCategoryGatingTests.cs).
 
 ## Remaining limitations
 
 - **Password-reset pre-auth flows and consumer signup stay anonymous by necessity** —
   `password/reset/*` and `signup` happen before the user has a token. `POST /api/password` and
-  `POST /api/password/verify` now require a token: consumers act only on themselves, staff may only
+  `POST /api/password/verify` require a token: consumers act only on themselves, staff may only
   reset **customer** passwords, and verify is self-only (no password oracle).
 - **`agent/status` stays public.** `agent/chat` bypasses Functions-audience middleware
   but requires a validated MCP-audience user token in its handler before forwarding;
@@ -376,7 +372,7 @@ source/deployment reconciliation remain incomplete.
 
 | Path | Role |
 | ---- | ---- |
-| [`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md) | Complete source route → tier/scope/mode/ownership matrix (all 199 Functions) |
+| [`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md) | Complete source route → tier/scope/mode/ownership matrix (all 200 HTTP Functions) |
 | [`api-mcp/AdventureWorks/Auth/OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs) | Shared business-domain scope catalog (reused) |
 | [`api-mcp/AdventureWorks/Auth/ApplicationRoles.cs`](../../../api-mcp/AdventureWorks/Auth/ApplicationRoles.cs) | Role → scope mapping (reused) |
 | [`api-mcp/AdventureWorks/Auth/AuthorizationServerOptions.cs`](../../../api-mcp/AdventureWorks/Auth/AuthorizationServerOptions.cs) | Resource identifiers / `AllowedResources()` (includes `functions`) |
@@ -384,6 +380,6 @@ source/deployment reconciliation remain incomplete.
 | [`api-functions/Auth/`](../../../api-functions/Auth/) | The resource server: policy registry, options, token validator, user model, and enforcement middleware |
 | [`api-functions/Functions/AddressFunctions.cs`](../../../api-functions/Functions/AddressFunctions.cs) | Tier-C consumer record-ownership reference implementation |
 | [`app/src/services/eshopOAuth.ts`](../../../app/src/services/eshopOAuth.ts) | E-shop credential exchange and silent DAB/Functions token refresh |
-| [`infra/modules/flex-api-functions.bicep`](../../../infra/modules/flex-api-functions.bicep) · [`infra/main.bicep`](../../../infra/main.bicep) | Injects issuer/audience/mode into the Flex Consumption Function App settings |
+| [`infra/modules/flex-api-functions.bicep`](../../../infra/modules/flex-api-functions.bicep) | Injects issuer/audience/mode into the Flex Consumption Function App settings |
 | [`api-functions.Tests/`](../../../api-functions.Tests/) | Offline resource-server unit tests (registry coverage, mode resolution, claim parsing) |
 | [`docs/features/mcp-oauth/README.md`](../mcp-oauth/README.md) · [`api/README.md`](../../../api/README.md) | Sibling OAuth designs this extends (MCP + DAB) |

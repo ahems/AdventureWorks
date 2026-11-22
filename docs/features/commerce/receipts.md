@@ -1,299 +1,127 @@
-# Order Receipt PDF Generation - Azure Function
+---
+title: Order receipts (PDF generation and email)
+summary: How Azure Functions generate a PDF receipt for each order with QuestPDF, store it in private Blob Storage, email it through Azure Communication Services, and let customers download or resend it.
+audience: [developer, operator, demo-presenter]
+components: [app, app-admin, api-functions, infra]
+related:
+  - order-lifecycle.md
+  - ../email/email-notifications.md
+  - ../../reference/storage-resources.md
+  - ../../reference/functions-routes.md
+---
 
-## Overview
+# Order receipts (PDF generation and email)
 
-This Azure Function generates PDF receipts for customer orders in the AdventureWorks system. It uses a **fire-and-forget** pattern with queue-based processing, allowing you to submit multiple order receipts for generation without waiting for each one to complete.
+Every new order gets a branded PDF receipt. Azure Functions builds the PDF in the background, stores it in a private blob container and emails it to the customer. Customers can download or resend their own receipts, and admins can regenerate receipts in bulk.
 
-## Architecture
+## What it does
 
-- **HTTP Trigger**: Accepts requests to generate receipts for one or more orders
-- **Queue Storage**: Orders are queued for asynchronous processing
-- **Queue Trigger**: Processes each order individually
-- **Blob Storage**: Generated PDFs are stored in `CustomerReceipts/` folder
-- **Naming**: PDFs are named using the `SalesOrderNumber` (e.g., `SO43659.pdf`)
+- Generates a PDF receipt automatically when an order is inserted.
+- Emails the receipt as an attachment ("🎉 Demo Order Confirmed - SO…").
+- Lets a signed-in customer check, download or resend the receipt for their own order from the storefront account page.
+- Lets admins regenerate receipts for specific orders or fill in any missing receipts.
 
-## Components
+The PDF contains a header, order information, customer and shipping details, a line-item table, applied special offers and totals, styled with the storefront colours (`#FF5E5B` and `#4a7c59`).
 
-### 1. **Models/ReceiptData.cs**
+## Try it
 
-Data model containing all order information needed for the receipt:
+- **UI (customer):** sign in to the storefront, open **Account → Orders** and choose **Resend receipt**.
+- **API (admin):** regenerate receipts for chosen orders (this sends email if the customer has a deliverable address):
 
-- Order details (ID, number, date, status)
-- Customer information (name, email, ID)
-- Billing and shipping addresses
-- Line items with products, quantities, prices
-- Totals (subtotal, tax, shipping, discounts)
-- Applied special offers
+  ```bash
+  python3 scripts/utilities/azure-auth.py request \
+    --identity admin --resource functions --path /api/GenerateOrderReceipts_HttpStart \
+    --method POST --data '{"salesOrderNumbers":["SO43659"]}'
+  ```
 
-### 2. **Services/ReceiptService.cs**
+## How it works
 
-Database service that retrieves complete order data:
-
-- Fetches order header with customer details
-- Retrieves all line items with product information
-- Gets billing and shipping addresses
-- Calculates discounts and retrieves special offers
-- Supports lookup by `SalesOrderNumber` or `SalesOrderID`
-
-### 3. **Services/PdfReceiptGenerator.cs**
-
-PDF generation service using **QuestPDF**:
-
-- Generates professional, styled PDF receipts
-- Uses **DoodleCSS theme colors** matching the website:
-  - Primary: `#FF5E5B` (Adventure orange/rust)
-  - Accent: `#4a7c59` (Forest green)
-  - Background: `#FDF7F1` (Warm cream)
-- Includes company branding with AdventureWorks address
-- Uploads completed PDFs to blob storage
-- Returns public blob URL
-
-### 4. **Functions/GenerateOrderReceipts.cs**
-
-Azure Function with two triggers:
-
-- **HTTP Trigger**: Enqueues receipt generation jobs
-- **Queue Trigger**: Processes individual receipts
-
-## Usage
-
-### Endpoint
-
-```
-POST /api/GenerateOrderReceipts_HttpStart
-```
-
-### Request Body
-
-```json
-{
-  "salesOrderNumbers": ["SO43659", "SO43660", "SO43661"]
-}
+```mermaid
+sequenceDiagram
+  autonumber
+  participant SQL as Azure SQL
+  participant T as OrderPlacedSqlTrigger
+  participant Q1 as Queue order-receipt-generation
+  participant G as Receipt worker
+  participant B as Blob adventureworks-receipts
+  participant Q2 as Queue order-email-generation
+  participant E as SendOrderEmail_QueueTrigger
+  participant ACS as Azure Communication Services
+  participant C as Customer (storefront)
+  SQL->>T: New SalesOrderHeader row
+  T->>Q1: Receipt job + email metadata
+  Q1->>G: Dequeue (managed identity)
+  G->>SQL: Read order, lines, offers
+  G->>B: Write CustomerReceipts/SO{n}.pdf
+  G->>Q2: Email job (when email metadata exists)
+  Q2->>E: Dequeue
+  E->>B: Read PDF
+  E->>ACS: Send email with PDF attachment
+  Note over C,B: Consumer token (orders.read, owner only)
+  C->>G: GET /api/orders/{id}/receipt
+  G->>B: Stream blob (no SAS URL)
+  G-->>C: application/pdf
 ```
 
-You can provide one or more sales order numbers. Each will be processed independently.
+1. `OrderPlacedSqlTrigger` enqueues a receipt job with the customer's email details on `order-receipt-generation`.
+2. The receipt worker renders the PDF with QuestPDF and writes `CustomerReceipts/SO{n}.pdf` to the private `adventureworks-receipts` container.
+3. If email metadata is present, it enqueues an email job on `order-email-generation`.
+4. `SendOrderEmail_QueueTrigger` validates the recipient and sends the email with the PDF attached. See [email notifications](../email/email-notifications.md).
 
-### Response
+### Routes
 
-```json
-{
-  "message": "Successfully enqueued 3 receipt generation job(s)",
-  "enqueuedOrders": ["SO43659", "SO43660", "SO43661"],
-  "totalEnqueued": 3
-}
-```
+| Route | Purpose |
+|---|---|
+| `POST /api/GenerateOrderReceipts_HttpStart` | Admin: regenerate receipts for `{ "salesOrderNumbers": [...] }` |
+| `POST /api/orders/generate-missing-receipts` | Admin: generate receipts for orders without one |
+| `GET /api/orders/{id}/receipt-status` | Customer: does a receipt exist? |
+| `GET /api/orders/{id}/receipt` | Customer: download the PDF (streamed from Blob Storage) |
+| `POST /api/orders/generate-and-send-receipt` | Customer: regenerate and resend |
 
-### Example cURL Request
+The storefront records `Order_ReceiptResent` when a customer resends a receipt.
 
-```bash
-# Generate receipt for a single order
-curl -X POST "http://localhost:7071/api/GenerateOrderReceipts_HttpStart" \
-  -H "Content-Type: application/json" \
-  -d '{"salesOrderNumbers": ["SO43659"]}'
+## Data & storage
 
-# Generate receipts for multiple orders
-curl -X POST "http://localhost:7071/api/GenerateOrderReceipts_HttpStart" \
-  -H "Content-Type: application/json" \
-  -d '{"salesOrderNumbers": ["SO43659", "SO43660", "SO43661"]}'
-```
+| Resource | Use |
+|---|---|
+| Blob container `adventureworks-receipts` | Private PDFs at `CustomerReceipts/SO{n}.pdf` |
+| Queue `order-receipt-generation` (+ `-poison`) | Receipt jobs |
+| Queue `order-email-generation` (+ `-poison`) | Receipt email jobs |
 
-### Finding Sales Order Numbers
+Queue processing (from `host.json`): visibility timeout 30 minutes, batch size 16, and up to 5 attempts before a message moves to the poison queue. All storage is provisioned by `infra/modules/storage.bicep`; see [storage resources](../../reference/storage-resources.md).
 
-You can find sales order numbers in the database:
+## Events (Web PubSub)
 
-```sql
-SELECT TOP 10
-    SalesOrderNumber,
-    SalesOrderID,
-    OrderDate,
-    TotalDue
-FROM Sales.SalesOrderHeader
-ORDER BY OrderDate DESC
-```
+Receipt generation does not publish its own events. Order changes are pushed on the `orders` group; see [Order lifecycle](order-lifecycle.md#events-web-pubsub).
 
-Example order numbers: `SO43659`, `SO43660`, `SO43661`, etc.
+## Security
 
-## PDF Receipt Contents
+| Route | Access |
+|---|---|
+| Admin receipt routes | Internal, `admin.write` |
+| Customer receipt routes | Consumer, `orders.read`; the order's `CustomerID` must match the signed-in customer |
 
-The generated PDF receipt includes:
+- The receipt container is private. Customers receive the PDF through the authenticated download route, never a public or SAS URL.
+- Functions access Blob and Queue Storage with the managed identity (`AzureWebJobsStorage__*` identity-based settings).
 
-### Header Section
+## Configuration
 
-- **AdventureWorks** company name and branding
-- Company address: 1 Adventure Way, Bothell, WA 98011
-- Contact: (555) 123-4567, hello@adventureworks.com
+| Setting | Purpose |
+|---|---|
+| `AzureWebJobsStorage__*` | Identity-based storage connection |
+| `COMMUNICATION_SERVICE_ENDPOINT`, `EMAIL_SENDER_DOMAIN` | Email sending |
+| `SQL_CONNECTION_STRING` | Order data |
 
-### Order Information Box
+Receipt emails are sent regardless of `ORDER_NOTIFICATIONS_EMAIL_ENABLED`, which only controls shipped and delivered emails.
 
-- Order Number (e.g., `SO43659`)
-- Order Date
-- Order ID
-- Customer ID
-- Order Status
-- Ship Date (if shipped)
+## Limits
 
-### Customer & Shipping Details
+- Seeded customers use sample addresses; reserved test domains (for example `example.com`) are suppressed rather than sent.
+- Receipts are generated asynchronously, so a new order's PDF may take a short time to appear.
 
-- Customer name and email
-- Ship-to address (full address with city, state, zip, country)
+## Related code & docs
 
-### Order Items Table
-
-Styled table with alternating row colors showing:
-
-- Quantity
-- Product name
-- Product SKU
-- Unit price
-- Line total
-
-### Special Offers (if applicable)
-
-Yellow highlight box showing any discounts or special offers applied
-
-### Totals Section
-
-- Subtotal
-- Discount (if applicable, shown in green)
-- Shipping cost + method
-- Tax
-- **Total Due** (bold, highlighted)
-
-### Footer
-
-Thank you message with adventure theme
-
-## Styling Details
-
-The PDF uses the **DoodleCSS theme** from the website:
-
-- **Colors**: Adventure orange (#FF5E5B), Forest green (#4a7c59), Warm cream background
-- **Font**: Arial (similar to the website's Short Stack font for readability in PDFs)
-- **Design**: Clean, professional invoice layout with fun, branded colors
-- **Hand-drawn aesthetic**: Maintained through color choices and friendly messaging
-
-## Storage
-
-PDFs are stored in Azure Blob Storage:
-
-- **Container**: `adventureworks-receipts`
-- **Folder**: `CustomerReceipts/`
-- **Filename pattern**: `{SalesOrderNumber}.pdf`
-- **Example**: `CustomerReceipts/SO43659.pdf`
-- **Access**: Public blob access (receipts can be shared via URL)
-
-## Error Handling
-
-- **Invalid order numbers**: Logged as warnings, processing continues for valid orders
-- **Order not found**: Logged, no PDF generated
-- **Queue failures**: Messages automatically retry (up to 5 times by default)
-- **Poison queue**: Failed messages after max retries move to `order-receipt-generation-poison` queue
-- **All errors logged**: Full Application Insights integration for monitoring
-
-## Local Development
-
-### Prerequisites
-
-1. Restore NuGet packages (includes QuestPDF):
-
-   ```bash
-   cd api-functions
-   dotnet restore
-   ```
-
-2. Ensure environment variables are set in `local.settings.json`:
-
-   ```json
-   {
-     "Values": {
-       "SQL_CONNECTION_STRING": "...",
-       "AZURE_STORAGE_CONNECTION_STRING": "...",
-       "AzureWebJobsStorage": "..."
-     }
-   }
-   ```
-
-3. Run the Azure Functions locally:
-   ```bash
-   func start
-   # Or use VS Code task: "func: host start"
-   ```
-
-### Testing Locally
-
-```bash
-# Test with a known order number from your database
-curl -X POST "http://localhost:7071/api/GenerateOrderReceipts_HttpStart" \
-  -H "Content-Type: application/json" \
-  -d '{"salesOrderNumbers": ["SO43659"]}'
-```
-
-Check the function logs to see:
-
-1. Order enqueued
-2. Queue trigger fires
-3. Data retrieved from database
-4. PDF generated
-5. PDF uploaded to blob storage
-6. Blob URL returned
-
-## Production Deployment
-
-The function will be deployed automatically with `azd up` as part of the Container Apps deployment.
-
-### Queue Configuration
-
-The function uses Azure Storage Queues:
-
-- **Queue name**: `order-receipt-generation`
-- **Visibility timeout**: 5 minutes (default)
-- **Max delivery count**: 5 (then moves to poison queue)
-- **Connection**: Uses Managed Identity with `AzureWebJobsStorage`
-
-### Monitoring
-
-Use Application Insights to monitor:
-
-- Receipt generation requests
-- Processing time per order
-- Success/failure rates
-- Queue depth and processing lag
-
-Query example:
-
-```kusto
-traces
-| where message contains "receipt"
-| order by timestamp desc
-| take 50
-```
-
-## Future Enhancements
-
-Potential improvements for the future:
-
-1. **Email Integration**: Automatically email receipts to customers
-2. **Custom Branding**: Support for different receipt templates
-3. **Batch Processing**: Generate receipts for all orders in a date range
-4. **Webhook Notifications**: Notify external systems when receipts are ready
-5. **Internationalization**: Multi-language receipts based on customer location
-6. **Digital Signatures**: Add cryptographic verification for receipt authenticity
-
-## Dependencies
-
-- **QuestPDF** (2024.12.3): PDF generation library
-- **Azure.Storage.Blobs** (12.26.0): Blob storage client
-- **Azure.Storage.Queues** (12.22.0): Queue storage client
-- **Dapper** (2.1.66): Database access
-- **Azure.Identity**: Managed Identity authentication
-
-## License
-
-QuestPDF Community License is used (free for community projects).
-
-## Related docs
-
-- Functions and endpoints that generate receipts and send emails: [../api-functions/README.md](../api-functions/README.md)
-- Detailed end-to-end receipt flow: [RECEIPT_GENERATION_FLOW.md](RECEIPT_GENERATION_FLOW.md)
-- Email sending implementation and configuration: [SEND_EMAIL_FUNCTION.md](SEND_EMAIL_FUNCTION.md)
-- Overall solution architecture and capabilities: [../README.md](../README.md)
+- `api-functions/Functions/GenerateOrderReceipts.cs`, `GenerateAndSendReceiptFunction.cs`, `ReceiptCheckFunction.cs`, `OrderPlacedSqlTrigger.cs`
+- `api-functions/Services/ReceiptService.cs`, `PdfReceiptGenerator.cs`, `EmailService.cs`
+- `infra/modules/storage.bicep`
+- [Email notifications](../email/email-notifications.md) · [Order lifecycle](order-lifecycle.md) · [Functions service](../../services/functions.md)

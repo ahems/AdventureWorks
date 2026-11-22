@@ -1,28 +1,37 @@
-# AdventureWorks SQL & Data Seed Files
+---
+title: Seed SQL scripts and CSV data catalog (seed-job/sql/)
+summary: Reference for the SQL scripts and original and AI-generated CSV files that the seed job loads into the AdventureWorks Azure SQL database, including which scripts are active, legacy or unused.
+audience: [developer, operator, ai-agent]
+components: [seed-job]
+related: [seed-job/README.md, docs/services/seed-job.md, docs/operations/seed-data-generation.md, docs/architecture/data-stores.md]
+---
 
-This folder contains the SQL scripts and CSV data used to provision the AdventureWorks database for this sample. It combines the **original AdventureWorks data exports** with **AI-augmented datasets** used to showcase the AI features in this project.
+# Seed SQL scripts and CSV data catalog (`seed-job/sql/`)
 
-These files are containerized and deployed as part of the **seed-job** Azure Container App Job, which runs during `azd up` and takes approximately **8 minutes** to populate the database with schema, data, and product images.
-
-**For complete seed-job documentation (architecture, deployment, monitoring), see [../README.md](../README.md).**
+This folder contains the SQL scripts and CSV data used to build the AdventureWorks database for this demo. It combines the **original AdventureWorks data exports** with **AI-augmented datasets** that power the AI features. The files are packaged into the seed-job image and loaded by `seed-database.ps1`; see the [seed job README](../README.md) and the [seed job service guide](../../docs/services/seed-job.md). How the AI datasets were produced is covered in [seed data generation](../../docs/operations/seed-data-generation.md).
 
 ## Conventions
 
 - `*.csv` files without an `-ai` suffix are **original AdventureWorks seed data**, exported from the sample database.
-- `*-ai*.csv` files are **additional or modified datasets created for this project** to demonstrate AI-driven capabilities (embellished descriptions, synthetic reviews, translations, enriched relationships, etc.).
-- `AdventureWorks.sql` is the primary schema + data load script.
-- `AdventureWorks-AI.sql` and `assign-database-roles.sql` add AI-specific data and security roles used by this solution.
+- `*-ai*.csv` files are **additional or modified datasets created for this project** (embellished descriptions, synthetic reviews, translations, embeddings, warehouse staff, manufacturing content and more).
+- Most CSVs are tab-delimited UTF-8 with LF line endings; the delimiter per file is defined in `seed-database.ps1`. Large files are stored with Git LFS.
 
-## SQL Scripts
+## SQL scripts
 
-- `AdventureWorks.sql` – Core schema and data load script for the AdventureWorks sample database. Creates tables and imports the base CSVs.
-- `AdventureWorks-AI.sql` – Additional schema and data for AI scenarios (e.g., review/description embeddings, AI-specific support tables, and references to the AI CSV files).
-- `assign-database-roles.sql` – Grants the appropriate database roles/permissions (for example, to managed identities used by the app) so that the app can read/write as required.
-- `date-shift-procedures.sql` – Defines `dbo.uspFindDateHighWatermark` and `dbo.uspShiftDatesForward`. Brings all seed-era dates forward so the most recent activity appears to have happened yesterday, then re-anchors pending PurchaseOrders, in-process WorkOrders, and in-process SalesOrders to near-future dates for realistic demo behaviour.
+| Script | Status | Purpose |
+|---|---|---|
+| `AdventureWorks.sql` | Active | Core schema for the AdventureWorks sample database |
+| `AdventureWorks-AI.sql` | Active | AI additions such as `VECTOR(1536)` embedding columns, search views and support tables |
+| `date-shift-procedures.sql` | Active | `dbo.uspFindDateHighWatermark` and `dbo.uspShiftDatesForward`: moves seed-era dates forward so recent activity looks like yesterday, then re-anchors pending purchase orders and in-process work and sales orders to near-future dates |
+| `realtime-notification-outbox.sql` | Active | `dbo.RealtimeNotificationOutbox` and the DML triggers that feed real-time push |
+| `guest-cart-sessions.sql` | Active | Guest-cart session schema |
+| `assign-database-roles.sql` | Legacy | Run by `postprovision.sh` only for a legacy database with public network access; grants `db_owner`. Fresh, private deployments get runtime grants from the seed job (`RuntimeDatabaseAccess.psm1`) instead |
+| `DropAndCreate.sql` | Unused | Not referenced by the seed job or hooks |
+| `usp_GetTotalProfit.sql` | Unused | Not referenced by the seed job or hooks |
 
-## CSV Data Files
+## CSV data files
 
-Below is a quick reference for the CSVs in this folder. Unless otherwise noted, a CSV without `-ai` in its name is the original AdventureWorks export; its corresponding `-ai` variant (if present) is an AI-augmented extension.
+Unless otherwise noted, a CSV without `-ai` in its name is the original AdventureWorks export; its `-ai` variant (if present) is an AI-augmented extension.
 
 ### Core Reference & People Data
 
@@ -36,6 +45,8 @@ Below is a quick reference for the CSVs in this folder. Unless otherwise noted, 
 - `CountryRegion.csv` – List of countries/regions.
 - `CountryRegionCurrency.csv` – Maps countries/regions to their currencies.
 - `CountryRegionCurrency-ai.csv` – AI-enriched country/currency data used for demos (for example, additional relationships or metadata).
+- `Culture.csv` – Cultures (languages) used for localized descriptions.
+- `Culture-ai.csv` – Additional cultures for the storefront's supported languages.
 - `CreditCard.csv` – Credit card reference data.
 - `Currency.csv` – Currency codes and names.
 - `Currency-ai.csv` – AI-augmented currency data (e.g., descriptions, localized or enriched text).
@@ -47,6 +58,7 @@ Below is a quick reference for the CSVs in this folder. Unless otherwise noted, 
 - `Employee.csv` – Employee records.
 - `EmployeeDepartmentHistory.csv` – Employee department assignments over time.
 - `EmployeePayHistory.csv` – Employee pay rate history.
+- `JobCandidate.csv` – Job candidate résumés (original sample data).
 - `Location.csv` – Manufacturing locations.
 - `Password.csv` – Password hashes used in the sample database.
 - `Person.csv` – Person records (customers, employees, etc.).
@@ -55,30 +67,38 @@ Below is a quick reference for the CSVs in this folder. Unless otherwise noted, 
 - `PhoneNumberType.csv` – Types of phone numbers (home, work, etc.).
 - `StateProvince.csv` – State/province reference data.
 - `StateProvince-ai.csv` – AI-augmented state/province data (e.g., enriched descriptions, localized names).
+- `BusinessEntity-warehouse-ai.csv`, `Person-warehouse-ai.csv`, `Employee-warehouse-ai.csv`, `EmployeeDepartmentHistory-warehouse-ai.csv`, `EmployeePayHistory-warehouse-ai.csv` – Generated warehouse staff (`+|` field and `&|` record delimiters).
 
 ### Product Catalog & Inventory
 
 - `Product.csv` – Core product catalog.
+- `Product-ai.csv` – Additional and updated product rows (upserted over the base catalog).
+- `ProductNames-ai.csv` – Localized product names with `ProductNameEmbedding` vectors (`Production.ProductName`; stored with Git LFS).
 - `ProductCategory.csv` – High-level product categories.
 - `ProductCostHistory.csv` – Historical cost data for products.
+- `ProductCostHistory-ai.csv` – Additional cost history for generated products.
 - `ProductDescription.csv` – Base product descriptions.
 - `ProductDescription-ai.csv` – AI-generated/enhanced product descriptions used for content and embeddings demos.
+- `ProductDescription-ai-embeddings.csv` – Optional embedding updates for base descriptions, applied after import.
 - `ProductDescription-ai-translations.csv` – AI-generated translations of product descriptions for multi-language scenarios.
 - `ProductDocument.csv` – Links products to documents.
 - `ProductInventory.csv` – Current inventory levels per product/location.
 - `ProductListPriceHistory.csv` – Historical list price changes.
 - `ProductModel.csv` – Product model definitions.
 - `ProductModelIllustration.csv` – Links product models to illustrations.
+- `ProductModelInstructions-ai.csv`, `Illustration-ai.csv`, `ProductModelIllustration-ai.csv` – Approved generated manufacturing instructions, diagrams and model mappings (imported by `ManufacturingOverlays.psm1`).
+- `Document-ai.csv`, `ProductDocument-ai.csv` – Optional generated part sheets and product links (imported together by `ManufacturingOverlays.psm1`).
 - `ProductModelProductDescriptionCulture.csv` – Maps product models to descriptions per culture.
 - `ProductModelProductDescriptionCulture-ai.csv` – AI-augmented mappings (e.g., additional cultures or AI translations).
 - `ProductPhoto.csv` – Product photo metadata (base AdventureWorks; typically **ProductPhotoID** below 1000).
 - `ProductProductPhoto.csv` – Links products to photos (base mappings).
 - `ProductProductPhoto-ai.csv` – **Generated at seed time** from the image file list (filesystem is source of truth). See below.
 
-**ProductPhoto and image files (source of truth: filesystem):** The seed job (1) **scans** `seed-job/images/` for files matching `product_<ProductID>_photo_<2|3|4>_small.png` (or `_thumb.png`) with a matching large `.png`; (2) **generates** `ProductProductPhoto-ai.csv` from that list (sorted by ProductID, photo number) and assigns **ProductPhotoID** 1000, 1001, 1002, … in that order; (3) loads the base **ProductPhoto.csv** and **ProductProductPhoto.csv**; (4) loads the generated **ProductProductPhoto-ai.csv**; (5) **PNG upload** inserts each image into `[Production].[ProductPhoto]` with the same ProductPhotoID from the generated CSV. So the list of image files is the source of truth; the CSV is derived from it each run. **Note:** Image filenames in the repo currently only include product IDs **680–999** (e.g. `product_877_photo_2.png`). Products 1–679 have no AI-generated images in the filesystem unless you add them or pull them from another deployment (e.g. via `scripts/utilities/download-large-images.ps1`).
+**ProductPhoto and image files (source of truth: filesystem):** The seed job (1) **scans** `seed-job/images/` for files matching `product_<ProductID>_photo_<2|3|4>_small.png` (or `_thumb.png`) with a matching large `.png`; (2) **generates** `ProductProductPhoto-ai.csv` from that list (sorted by ProductID, photo number) and assigns **ProductPhotoID** 1000, 1001, 1002, … in that order; (3) loads the base **ProductPhoto.csv** and **ProductProductPhoto.csv**; (4) loads the generated **ProductProductPhoto-ai.csv**; (5) **PNG upload** inserts each image into `[Production].[ProductPhoto]` with the same ProductPhotoID from the generated CSV. So the list of image files is the source of truth; the CSV is derived from it each run. **Note:** Image filenames in the repo only include product IDs **680–999** (e.g. `product_877_photo_2.png`). Products 1–679 have no AI-generated images in the filesystem unless you add them or pull them from another deployment (e.g. via `scripts/utilities/download-large-images.ps1`).
 
 - `ProductReview.csv` – Base product reviews.
 - `ProductReview-ai.csv` – AI-generated product reviews used to demonstrate review generation and embeddings.
+- `ProductReview-ai-Embeddings.csv` – Review embedding updates applied after the review CSVs load.
 - `ProductReview-ai-UserID.csv` – ProductReviewID and UserID (Person.BusinessEntityID, PersonType IN) per row; used by the seed-job to update `Production.ProductReview.UserID` after the other review CSVs are loaded. Generate with `node scripts/utilities/generate-product-review-userids.js` (requires `API_URL` or `VITE_API_URL` pointing at the DAB API).
 - `ProductSubcategory.csv` – Product subcategories.
 - `ProductVendor.csv` – Links products to vendors.
@@ -86,6 +106,7 @@ Below is a quick reference for the CSVs in this folder. Unless otherwise noted, 
 ### Purchasing, Sales & Orders
 
 - `BillOfMaterials.csv` – Bill of materials entries.
+- `BillOfMaterials-ai.csv` – Additional bill of materials entries for generated products.
 - `PurchaseOrderDetail.csv` – Details of purchase orders.
 - `PurchaseOrderHeader.csv` – Purchase order headers.
 - `SalesOrderDetail.csv` – Sales order line items.
@@ -115,30 +136,3 @@ Below is a quick reference for the CSVs in this folder. Unless otherwise noted, 
 - `Vendor.csv` – Vendor records.
 - `WorkOrder.csv` – Work orders.
 - `WorkOrderRouting.csv` – Work order routing steps.
-
----
-
-In summary:
-
-- **Original AdventureWorks CSVs** (`*.csv` without `-ai`) provide the canonical sample dataset.
-- **AI-specific CSVs** (`*-ai*.csv`) add synthetic or enriched data used by this project to demonstrate AI features such as:
-  - AI-generated product descriptions and reviews.
-  - Translated content for multiple locales.
-  - Enriched reference data for more realistic demos.
-
-These files are consumed by the SQL scripts and deployment automation to populate the Azure SQL database used by the application.
-
-## Deployment Process
-
-During `azd up`, the `postprovision.sh` hook:
-
-1. Builds the seed-job container image with these files using Azure Container Registry
-2. Deploys and starts the seed-job as an Azure Container App Job
-3. The job executes `seed-database.ps1` which loads all SQL scripts and CSV files
-4. **Total seed-job execution time: ~8 minutes**
-
-You can monitor the seed-job progress with:
-
-```bash
-az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
-```

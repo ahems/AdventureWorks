@@ -71,7 +71,7 @@ public class GenerateProductReviewEmbeddings
         }
     }
 
-    // ── Durable Activity functions kept so in-flight orchestrations can still complete ──
+    // ── Durable orchestrator and activities (HttpStart above queues an AI job instead) ──
 
     [Function(nameof(GenerateProductReviewEmbeddings_Orchestrator))]
     public async Task<string> GenerateProductReviewEmbeddings_Orchestrator(

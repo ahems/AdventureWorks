@@ -81,8 +81,10 @@ def telemetry_outcome(suppressed, sent):
 
 
 class OrderCanary(Mutations):
-    def __init__(self, report, deployment, run_id):
+    def __init__(self, report, deployment, run_id, *, agent_sweep=False, generation=False):
         super().__init__(report, deployment, run_id)
+        self.agent_sweep = agent_sweep
+        self.generation = generation
         self.residuals = []
         report.inventory.pop("mutationResiduals", None)
         report.inventory["orderCanaryResiduals"] = self.residuals
@@ -271,7 +273,66 @@ class OrderCanary(Mutations):
                             lambda: self.mcp_ownership(order_id, owner, foreign))
         self.report.guarded("order:dab-customer-owner-rows", "orders",
                             lambda: self.customer_owner_rows(owner, foreign))
+        if self.agent_sweep:
+            self.report.guarded("agent:customer-owner-chat:tool-sweep-evidence", "agents",
+                                lambda: self.owner_chat_sweep(owner, order_id))
+        if self.generation:
+            self.report.guarded("agent:admin-order:evidence", "agents",
+                                lambda: self.order_generation(owner, minimum))
         return owner.customer_id, order_id
+
+    def owner_chat_sweep(self, owner, order_id):
+        """Customer chat owner tools need a real Customer row, so they run for the disposable owner."""
+        import agent_sweep
+        agent_sweep.chat_sweep(
+            self.report, self.deployment, "customer-chat", lambda: owner.token("mcp"),
+            agent_sweep.owner_prompts(order_id), auth.CUSTOMER_CHAT_TOOLS, agent_key="AI_AGENT_CHAT_ID",
+            category="consumer", client_app="adventureworks-eshop", inventory_key="customerChatCorrelatedTools",
+            label="customer-owner-chat")
+
+    def order_generation(self, owner, minimum):
+        """The order-generation agent places one order for the disposable owner, then an admin cancels it."""
+        import agent_sweep
+        self.internal("admin", "functions")
+        self.internal("admin", "dab")
+        created = {}
+
+        def request(header):
+            residual = {"kind": "ai-generated-order", "owner": owner.customer_id, "state": "creation-requested"}
+            self.record_residual(residual)
+            # Conservative: the approval window is measured from before the order could exist.
+            created["started"] = time.monotonic()
+            status, _, raw = auth.http(
+                "POST", self.functions + "/api/GenerateOrderWithAI", token=self.internal("admin", "functions"),
+                timeout=300, data={"personaType": "existing-customer", "seedCustomerId": owner.customer_id},
+                headers={"traceparent": header})
+            try:
+                body = json.loads(raw)
+            except (ValueError, TypeError):
+                body = None
+            order_id = body.get("salesOrderId") if isinstance(body, dict) else None
+            valid = (status == 200 and isinstance(body, dict) and body.get("success") is True and
+                     type(order_id) is int and order_id > 0 and body.get("newCustomerCreated") is not True)
+            self.update_residual(residual, id=order_id if type(order_id) is int else None,
+                                 state="retained-in-process" if valid else "uncertain")
+            self.report.check("agent:admin-order:generate", "agents", valid,
+                              f"The admin order generator returned HTTP {status} and one order for the seeded "
+                              "disposable customer; receipt and personal data are withheld.")
+            if not valid:
+                auth.classify_foundry_throttle(self.report, self.deployment, "agent:admin-order:generate",
+                                               header.split("-")[1])
+            if valid:
+                created["order"], created["residual"] = order_id, residual
+            return status, body
+
+        try:
+            agent_sweep.service_generation_canary(
+                self.report, self.deployment, "admin-order", "AI_AGENT_ORDER_ID", "order-generation",
+                agent_sweep.ORDER_GENERATION_TOOLS, request)
+        finally:
+            if "order" in created:
+                self.admin_cancel(created["order"], "admin-order", created["started"], minimum)
+                self.update_residual(created["residual"], state="cancelled")
 
     def customer_owner_rows(self, owner, foreign):
         """Retained fixtures have no Customer rows; these two real Customers close the customer_id DAB policies."""
@@ -455,6 +516,7 @@ class OrderCanary(Mutations):
         if customer:
             self.report.guarded("order:storefront-email", "orders", lambda: self.email_telemetry(customer))
         self.report.add("order:residuals", "residuals", "ACCEPTED_EXCEPTION",
-                        "Cancelled canary orders, disposable consumers, Customers, addresses and the store order's "
+                        "Cancelled canary orders (including any AI-generated order), disposable consumers, Customers, "
+                        "addresses and the store order's "
                         "single-unit inventory decrement remain until environment recreation. IDs are inventoried; "
                         "credentials and emails are not exported.")

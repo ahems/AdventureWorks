@@ -122,6 +122,7 @@ start_seed_job seed-job test-rg
         self.assertLess(hook.index('if wait "$SEED_SETUP_PID"; then'), hook.index("start_seed_job"))
         self.assertLess(hook.index("az acr build"), hook.index("az containerapp job update"))
         self.assertIn("COPY ManufacturingOverlays.psm1 /app/ManufacturingOverlays.psm1", dockerfile)
+        self.assertIn("COPY SeedTelemetry.psm1 /app/SeedTelemetry.psm1", dockerfile)
         self.assertIn("COPY sql/ /app/sql/", dockerfile)
 
     def test_final_status_does_not_claim_seed_completion(self):

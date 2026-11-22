@@ -163,7 +163,7 @@ jobs:
   # Reproduces the azd `package-app` step for the e-shop Static Web App, which
   # runs `swa build` (Azure Static Web Apps CLI) rather than `docker build`.
   # The container `app` build above compiles the same Vite bundle, but the azd
-  # deployment path goes through the SWA CLI + `scripts/build-with-env.sh`; this
+  # deployment path goes through the SWA CLI + `app/scripts/build-with-env.sh`; this
   # job exercises that exact path so a broken frontend build (e.g. a TypeScript
   # / Vite compile error) is caught here instead of only surfacing during
   # `azd up`.

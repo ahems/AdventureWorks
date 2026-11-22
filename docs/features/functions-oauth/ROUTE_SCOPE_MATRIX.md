@@ -1,3 +1,15 @@
+---
+title: Functions route-to-scope authorization matrix
+summary: Authoritative per-route OAuth tier, required scope, access mode and ownership key for all 200 HTTP-triggered Azure Functions in api-functions.
+audience: [developer, security-reviewer, ai-agent]
+components: [api-functions, api-mcp]
+related:
+  - docs/features/functions-oauth/README.md
+  - docs/features/mcp-oauth/TOOL_SCOPE_MATRIX.md
+  - docs/reference/functions-routes.md
+  - docs/services/functions.md
+---
+
 # AdventureWorks Functions API — Complete Route-to-Scope Authorization Matrix
 
 > This document is the human-readable **source of truth** for authorizing the
@@ -9,11 +21,9 @@
 > unclassified. Non-HTTP triggers (queue / SQL / timer) are internal and not part of
 > this matrix.
 
-**Status:** The registry in
+The registry in
 [`FunctionAuthorizationRegistry.cs`](../../../api-functions/Auth/FunctionAuthorizationRegistry.cs)
-implements this source matrix and `FUNCTIONS_OAUTH_MODE=enforced` is provisioned.
-The new order-header and order-detail routes, address protections and related
-DAB restrictions are source-tested, but not verified in the current deployment.
+implements this matrix, and `FUNCTIONS_OAUTH_MODE=enforced` is provisioned.
 
 ## How to read this matrix
 
@@ -315,7 +325,7 @@ client-supplied; this ownership guard is not a pricing or inventory guarantee.
 | -------------- | ---- | -------------- | ----------- | ------------- |
 | `POST /api/carts/analyze-recovery` | I | `admin.read` | Internal-only | — |
 
-### AI content & data generation (11)
+### AI content & data generation (17)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |

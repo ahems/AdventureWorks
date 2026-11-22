@@ -260,7 +260,7 @@ resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-
 // Grant the managed identity Azure AI Developer role for Foundry Agents API access
 // Required for: reading agent definitions (agents/read), invoking agents, and using the Responses API with MCP tools
 // Role: Azure AI Developer (64702f94-c441-49e6-a78b-ef80e0188fee)
-// Without this role, the Container App cannot call GET /api/projects/{name}/agents/{agentId}
+// Without this role, services using this identity (such as the Function App) cannot call GET /api/projects/{name}/agents/{agentId}
 resource aiDeveloperRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
   name: guid(account.id, azidentity.id, '64702f94-c441-49e6-a78b-ef80e0188fee')
   scope: account

@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y nginx --no-install-recommends \
 WORKDIR /inspector
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
-COPY gateway.mjs ./
+COPY gateway.mjs telemetry.mjs ./
 
 # Expose only the authenticated loopback gateway.
 COPY nginx.conf /etc/nginx/sites-available/inspector.conf

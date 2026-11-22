@@ -45,12 +45,15 @@ This is a **3-tier Azure application** demonstrating enterprise patterns with pa
 
 - **Frontend** (`app/`): React + TypeScript + Vite SPA deployed as Azure Static Web App
 - **Internal frontends** (`app-admin/`, `app-manufacturing/`): React + TypeScript + Vite SPAs served from Azure Container Apps
-- **Backend API** (`api/`): Microsoft Data API Builder (DAB) providing GraphQL + REST, running in Azure Container Apps
+- **Backend API** (`api/`): Microsoft Data API Builder (DAB) providing GraphQL + REST (plus DAB's native `/mcp` endpoint), running in Azure Container Apps
 - **Serverless Functions** (`api-functions/`): .NET 10 isolated Azure Functions on Flex Consumption for custom business logic, provisioned by `infra/modules/flex-api-functions.bicep`; published directly without a container image
 - **OAuth + MCP** (`api-mcp/`): Self-contained OpenIddict authorization server and protected MCP tools, running in Azure Container Apps
 - **AI**: Microsoft Foundry agent definitions plus the hosted `manufacturing-agent/`, deployed with `host: azure.ai.agent`
+- **MCP Inspector** (`mcp-inspector/`): Container App for exploring the api-mcp tools interactively
 - **Database**: Azure SQL with AdventureWorks schema, Entra ID authentication and private networking
 - **Infrastructure** (`infra/`): Bicep modules with modular service definitions
+
+Details: [system overview](../docs/architecture/system-overview.md).
 
 ### Data Flow Pattern
 
@@ -84,6 +87,8 @@ When adding a new query that needs live updates:
 1. Register the query key in the appropriate group handler in `app-manufacturing/src/hooks/useRealTimeUpdates.ts` or `app/src/hooks/useRealTimeUpdates.ts`; in admin, handle the corresponding `webpubsub` DOM event in the page
 2. Ensure the server-side mutation calls `WebPubSubService.SendToGroupAsync` for the relevant group
 3. Do NOT add `refetchInterval` — the Web PubSub event-driven invalidation replaces polling entirely
+
+Details: [real-time eventing](../docs/architecture/realtime-eventing.md).
 
 ## Critical Development Workflows
 
@@ -126,6 +131,14 @@ For local Functions configuration, start from
 `api-functions/local.settings.example.json`; never commit populated settings.
 SQL public networking is disabled after deployment, so local credentials alone
 do not provide direct SQL connectivity. Prefer deployed APIs rather than reopening SQL.
+`AZURE_RESOURCE_GROUP` and `SQL_DATABASE_NAME` are azd inputs (set by `preup.sh` or the
+deployment workflow), not Bicep outputs. Full list:
+[environment variables](../docs/reference/environment-variables.md).
+
+**Dev ports:** all three Vite apps serve on port 8080, but api-mcp registers local OAuth
+redirects only for the admin (5174) and manufacturing (5175) apps, so local sign-in to
+those apps needs a matching port override. The storefront signs in with a custom
+credentials grant and needs no redirect.
 
 **For Azure Functions (api-functions) local development:**
 
@@ -157,12 +170,15 @@ warning is automatically accepted. Deployment and seed durations vary.
 
 1. `scripts/hooks/preup.sh` - Persists user context and selects available AI models/capacity
 2. `azd provision` - Deploys Bicep infrastructure
-3. `scripts/hooks/postprovision.sh` - Configures SQL roles, Key Vault signing material,
-   starts the seed job asynchronously and prepares Foundry agents
+3. `scripts/hooks/postprovision.sh` - Creates Key Vault signing material, starts the
+   seed job asynchronously and prepares Foundry agents. Its SQL firewall/role path
+   (`assign-database-roles.sql`) runs only for a legacy public-enabled SQL server; on
+   normal private deployments the seed job grants runtime database access
 4. `scripts/hooks/predeploy.sh` - Generates storefront build/runtime configuration
 5. `azd deploy` - Remote-builds Container Apps, publishes Functions, builds/deploys
-   the Static Web App and deploys the hosted Manufacturing agent; service-specific
-   postdeploy hooks apply their configuration
+   the Static Web App and deploys the hosted Manufacturing agent; service hooks
+   (`api-postdeploy.sh`, `app-postdeploy.sh`, `app-admin-postdeploy.sh`,
+   `api-functions-postdeploy.sh`) apply their configuration
 6. `scripts/hooks/postdeploy.sh` - Wires OAuth redirects and the hosted-agent endpoint,
    then reapplies Functions agent settings
 7. `scripts/hooks/postup.sh` - Ensures the hosted agent exists, disables public SQL
@@ -177,6 +193,7 @@ az containerapp job execution list --name <seed-job-name> --resource-group <reso
 ```
 
 For complete details on the seed-job architecture and data loading process, see [seed-job/README.md](../seed-job/README.md).
+Details: [deployment lifecycle](../docs/operations/deployment.md).
 
 ### Getting Azure Resource Information
 
@@ -232,6 +249,10 @@ Use built-in tasks for development (accessible via `Cmd/Ctrl+Shift+B`):
 These are local tasks, not proof of deployed-service behavior. The frontend task
 starts only `app/`; start admin/manufacturing from their own package scripts.
 
+**Do not run the `reseed-demo-logins` task.** It rebuilds and restarts the seed job
+directly with Azure CLI, bypassing azd and the demo/POC policy above, and it does not
+reseed demo logins on its own. Agents must not run it.
+
 ## Project-Specific Conventions
 
 ### GraphQL API (DAB Naming)
@@ -254,7 +275,7 @@ const { productCategories } = await client.request(gql`
 `);
 ```
 
-See [DAB naming conventions](../docs/architecture/DAB_NAMING_CONVENTIONS.md) for complete rules.
+See [DAB naming conventions](../docs/architecture/dab-naming-conventions.md) for complete rules.
 
 ### Configuration Files Pattern
 
@@ -288,6 +309,7 @@ public AddressFunctions(ILogger<AddressFunctions> logger, AddressService service
 ```
 
 Connection string uses **Active Directory Default** authentication (Managed Identity in Azure, Azure CLI locally).
+Details: [Functions service](../docs/services/functions.md).
 
 ### Loading Skeletons (app-manufacturing)
 
@@ -404,6 +426,8 @@ while the storage module receives `identityId`.
 
 Use `infra/main.parameters.json` as the actual azd-to-Bicep mapping; do not invent
 parameter names or assume every module parameter is an azd environment value.
+Details: [deployment lifecycle](../docs/operations/deployment.md) and
+[Azure resources](../docs/reference/azure-resources.md).
 
 ### Infrastructure-as-Code Policy
 
@@ -473,11 +497,11 @@ Backend data-plane access uses passwordless auth:
 
 1. **DAB, Functions and api-mcp** use the provisioned runtime user-assigned MI;
    api-mcp reads Key Vault signing material using its configured managed identity
-2. **SQL Database** grants roles in `postprovision.sh`:
-   ```sql
-   CREATE USER [mi-name] FROM EXTERNAL PROVIDER;
-   ALTER ROLE db_datareader ADD MEMBER [mi-name];
-   ```
+2. **SQL Database** access for the runtime identity is granted by the seed job
+   (`seed-job/RuntimeDatabaseAccess.psm1`, user created by SID): `db_datareader`,
+   `db_datawriter`, `EXECUTE` and object-scoped `VIEW CHANGE TRACKING`. The
+   `postprovision.sh` path that runs `seed-job/sql/assign-database-roles.sql`
+   (`db_owner`) applies only to a legacy public-enabled SQL server
 3. **Connection strings** use `Authentication=Active Directory Default`
 4. **Local SDK clients** can use `DefaultAzureCredential` / `az login` where network
    access and RBAC permit; this does not authenticate an application user or bypass
@@ -497,8 +521,10 @@ the entire azd `.env`.
 - Prefer `--identity manufacturing` (seeded Peter, `manufacturing-engineer`) for
   manufacturing/inventory/supply-chain testing. Use `--identity admin` (seeded Ken,
   `executive-admin`) for customers/orders/reporting/admin or broader internal operations.
-  Neither account bypasses ownership, self-only checks or business rules. Do not
-  silently retry a forbidden operation as the more privileged identity.
+  Neither account bypasses ownership, self-only checks or business rules. Ken lacks
+  `manufacturing.write`, so manufacturing writes need Peter. Do not silently retry a
+  forbidden operation as the more privileged identity. The helper never prompts for a
+  password; it uses the seeded demo password unless `AZURE_AUTH_PASSWORD` is set.
 - Prefer `request --identity ... --resource functions|dab --path /...`; this keeps
   tokens in memory and adds the DAB `X-MS-API-ROLE` header automatically.
 - Use `token` for curl/other scripts, `token --json` plus `refresh` for long-running
@@ -521,7 +547,16 @@ Test scripts live under `tests/scripts/`, not the repository root:
   consumer's token and BusinessEntityID, not a canned internal identity
 - `tests/scripts/test-password-reset-flow.sh` - Reset flow; requires explicit test inputs
 - `tests/scripts/README.md` - Current test prerequisites and commands
-- `.NET` tests: `api-functions.Tests/` and `api-mcp/AdventureWorks.Tests/`
+- `bash tests/scripts/validate-auth.sh --offline` - Offline authentication assurance gate
+  (no Azure calls); the same gate runs in the Build-Checker workflow
+- `.NET` tests: `dotnet test AdventureWorks.sln` (`api-functions.Tests/` and
+  `api-mcp/AdventureWorks.Tests/`)
+- Frontends: `npm test` in `app-manufacturing/` (Vitest); storefront
+  `cd app && node --test scripts/*.test.mjs`; `npm --prefix mcp-inspector test`
+- Seed job: `python3 -B -m unittest discover -s seed-job/tests -p 'test_*.py'` and the
+  `seed-job/tests/Test-*.ps1` PowerShell scripts
+
+Details: [testing strategy](../docs/testing/testing-strategy.md).
 
 **Run functions locally** with the `func: host start` task, which auto-builds before starting.
 
@@ -563,14 +598,15 @@ The storefront has a `/health` diagnostics page; admin/manufacturing do not
 currently define that route. Use the sanitized Functions
 `/api/health/readiness` and MCP `/ready` contracts for dependency readiness;
 liveness alone does not prove SQL/storage/OAuth readiness. Keep AI/email functional
-checks opt-in. See [health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md).
+checks opt-in. See [health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md)
+and [monitoring](../docs/operations/monitoring.md).
 
 ## Common Gotchas
 
 1. **DAB config during local dev**: Use the existing `api/dab-config.json`; supply its environment placeholders and use the configured OAuth issuer/audience. Do not disable auth to fix local failures.
 2. **GraphQL query failures**: Check for `.items` in response - DAB wraps all lists
 3. **API pagination**: DAB defaults to 100 items per list page; follow GraphQL cursors or REST next links, not an assumed hard maximum or a single-page count.
-4. **DAB 1.7 OData pagination parameter**: Use `$first` instead of `$top` for limiting results in REST calls (e.g. `?$first=10`). DAB 1.7+ replaced `$top` with `$first`. `$skip` is also unsupported — use `$after` for cursor-based pagination.
+4. **DAB REST pagination parameters**: Use `$first` (not `$top`) to limit results in REST calls (e.g. `?$first=10`). `$skip` is unsupported — use `$after` for cursor-based pagination.
 5. **Address entity not in DAB**: `Person.Address` is excluded from DAB because the `SpatialLocation` (`geography`) column is unsupported. Use the `AddressFunctions` Azure Function for address data instead.
 6. **Direct SQL access**: Deployment disables public SQL access; use deployed DAB/Functions instead of reopening networking.
 7. **Build failures**: `dotnet build` restores by default; use `restore (functions)` when diagnosing missing dependencies or building with `--no-restore`.
@@ -579,9 +615,11 @@ checks opt-in. See [health diagnostics](../docs/features/monitoring/HEALTH_DIAGN
 10. **Shopping Simulator AI requirement**: `OrderGenerationAgentService` requires `AI_AGENT_ORDER_ID` for all modes; no random-order fallback is implemented. Structured planning failures are saved as failed simulator results with failure codes; unhandled queue exceptions are rethrown for runtime retry/poison handling.
 11. **Shopping Simulator auto-stop**: The simulator always auto-stops after the configured `durationHours` (default 24h, max 72h). It never runs forever — this is a cost protection feature checked every timer tick (1 minute).
 12. **Order Status=7 is "Delivered"**: Orders are automatically promoted from Shipped (5) to Delivered (7) by the hourly `OrderDelivery_Timer` function. Terminal statuses are now 4 (Rejected), 6 (Cancelled), and 7 (Delivered) — Status=5 (Shipped) is no longer a terminal state. Delivery windows are configurable per order type via `PUT /api/orders/pipeline/config`.
-13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The Flex Consumption template does not enable the flag; enabling it requires an explicit Function App setting via Azure Portal or CLI. See [order notifications](../docs/features/email/ORDER_NOTIFICATIONS.md).
+13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The Flex Consumption template does not enable the flag; enabling it requires an explicit Function App setting via Azure Portal or CLI. See [order notifications](../docs/features/email/email-notifications.md).
 14. **Web PubSub Free tier limits**: 20 concurrent connections, 20K messages/day across all three apps. High-rate simulations can exhaust this; do not assume the Free tier is sufficient for sustained workloads. Failed negotiation reports live updates unavailable; it does not automatically install polling. Preserve the no-polling policy above.
 15. **No runtime infra creation**: Application code must not call `CreateIfNotExistsAsync` or `CreateIfNotExists` on storage resources (queues, tables, containers). All storage infrastructure is provisioned by `infra/modules/storage.bicep` via `azd up`. If you need a new queue or table, add it to the Bicep file. A startup health check in `Program.cs` logs App Insights warnings for any missing resources.
+16. **MCP tool count**: api-mcp exposes 63 MCP tools over Streamable HTTP at `/mcp`.
+17. **Always-ready Functions cost**: `OrderPlacedSqlTrigger` and `DatabaseChanges` each have one always-ready Flex instance (two total), which can keep serverless SQL from auto-pausing while the environment exists.
 
 ### Shopping Simulator
 
@@ -594,12 +632,18 @@ The shopping simulator (`POST /api/shopping-simulator/start`) generates continuo
 - **State**: Persisted in Azure Table Storage (`shoppingSimulator` table). Queue: `simulation-order-queue`.
 - **Admin UI**: `app-admin/src/pages/ShoppingSimulatorPage.tsx` — sliders, toggles, live stats, and results feed.
 
+Details: [shopping simulator](../docs/features/simulators/shopping-simulator.md).
+
 ## Documentation Map
 
+- [Documentation hub](../docs/README.md) - Start here; [llms.txt](../llms.txt) is the machine-readable index
+- [Glossary](../docs/glossary.md) - Project terms and acronyms
 - [QUICKSTART.md](../QUICKSTART.md) - Azure deployment and exploration
-- [app/README.md](../app/README.md) - Storefront setup and features
-- [api/README.md](../api/README.md) - DAB deployment details
-- [DAB naming conventions](../docs/architecture/DAB_NAMING_CONVENTIONS.md) - GraphQL schema rules
+- [Deployment lifecycle](../docs/operations/deployment.md) - azd hooks, seed job and recreation
+- Services: [DAB API](../docs/services/dab-api.md), [Functions](../docs/services/functions.md),
+  [api-mcp](../docs/services/api-mcp.md), [Manufacturing agent](../docs/services/manufacturing-agent.md),
+  [Seed job](../docs/services/seed-job.md)
+- [DAB naming conventions](../docs/architecture/dab-naming-conventions.md) - GraphQL schema rules
 - [OAuth server](../docs/features/mcp-oauth/README.md) - User identities, resource tokens and tool policies
 - [Functions OAuth](../docs/features/functions-oauth/README.md) - Route scope/category/ownership enforcement
 - [Authenticated local scripts](../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md) - azd-based testing helper

@@ -210,8 +210,9 @@ public class ProductService
                 ROW_NUMBER() OVER (PARTITION BY ps.ProductSubcategoryID ORDER BY p.ListPrice DESC) AS rn
             FROM Production.ProductCategory pc
             INNER JOIN Production.ProductSubcategory ps ON ps.ProductCategoryID = pc.ProductCategoryID
+                AND RTRIM(ps.CultureID) = 'en'
             INNER JOIN Production.Product p ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            WHERE p.FinishedGoodsFlag = 1 AND p.ListPrice > 0";
+            WHERE p.FinishedGoodsFlag = 1 AND p.ListPrice > 0 AND RTRIM(pc.CultureID) = 'en'";
 
         var rows = await connection.QueryAsync(sql, new { MaxProducts = maxProductsPerSubcategory });
 

@@ -43,8 +43,8 @@ public static class PromotionProductData
                 ISNULL(sales.RecentRevenue, 0) AS RecentRevenue,
                 ISNULL(discounts.ActiveDiscounts, 0) AS ActiveDiscounts
             FROM Production.Product p
-            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID AND RTRIM(ps.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             LEFT JOIN (
                 SELECT pi.ProductID, SUM(pi.Quantity) AS TotalInventory
                 FROM Production.ProductInventory pi

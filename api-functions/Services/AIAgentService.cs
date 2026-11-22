@@ -204,9 +204,8 @@ public class AIAgentService
     }
 
     /// <summary>
-    /// Returns default suggested follow-up questions.
-    /// TODO: Fold into the Foundry chat agent's response schema so the agent
-    /// generates context-aware suggestions as part of its output.
+    /// Returns a fixed set of default follow-up questions; the message, response
+    /// and customer arguments are not currently used.
     /// </summary>
     private Task<List<string>> GenerateSuggestedQuestionsAsync(
         string userMessage,

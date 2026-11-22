@@ -153,7 +153,8 @@ export const getAgentStatus = async () => {
   }
 };
 
-// Legacy MCP tool direct call functions (kept for backward compatibility)
+// Unused legacy MCP helpers: they target Functions /api/mcp/call and /api/mcp/tools,
+// which do not exist. MCP tools are invoked server-side by the Foundry agents.
 const getMCPEndpoint = (): string => {
   // Check for runtime config first (Azure deployment)
   if (typeof window !== "undefined" && window.APP_CONFIG?.API_FUNCTIONS_URL) {

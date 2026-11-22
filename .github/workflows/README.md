@@ -1,22 +1,35 @@
-# GitHub Workflows
+---
+title: GitHub workflows (.github/workflows/) — build checks, service-principal deployment and seed image publishing
+summary: Component README for the GitHub Actions workflows, including the offline build checker, the one-time OIDC service-principal setup and conditioned role grant for the azd up deployment workflow, running it, recreating the local azd environment afterwards, and the seed-job image publisher.
+audience: [developer, operator, security-reviewer]
+components: [ci-cd, infra]
+related: [docs/operations/ci-cd.md, docs/AZD_DEPLOYER_PERMISSIONS.md, docs/operations/deployment.md, docs/testing/testing-strategy.md]
+---
 
-This directory contains GitHub Actions workflows for the AdventureWorks application.
+# GitHub workflows (`.github/workflows/`)
 
-## build-checker.yaml: offline authentication assurance
+GitHub Actions workflows for the AdventureWorks demo. For an overview of inputs, steps
+and what CI covers, see **[CI/CD workflows](../../docs/operations/ci-cd.md)**.
 
-The existing manual/scheduled [Build-Checker](build-checker.yaml) includes an
-`auth-offline` job. It restores the .NET, locked Node and assurance Python dependencies and runs
-`bash tests/scripts/validate-auth.sh --offline`, without Azure login, secrets or
-deployed API calls.
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| [`build-checker.yaml`](build-checker.yaml) | Manual or scheduled | Offline authentication assurance, container and Functions build checks, storefront SWA build |
+| [`azd-up-service-principal.yml`](azd-up-service-principal.yml) | Manual | Full `azd up --no-prompt` as an Entra service principal over GitHub OIDC |
+| [`publish-seed-job.yml`](publish-seed-job.yml) | Manual | Publishes the seed-job image to GitHub Container Registry; deployments build their own image in ACR |
 
-Any assertion failure fails the job. The current-run signed assertion,
-Functions middleware, address/password/receipt ownership, all-consumer-handler
-closure, guest-cart lifecycle and MCP
-HTTP tool-dispatch and persisted task-ownership gates
-must each pass exactly once. The profile's exit code 2 is allowed only when those
-deterministic gates pass and no assertion fails; unresolved live coverage
-remains explicitly blocked. JSON, JUnit and TRX evidence is uploaded for review.
-This job does not build/deploy the private runner or authorize live mutations.
+## build-checker.yaml
+
+[Build-Checker](build-checker.yaml) runs three independent jobs:
+
+- `auth-offline` restores the .NET, locked Node and assurance Python dependencies and
+  runs `bash tests/scripts/validate-auth.sh --offline`, without Azure login, secrets or
+  deployed API calls. Any assertion failure fails the job; exit code 2 is allowed only
+  when every deterministic gate passes and the remaining live coverage is explicitly
+  blocked. JSON, JUnit and TRX evidence is uploaded. It does not authorize live mutations.
+- `build-check` runs `docker build` for `app`, `api`, `seed-job`, `api-mcp`,
+  `app-admin`, `app-manufacturing` and `.devcontainer`, and `dotnet publish` for
+  `api-functions`.
+- `swa-build` runs `swa build` for the storefront.
 
 ## azd-up-service-principal.yml
 
