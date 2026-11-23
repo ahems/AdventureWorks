@@ -161,6 +161,7 @@ flowchart LR
 ```
 
 - **Functions.** In the isolated worker, the current trace is not always the host invocation's trace. [`InvocationTraceMiddleware`](../../api-functions/Functions/InvocationTraceMiddleware.cs) runs for every invocation. When the trace differs, it starts an `Invocation` activity parented to the host's `traceparent`, so custom events, SQL dependencies and outbound calls share the caller's `operation_Id`. AI routes also start named activities and request operations (listed under [Azure Functions](#azure-functions)).
+- **DAB.** Version 2.1.7 has been observed to link SQL dependencies to the request while emitting 32-character dependency IDs, rather than 16-character W3C span IDs. The strict trace verifier reports this separately from a successful parent link.
 - **api-mcp.** Tool activities report protocol/business outcomes separately from HTTP entry requests. Functions passes validated W3C context where the protocol supports it.
 - **Browsers.** All three first-party apps restrict W3C correlation to configured solution hosts and sanitize telemetry URLs/headers.
 - **MCP Inspector.** The gateway reuses the trace ID from an incoming `traceparent` header and otherwise generates one.

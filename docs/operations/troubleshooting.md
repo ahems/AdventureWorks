@@ -61,6 +61,7 @@ Never repair deployed resources by hand.
 | `Address` data is not available in DAB | `Person.Address` has a `geography` column that DAB does not support | Use the `AddressFunctions` routes. |
 | Manufacturing `WorkOrder` reads return 500 with SQL `10928` | The database worker limit was reached | See [Monitoring](monitoring.md#diagnostic-queries). |
 | Functions readiness fails on a queue or table | The storage resource is missing from infrastructure | Add it to `infra/modules/storage.bicep` and the `DependencyHealthService.Application*` lists, then ask the user to recreate the environment. Runtime code must never create storage resources. |
+| Functions endpoints return 500 with `MissingMethodException` in `GrpcFunctionInvocation` | Incompatible Functions Worker, Worker Core and gRPC package versions | Align the Functions Worker and OpenTelemetry dependencies, run the worker invocation compatibility test, and deploy the Functions service through azd. |
 
 ## Real-time updates
 

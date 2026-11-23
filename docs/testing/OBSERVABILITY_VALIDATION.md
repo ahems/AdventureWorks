@@ -170,6 +170,12 @@ the selected roles, not complete coverage of every service or content redaction.
 Use emitted-payload fixture tests and selected demo-run inspection for the
 remaining acceptance checks.
 
+DAB 2.1.7 has been observed to emit a SQL dependency with a 32-character ID
+while retaining the request's W3C span as its parent. The strict verifier
+reports this as an invalid span ID, even when the parent link is present. Report
+the failed strict check and the observed link separately; do not treat that SQL
+dependency ID as a valid W3C span ID.
+
 ## Cost and performance evidence
 
 Compare a bounded warm baseline with a modest demo workload. Record the

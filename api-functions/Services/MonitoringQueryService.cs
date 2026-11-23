@@ -130,7 +130,7 @@ public sealed class MonitoringQueryService(IConfiguration configuration, Default
             if (!metric.ResourceId.StartsWith("/subscriptions/", StringComparison.Ordinal)
                 || !System.Text.RegularExpressions.Regex.IsMatch(metric.Metric, "^[a-zA-Z][a-zA-Z0-9_]*$"))
                 return Failure(metric.Id, "unavailable", "Invalid server metric configuration.");
-            var end = DateTimeOffset.UtcNow;
+            var end = DateTime.UtcNow;
             var url = "https://management.azure.com" + metric.ResourceId
                 + "/providers/microsoft.insights/metrics?api-version=2023-10-01&metricnames="
                 + Uri.EscapeDataString(metric.Metric) + "&timespan="
@@ -152,7 +152,7 @@ public sealed class MonitoringQueryService(IConfiguration configuration, Default
 
     private async Task<MonitoringSource> QueuesAsync()
     {
-        var account = configuration["STORAGE_ACCOUNT_NAME"];
+        var account = configuration["AzureWebJobsStorage:accountName"];
         if (string.IsNullOrWhiteSpace(account)) return Failure("queues", "unavailable", "Storage is not configured.");
         var rows = await Task.WhenAll(DependencyHealthService.ApplicationQueues
             .SelectMany(name => new[] { name, name + "-poison" }).Take(40).Select(async name =>

@@ -160,8 +160,8 @@ public sealed class TableMonitoringCaptureStore : IMonitoringCaptureStore
     private readonly TableClient _table;
     public TableMonitoringCaptureStore(IConfiguration configuration, DefaultAzureCredential credential)
     {
-        var name = configuration["STORAGE_ACCOUNT_NAME"]
-            ?? throw new InvalidOperationException("STORAGE_ACCOUNT_NAME is required.");
+        var name = configuration["AzureWebJobsStorage:accountName"]
+            ?? throw new InvalidOperationException("AzureWebJobsStorage:accountName is required.");
         _table = new TableClient(new Uri($"https://{name}.table.core.windows.net"), "awMonitoringCapture", credential);
     }
     public TableMonitoringCaptureStore(TableClient table) => _table = table;

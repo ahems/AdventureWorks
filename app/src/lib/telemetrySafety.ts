@@ -50,7 +50,18 @@ export function sanitizeTelemetry(value: unknown, key = "", seen = new WeakSet<o
   if (seen.has(value)) return "[circular]";
   seen.add(value);
   if (value instanceof Error) return { name: value.name, message: "[redacted]" };
-  if (Array.isArray(value)) return value.slice(0, 100).map(entry => sanitizeTelemetry(entry, key, seen, depth + 1));
+  if (Array.isArray(value)) {
+    const entries = value.slice(0, 100).map(entry => sanitizeTelemetry(entry, key, seen, depth + 1));
+    for (const [childKey, child] of Object.entries(value)) {
+      if (!/^(0|[1-9]\d*)$/.test(childKey)) {
+        Object.defineProperty(entries, childKey, {
+          value: sanitizeTelemetry(child, childKey, seen, depth + 1),
+          enumerable: true, writable: true, configurable: true,
+        });
+      }
+    }
+    return entries;
+  }
   return Object.fromEntries(Object.entries(value).map(([childKey, child]) =>
     [childKey, sanitizeTelemetry(child, childKey, seen, depth + 1)],
   ));

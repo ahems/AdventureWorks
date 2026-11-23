@@ -19,6 +19,17 @@ namespace ApiFunctions.Tests;
 public sealed class MonitoringTests
 {
     [Fact]
+    public void CaptureStoreUsesConfiguredFunctionsStorageAccount()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AzureWebJobsStorage:accountName"] = "testaccount"
+        }).Build();
+
+        Assert.NotNull(new TableMonitoringCaptureStore(configuration, new DefaultAzureCredential()));
+    }
+
+    [Fact]
     public void Monitoring_requires_scope_internal_category_and_executive_role()
     {
         FunctionUser User(string category, string role, params string[] scopes) => new()
@@ -316,7 +327,15 @@ public sealed class MonitoringTests
                 var metric = request.RequestUri!.Host == "management.azure.com";
                 Assert.Equal(metric ? "management.azure.com" : "api.loganalytics.io", request.RequestUri.Host);
                 Assert.Equal(metric ? HttpMethod.Get : HttpMethod.Post, request.Method);
-                if (metric) Assert.NotNull(metricJson);
+                if (metric)
+                {
+                    Assert.NotNull(metricJson);
+                    var timespan = request.RequestUri.Query.TrimStart('?').Split('&')
+                        .Single(part => part.StartsWith("timespan=", StringComparison.Ordinal));
+                    var bounds = Uri.UnescapeDataString(timespan["timespan=".Length..]).Split('/');
+                    Assert.Equal(2, bounds.Length);
+                    Assert.All(bounds, bound => Assert.EndsWith("Z", bound));
+                }
                 await Task.Delay(10, ct);
                 if (timeout) throw new TaskCanceledException();
                 return new(status) { Content = new StringContent(metric ? metricJson! : json) };

@@ -120,5 +120,16 @@ for (const root of ["app", "app-admin", "app-manufacturing"]) {
     assert.equal(classifyFailure({ name: "AbortError" }), "cancelled");
     assert.equal(classifyFailure({ message: "The session has changed." }), "authorization-cancelled");
     assert.equal(classifyFailure({ status: 429 }), "throttled");
+    const tags = [{ "ai.operation.name": "/api/orders/123?token=privateMarker" }];
+    tags["ai.cloud.role"] = root;
+    tags.authorization = "Bearer privateMarker";
+    Object.defineProperty(tags, "__proto__", { value: { password: marker }, enumerable: true });
+    const safeTags = sanitizeTelemetry({ tags }).tags;
+    assert.ok(Array.isArray(safeTags));
+    assert.equal(safeTags["ai.cloud.role"], root);
+    assert.equal(safeTags.authorization, "[redacted]");
+    assert.equal(Object.getPrototypeOf(safeTags), Array.prototype);
+    assert.equal(safeTags.__proto__.password, "[redacted]");
+    assert.equal(safeTags[0]["ai.operation.name"], "/api/orders/:id");
   });
 }
