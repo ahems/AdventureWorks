@@ -166,8 +166,9 @@ principal, a federated credential with the same subject, and existing
 subscription-scope grants, creating only what is missing. To correct the
 subject, edit `OIDC_SUBJECT` and rerun: the script replaces the subject of its
 `github-adventureworks-demo` credential, so the old subject stops working. It
-stops instead of changing anything if several apps share that name, or if an
-existing RBAC Administrator grant has a different condition.
+updates a single existing allowlist-conditioned RBAC Administrator grant to the
+current allowlist. It stops instead of changing anything if several apps share
+that name, or if the RBAC Administrator grant is unconditioned or duplicated.
 
 ```bash
 #!/usr/bin/env bash
@@ -297,8 +298,17 @@ if [[ "$RBAC_ADMIN_GRANTS" == "[]" ]]; then
   echo "Assigned the conditioned RBAC Administrator role."
 elif jq -e --arg condition "$CONDITION" '. == [$condition]' <<<"$RBAC_ADMIN_GRANTS" >/dev/null; then
   echo "The conditioned RBAC Administrator role is already assigned."
+elif jq -e 'length == 1 and (.[0] // "" | test("roleAssignments:RoleDefinitionId"))' <<<"$RBAC_ADMIN_GRANTS" >/dev/null; then
+  # One allowlist-conditioned grant from an older allowlist: update its condition in place.
+  ASSIGNMENT=$(az role assignment list --assignee "$PRINCIPAL_ID" --scope "$SCOPE" --output json |
+    jq -c --arg role "$RBAC_ADMIN_ROLE_ID" --arg scope "$SCOPE" --arg condition "$CONDITION" \
+      '[.[] | select((.roleDefinitionId | ascii_downcase | endswith("/" + $role))
+              and ((.scope | ascii_downcase) == ($scope | ascii_downcase)))][0]
+       | .condition = $condition | .conditionVersion = "2.0"')
+  az role assignment update --role-assignment "$ASSIGNMENT" --output none
+  echo "Updated the RBAC Administrator condition to the current role allowlist."
 else
-  echo "An RBAC Administrator grant with a different or missing condition exists; remove it and rerun." >&2
+  echo "An unconditioned or duplicate RBAC Administrator grant exists; remove it and rerun." >&2
   exit 1
 fi
 
@@ -311,6 +321,10 @@ to the repository's allowlisted role definitions and service-principal
 assignees. The script's `ALLOWED_ROLE_IDS` is a copy of
 [azd-role-assignment-allowlist.json](../../infra/azd-role-assignment-allowlist.json);
 an offline test (`tests/auth/test_validate.py`) fails if the two differ.
+When the allowlist gains a role, rerun this script as a subscription
+administrator: it replaces the condition on the existing conditioned grant.
+Until then, provisioning fails with `does not have permission to perform action
+'Microsoft.Authorization/roleAssignments/write'` for the new role.
 Without that condition it can grant Owner. Another unrestricted
 role-assignment grant to the same principal can bypass the condition. The
 remaining risks and role allowlist are explained in

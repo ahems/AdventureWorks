@@ -406,7 +406,7 @@ class KeyVaultPrivateLinkTemplateTests(unittest.TestCase):
 
         expected_role_types = {
             "infra/modules/storage.bicep": (4, 4),
-            "infra/modules/applicationinsights.bicep": (1, 1),
+            "infra/modules/applicationinsights.bicep": (1, 2),
             "infra/modules/aiservices.bicep": (5, 4),
         }
         for relative_path, (deployer_count, runtime_count) in expected_role_types.items():

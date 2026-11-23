@@ -315,6 +315,7 @@ function loadWebPubSub(fetch) {
         subscribeEshopSession: () => () => {},
       },
       "@/lib/utils": { getFunctionsApiUrl: () => config.functionsUrl },
+      "@/lib/appInsights": { trackEvent: () => {} },
     })[name],
   });
   return { api: module.exports, clients, warnings,

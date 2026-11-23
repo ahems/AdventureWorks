@@ -53,12 +53,15 @@ async function loadDownload(status = 200, contentType = "application/pdf", { gen
     this.setExport("isTabAuthorizationGenerationCurrent", generation =>
       generationCurrent && generation === "test-generation");
   }, { context });
+  const telemetry = new vm.SyntheticModule(["reportHandledFailure"], function () {
+    this.setExport("reportHandledFailure", () => {});
+  }, { context });
   async function load(path) {
     const source = await readFile(new URL(`../../app-admin/src/services/${path}.ts`, import.meta.url), "utf8");
     const module = new vm.SourceTextModule(ts.transpileModule(source, {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
     }).outputText, { context });
-    await module.link(name => name === "@/lib/utils" ? config : auth);
+    await module.link(name => name === "@/lib/utils" ? config : name === "@/lib/appInsights" ? telemetry : auth);
     await module.evaluate();
     return module.namespace;
   }
