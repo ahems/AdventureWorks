@@ -57,6 +57,46 @@ event batching and no-polling rule.
   required scope do not see (or cannot click) them. This is UI only; DAB and Functions
   remain authoritative.
 
+## Monitoring and browser observability
+
+`/monitoring` and its navigation entry require executive-admin and `monitoring.read`.
+Capture controls additionally require `monitoring.write`; the Functions API remains
+authoritative. The page reads the protected summary (`1h`, `6h`, `24h`), trace and capture
+contracts using Functions-audience tokens. It shows source timestamps, observed zeros,
+unknown/null counters, partial/forbidden/throttled/unavailable outcomes and retained stale
+snapshots separately. Source rows and trace timelines are real backend projections, not
+sample/demo telemetry. Azure ingestion is delayed: application push events invalidate
+cached reads but do not prove that telemetry has arrived.
+
+The existing Web PubSub connection, fixed-window batching, in-flight follow-ups and
+focus/reconnect recovery drive reads; there is no polling or manual refresh control.
+Rich capture is off by default, explicitly session/job selected and server-bounded to
+15 minutes/100 root operations. The countdown is display-only. Stop does not delete
+ingested content; supported reasoning summaries may be absent and provider-managed
+tracing remains independent. Operator portal/workbook/Grafana links require separate
+Entra/RBAC access.
+
+Session capture selects the server-issued monitoring session GUID shown in an owned
+chat. It is recovered from stored conversation metadata after ownership verification,
+not inferred from a caller ID, tab or arbitrary trace header. Rich job capture is supported
+only for persisted manufacturing agent runs using their exact canonical `RunId`. The
+consumer verifies stored order/customer/nonterminal provenance and shares one root across
+retries; queue `CaptureId` does not enable capture. Captured content is the application
+request and parsed hosted findings/actions output, not internal hosted tool traces,
+hidden reasoning or provider-managed content. Other jobs remain metadata-only.
+No arbitrary capture header or browser token enables rich tracing.
+Container CPU/memory limits are per replica while platform metric rollups can span
+replicas/revisions; the view does not invent pressure percentages from those values.
+
+Browser telemetry disables header capture, restricts W3C correlation to configured
+solution hosts, normalizes routes and centrally redacts URL queries, nested/serialized
+credentials and error content. React/query/mutation/HTTP failures and HTTP-200 GraphQL
+logical errors retain separate outcomes; Web Vitals and realtime connection states
+contain no signed URLs or message payloads. Set `VITE_BUILD_VERSION` at build time to
+identify a known build; otherwise the version is unknown.
+
+Focused tests: `npm test -- src/pages/MonitoringPage.test.tsx src/services/monitoringService.test.ts src/lib/browserSignals.test.ts src/components/TelemetryErrorBoundary.test.tsx`.
+
 ## Configuration
 
 At container start `docker-entrypoint.sh` writes `window.APP_CONFIG` (`API_URL`,

@@ -51,6 +51,8 @@ interface Conversation {
   title: string;
   messages: AgentMessage[];
   createdAt: number;
+  threadId?: string;
+  monitoringSessionId?: string;
 }
 
 const getInitialMessage = (): AgentMessage => ({
@@ -172,11 +174,11 @@ const AiAgentChat: React.FC = () => {
   }, [messages]);
 
   const updateActiveConversation = useCallback(
-    (updater: (conv: Conversation) => Conversation) => {
+    (updater: (conv: Conversation) => Conversation, conversationId?: string) => {
       setData((prev) => ({
         ...prev,
         conversations: prev.conversations.map((c) =>
-          c.id === prev.activeId ? updater(c) : c,
+          c.id === (conversationId ?? prev.activeId) ? updater(c) : c,
         ),
       }));
     },
@@ -217,6 +219,8 @@ const AiAgentChat: React.FC = () => {
       ...conv,
       messages: [getInitialMessage()],
       title: "New Chat",
+      threadId: undefined,
+      monitoringSessionId: undefined,
     }));
   }, [updateActiveConversation]);
 
@@ -226,6 +230,7 @@ const AiAgentChat: React.FC = () => {
 
     const userMessage: AgentMessage = { role: "user", content: input.trim() };
     const userInput = input.trim();
+    const conversationId = activeConversation.id;
 
     // Update title if this is the first user message
     updateActiveConversation((conv) => {
@@ -243,13 +248,15 @@ const AiAgentChat: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await sendAgentMessage(userInput, messages);
-      updateActiveConversation((conv) => ({
+      const response = await sendAgentMessage(userInput, messages, activeConversation.threadId);
+      updateActiveConversation((conv) => conv.messages.includes(userMessage) ? ({
         ...conv,
         messages: [...conv.messages, response],
-      }));
+        threadId: response.threadId,
+        monitoringSessionId: response.monitoringSessionId,
+      }) : conv, conversationId);
     } catch (error) {
-      updateActiveConversation((conv) => ({
+      updateActiveConversation((conv) => conv.messages.includes(userMessage) ? ({
         ...conv,
         messages: [
           ...conv.messages,
@@ -258,7 +265,7 @@ const AiAgentChat: React.FC = () => {
             content: "❌ Sorry, something went wrong. Please try again.",
           },
         ],
-      }));
+      }) : conv, conversationId);
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -325,6 +332,7 @@ const AiAgentChat: React.FC = () => {
     if (isLoading) return;
 
     const userMessage: AgentMessage = { role: "user", content: prompt };
+    const conversationId = activeConversation.id;
 
     updateActiveConversation((conv) => {
       const isFirstUserMessage = !conv.messages.some((m) => m.role === "user");
@@ -340,13 +348,15 @@ const AiAgentChat: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await sendAgentMessage(prompt, messages);
-      updateActiveConversation((conv) => ({
+      const response = await sendAgentMessage(prompt, messages, activeConversation.threadId);
+      updateActiveConversation((conv) => conv.messages.includes(userMessage) ? ({
         ...conv,
         messages: [...conv.messages, response],
-      }));
+        threadId: response.threadId,
+        monitoringSessionId: response.monitoringSessionId,
+      }) : conv, conversationId);
     } catch (error) {
-      updateActiveConversation((conv) => ({
+      updateActiveConversation((conv) => conv.messages.includes(userMessage) ? ({
         ...conv,
         messages: [
           ...conv.messages,
@@ -355,7 +365,7 @@ const AiAgentChat: React.FC = () => {
             content: "❌ Sorry, something went wrong. Please try again.",
           },
         ],
-      }));
+      }) : conv, conversationId);
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -384,6 +394,12 @@ const AiAgentChat: React.FC = () => {
 
   return (
     <div className="doodle-card flex flex-col h-[500px] relative">
+      {activeConversation.monitoringSessionId && <div className="p-2 border-b text-xs shrink-0">
+        <label className="flex flex-wrap items-center gap-2">Monitoring session ID
+          <Input className="h-7 text-xs flex-1 min-w-48" readOnly value={activeConversation.monitoringSessionId} onFocus={event => event.target.select()} />
+        </label>
+        <p>Select and copy this server-issued conversation GUID into Monitoring. It is not an authorization token. No content capture is enabled by displaying it.</p>
+      </div>}
       {/* Thread Sidebar */}
       {showThreads && (
         <div className="absolute inset-0 z-20 flex">

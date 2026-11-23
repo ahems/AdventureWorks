@@ -42,6 +42,7 @@ public class AutoPromotionQueueTrigger
     public async Task AutoPromotion_QueueTrigger(
         [QueueTrigger(QueueName, Connection = "AzureWebJobsStorage")] string queueMessage)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("auto-promotion", queueMessage);
         _logger.LogInformation("[AutoPromotion] Processing queue message.");
 
         AutoPromotionMessage? msg;
@@ -51,12 +52,14 @@ public class AutoPromotionQueueTrigger
         }
         catch (Exception ex)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogError(ex, "[AutoPromotion] Failed to deserialise message — dropping.");
             return;
         }
 
         if (msg == null || string.IsNullOrEmpty(msg.OrderType))
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("[AutoPromotion] Null or invalid message — dropping.");
             return;
         }
@@ -147,6 +150,7 @@ public class AutoPromotionQueueTrigger
                 productCount = productIds.Count,
                 expiredPromotionIds = expiredIds
             });
+            attempt.Complete();
         }
         catch (Exception ex)
         {
@@ -160,7 +164,7 @@ public class AutoPromotionQueueTrigger
         }
     }
 
-    public record AutoPromotionMessage(string OrderType);
+    public record AutoPromotionMessage(string OrderType, QueueTelemetryContext? Telemetry = null);
 
     private static readonly JsonSerializerOptions MessageJsonOptions = new() { PropertyNameCaseInsensitive = true };
 

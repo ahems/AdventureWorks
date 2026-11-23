@@ -67,6 +67,13 @@ class AuthenticationTests(unittest.TestCase):
                 self.assertEqual(authorize["client_id"], auth.IDENTITIES[identity][2])
                 self.assertIn("offline_access", authorize["scope"])
                 self.assertIn("realtime.connect", authorize["scope"].split())
+                requested_scopes = authorize["scope"].split()
+                if identity == "admin":
+                    self.assertIn("monitoring.read", requested_scopes)
+                    self.assertIn("monitoring.write", requested_scopes)
+                else:
+                    self.assertNotIn("monitoring.read", requested_scopes)
+                    self.assertNotIn("monitoring.write", requested_scopes)
                 self.assertEqual(authorize["resource"], BASE + "/dab")
                 verifier = exchange["code_verifier"]
                 self.assertGreaterEqual(len(verifier), 43)

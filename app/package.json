@@ -71,7 +71,8 @@
     "tailwindcss-animate": "^1.0.7",
     "twemoji": "^14.0.2",
     "vaul": "^1.1.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "web-vitals": "^5.1.0"
   },
   "devDependencies": {
     "@azure/static-web-apps-cli": "^2.0.7",

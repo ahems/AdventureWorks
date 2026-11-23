@@ -71,3 +71,17 @@ Assert (-not (Send-SeedTelemetryEvent 'Seed.Completed' @{ Outcome = 'succeeded' 
 Assert (Send-SeedTelemetryEvent 'Seed.Completed' ([ordered]@{ Mode = 'full'; Outcome = 'succeeded' }) $sender) 'Completion event sent'
 Assert ((($sent[-1].Body | ConvertFrom-Json).tags.'ai.operation.id') -eq $event.tags.'ai.operation.id') 'Events share one operation per run'
 Write-Output 'SeedTelemetry tests passed.'
+
+$sent.Clear()
+Assert (Initialize-SeedTelemetry "InstrumentationKey=$key;IngestionEndpoint=https://ingest.example.test/") 'New lifecycle initialized'
+Assert (Send-SeedLifecycleEvent -Phase started -Mode full -ScriptVersion 'abcdef12' -Sender $sender) 'Sparse start sent'
+Assert (Send-SeedLifecycleEvent -Phase stage -Stage modules -Sender $sender) 'Module stage sent'
+Assert (-not (Send-SeedLifecycleEvent -Phase stage -Stage modules -Sender $sender)) 'Repeated stage suppressed'
+Assert (Send-SeedLifecycleEvent -Phase failed -Stage modules -Mode 'Bearer marker-secret' -ScriptVersion 'marker-secret' -Sender $sender) 'Early failure sent'
+Assert (-not (Send-SeedLifecycleEvent -Phase completed -Sender $sender)) 'Terminal event emitted at most once'
+Assert ($sent.Count -eq 3) 'Lifecycle bounded and sparse'
+$terminal = $sent[-1].Body | ConvertFrom-Json
+Assert ($terminal.data.baseData.name -eq 'Seed.Failed') 'Startup failure distinguished from successful completion'
+Assert ($sent[-1].Body -notmatch 'marker-secret') 'Lifecycle arbitrary values cannot leak'
+Assert ((($sent[0].Body | ConvertFrom-Json).tags.'ai.operation.id') -eq $terminal.tags.'ai.operation.id') 'Lifecycle shares causal seed operation'
+Write-Output 'Seed lifecycle telemetry tests passed.'

@@ -66,6 +66,11 @@ public static class FunctionAuthorizationRegistry
         new("RemoveReviewHelpfulVote", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "business_entity_id(self; consumer only, own vote)"),  // DELETE /api/reviews/{productReviewId:int}/vote
 
         // ---- Tier I — internal-only (124) ----
+        new("MonitoringSummary", AccessTier.Internal, FunctionScopes.MonitoringRead, AccessMode.InternalOnly, null),
+        new("MonitoringTrace", AccessTier.Internal, FunctionScopes.MonitoringRead, AccessMode.InternalOnly, null),
+        new("MonitoringCaptureStatus", AccessTier.Internal, FunctionScopes.MonitoringRead, AccessMode.InternalOnly, null),
+        new("MonitoringCaptureStart", AccessTier.Internal, FunctionScopes.MonitoringWrite, AccessMode.InternalOnly, null),
+        new("MonitoringCaptureStop", AccessTier.Internal, FunctionScopes.MonitoringWrite, AccessMode.InternalOnly, null),
         new("AdminRequestPasswordReset", AccessTier.Internal, FunctionScopes.CustomersWrite, AccessMode.InternalOnly, null),  // /api/password/reset/admin-request (staff-only; reports eligibility)
         new("GenerateManufacturingDiagram", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("GenerateManufacturingInstructions", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),

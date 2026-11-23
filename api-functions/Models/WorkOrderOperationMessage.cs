@@ -15,6 +15,7 @@ namespace api_functions.Models;
 /// </summary>
 public record WorkOrderOperationMessage
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     /// <summary>GUID identifying the production run. Used to correlate BOM-chained WorkOrders.</summary>
     public string RunId { get; set; } = string.Empty;
 

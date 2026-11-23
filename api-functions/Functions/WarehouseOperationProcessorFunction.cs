@@ -55,6 +55,7 @@ public class WarehouseOperationProcessorFunction
     public async Task WarehouseOperationProcessor(
         [QueueTrigger(QUEUE_NAME)] string messageText)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("warehouse-operation", messageText);
         WarehouseOperationMessage? msg;
         try
         {
@@ -67,12 +68,14 @@ public class WarehouseOperationProcessorFunction
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to deserialize warehouse operation message: {Message}", messageText);
-            return; // Poison message — let it dead-letter
+            attempt.SetOutcome("rejected");
+            _logger.LogError("Failed to deserialize warehouse operation message ({ErrorType}).", ex.GetType().Name);
+            return; // Existing invalid-message policy deletes rather than retries.
         }
 
         if (msg == null)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("Null warehouse operation message received.");
             return;
         }
@@ -95,6 +98,7 @@ public class WarehouseOperationProcessorFunction
 
                 await _webPubSub.SendCoalescedAsync("warehouse", "operation-completed", new { @event = "operation-completed", operationType = msg.OperationType, productId = msg.ProductId });
             }
+            attempt.Complete();
         }
         catch (Exception ex)
         {

@@ -69,6 +69,7 @@ public class SimulationOrderQueueTrigger
         [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("simulation-order", queueMessage.ToString());
         SimulationOrderMessage? msg = null;
         try
         {
@@ -78,12 +79,14 @@ public class SimulationOrderQueueTrigger
         }
         catch (Exception ex)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogError(ex, "[simulation-order-queue] Failed to deserialise message — dropping");
             return; // Poison message: let it dead-letter rather than retry indefinitely
         }
 
         if (msg == null)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("[simulation-order-queue] Null message after deserialisation — dropping");
             return;
         }
@@ -186,9 +189,11 @@ public class SimulationOrderQueueTrigger
                     CompletedAt = DateTimeOffset.UtcNow,
                     OrderType = orderType,
                 });
+                attempt.Complete();
             }
             else
             {
+                attempt.SetOutcome("failed");
                 _logger.LogWarning("[simulation-order-queue] Order generation failed — {Error}", result.ErrorMessage);
                 _telemetryClient.TrackEvent("SimulationOrder.Failed", new Dictionary<string, string>(trackProps)
                 {
@@ -209,6 +214,7 @@ public class SimulationOrderQueueTrigger
         }
         catch (Exception ex)
         {
+            attempt.SetOutcome("retrying");
             _logger.LogError(ex, "[simulation-order-queue] Unhandled error for persona={Persona} customerId={CustomerId}",
                 personaType, seedCustomerId);
             _telemetryClient.TrackException(ex, trackProps);
@@ -263,7 +269,7 @@ public class SimulationOrderQueueTrigger
                     CustomerId  = customerId,
                     PersonaHint = personaHint
                 };
-                await queueClient.SendMessageAsync(JsonSerializer.Serialize(msg));
+                await queueClient.SendObservedMessageAsync(JsonSerializer.Serialize(msg));
                 queued++;
             }
 

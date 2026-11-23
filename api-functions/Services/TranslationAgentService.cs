@@ -48,7 +48,7 @@ public class TranslationAgentService
         TranslationRequest request,
         List<CultureInfo> targetCultures)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("TranslationAgent.TranslateProduct");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("TranslationAgent.TranslateProduct");
         operation.Telemetry.Properties["ProductModelID"] = request.ProductModelID.ToString();
         operation.Telemetry.Properties["TargetCultureCount"] = targetCultures.Count.ToString();
 
@@ -110,7 +110,7 @@ public class TranslationAgentService
         string context,
         List<CultureInfo> targetCultures)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("TranslationAgent.TranslateText");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("TranslationAgent.TranslateText");
         operation.Telemetry.Properties["TargetCultureCount"] = targetCultures.Count.ToString();
 
         try

@@ -71,13 +71,18 @@ public class AIJobProcessorFunction
         [QueueTrigger(IMAGE_QUEUE, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("ai-image-job", queueMessage.ToString());
         var msg = DeserialiseOrDrop(queueMessage);
-        if (msg == null) return;
+        if (msg == null) { attempt.SetOutcome("rejected"); return; }
         _logger.LogInformation("[image-queue] Processing JobType={jobType}", msg.JobType);
         if (msg.JobType.Equals("image", StringComparison.OrdinalIgnoreCase))
             await ProcessImageJobAsync(msg);
         else
+        {
+            attempt.SetOutcome("skipped");
             _logger.LogWarning("[image-queue] Unexpected JobType '{jobType}' — skipping", msg.JobType);
+        }
+        attempt.Complete();
     }
 
     /// <summary>Processes embedding jobs. Serialised against the embeddings model.</summary>
@@ -86,15 +91,17 @@ public class AIJobProcessorFunction
         [QueueTrigger(EMBEDDINGS_QUEUE, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("ai-embeddings-job", queueMessage.ToString());
         var msg = DeserialiseOrDrop(queueMessage);
-        if (msg == null) return;
+        if (msg == null) { attempt.SetOutcome("rejected"); return; }
         _logger.LogInformation("[embeddings-queue] Processing JobType={jobType}", msg.JobType);
         switch (msg.JobType.ToLowerInvariant())
         {
             case "product-embeddings": await ProcessProductEmbeddingsJobAsync(); break;
             case "review-embeddings":  await ProcessReviewEmbeddingsJobAsync();  break;
-            default: _logger.LogWarning("[embeddings-queue] Unexpected JobType '{jobType}' — skipping", msg.JobType); break;
+            default: attempt.SetOutcome("skipped"); _logger.LogWarning("[embeddings-queue] Unexpected JobType '{jobType}' — skipping", msg.JobType); break;
         }
+        attempt.Complete();
     }
 
     /// <summary>Processes chat-model jobs (translations, reviews). Serialised against the GPT model.</summary>
@@ -103,16 +110,18 @@ public class AIJobProcessorFunction
         [QueueTrigger(CHAT_QUEUE, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("ai-chat-job", queueMessage.ToString());
         var msg = DeserialiseOrDrop(queueMessage);
-        if (msg == null) return;
+        if (msg == null) { attempt.SetOutcome("rejected"); return; }
         _logger.LogInformation("[chat-queue] Processing JobType={jobType}", msg.JobType);
         switch (msg.JobType.ToLowerInvariant())
         {
             case "translation":     await ProcessTranslationJobAsync(msg);   break;
             case "review":          await ProcessReviewJobAsync(msg);         break;
             case "generate-order":  await ProcessGenerateOrderJobAsync(msg);  break;
-            default: _logger.LogWarning("[chat-queue] Unexpected JobType '{jobType}' — skipping", msg.JobType); break;
+            default: attempt.SetOutcome("skipped"); _logger.LogWarning("[chat-queue] Unexpected JobType '{jobType}' — skipping", msg.JobType); break;
         }
+        attempt.Complete();
     }
 
     // ── Status endpoint ───────────────────────────────────────────────────────
@@ -159,6 +168,7 @@ public class AIJobProcessorFunction
     {
         if (msg.ProductId == null)
         {
+            BackgroundWorkTelemetry.Outcome("rejected");
             _logger.LogWarning("Image job missing ProductId — skipping");
             return;
         }
@@ -169,6 +179,7 @@ public class AIJobProcessorFunction
         var product = await _productService.GetProductForImageGenerationAsync(productId);
         if (product == null)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogInformation("Image job: product {id} not found or already has enough photos — skipping", productId);
             return;
         }
@@ -194,6 +205,7 @@ public class AIJobProcessorFunction
 
         if (_aiService.ImageDeploymentName is null)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogWarning("Image job: no image model deployment is configured (AI_IMAGE_DEPLOYMENT_NAME) — skipping product {id}", productId);
             return;
         }
@@ -205,6 +217,7 @@ public class AIJobProcessorFunction
 
         if (photos == null || photos.Count == 0)
         {
+            BackgroundWorkTelemetry.Outcome("failed");
             _logger.LogWarning("Image job: no photos returned for product {id}", productId);
             return;
         }
@@ -222,7 +235,7 @@ public class AIJobProcessorFunction
                 ProductPhotoID = photoId,
                 LargePhotoFileName = photo.FileName
             });
-            await thumbnailQueueClient.SendMessageAsync(thumbnailMessage);
+            await thumbnailQueueClient.SendObservedMessageAsync(thumbnailMessage);
         }
 
         _logger.LogInformation("Image job: completed for product {id} — {count} photos saved", productId, photos.Count);
@@ -232,6 +245,7 @@ public class AIJobProcessorFunction
     {
         if (msg.ProductModelId == null)
         {
+            BackgroundWorkTelemetry.Outcome("rejected");
             _logger.LogWarning("Translation job missing ProductModelId — skipping");
             return;
         }
@@ -245,6 +259,7 @@ public class AIJobProcessorFunction
         var products = await productService.GetProductsByModelIdsAsync(new List<int> { productModelId });
         if (products == null || products.Count == 0)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogWarning("Translation job: no product found for ProductModelID {id} — skipping", productModelId);
             return;
         }
@@ -257,6 +272,7 @@ public class AIJobProcessorFunction
 
         // Translate descriptions
         var translations = await _translationAgentService.TranslateProductAsync(product, cultures);
+        if (translations.Count < cultures.Count) BackgroundWorkTelemetry.Outcome("partial");
         _logger.LogInformation("Translation job: AI translated ProductModelID {id} to {count} languages",
             productModelId, translations.Count);
 
@@ -312,6 +328,7 @@ public class AIJobProcessorFunction
             }
             catch (Exception ex)
             {
+                BackgroundWorkTelemetry.Outcome("partial");
                 _logger.LogWarning(ex, "Translation job: product name translation failed for ProductModelID {id} — continuing", productModelId);
             }
         }
@@ -353,6 +370,7 @@ public class AIJobProcessorFunction
             {
                 var batch = forEmbedding.Skip(i).Take(10).ToList();
                 var embeddedBatch = await _aiService.GenerateEmbeddingsAsync(batch);
+                if (embeddedBatch.Count < batch.Count) BackgroundWorkTelemetry.Outcome("partial");
                 foreach (var emb in embeddedBatch)
                     await productService.SaveEmbeddingAsync(emb);
             }
@@ -367,6 +385,7 @@ public class AIJobProcessorFunction
     {
         if (msg.ProductIds == null || msg.ProductIds.Count == 0)
         {
+            BackgroundWorkTelemetry.Outcome("rejected");
             _logger.LogWarning("Review job missing ProductIds — skipping");
             return;
         }
@@ -381,11 +400,13 @@ public class AIJobProcessorFunction
         var products = await reviewService.GetProductsForReviewGenerationAsync(msg.ProductIds);
         if (products == null || products.Count == 0)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogInformation("Review job: no products found for the requested IDs — skipping");
             return;
         }
 
         var generatedReviews = await _reviewBatchAgentService.GenerateProductReviewsAsync(products);
+        if (generatedReviews.Count == 0) BackgroundWorkTelemetry.Outcome("failed");
         _logger.LogInformation("Review job: AI generated {count} reviews", generatedReviews.Count);
 
         foreach (var review in generatedReviews)
@@ -402,7 +423,7 @@ public class AIJobProcessorFunction
         {
             _logger.LogInformation("Review job: chat queue is empty — enqueuing review-embeddings job");
             var embeddingsQueueClient = await GetQueueClientAsync(EMBEDDINGS_QUEUE);
-            await embeddingsQueueClient.SendMessageAsync(
+            await embeddingsQueueClient.SendObservedMessageAsync(
                 JsonSerializer.Serialize(new AiJobMessage { JobType = "review-embeddings" }));
         }
     }
@@ -427,11 +448,13 @@ public class AIJobProcessorFunction
             }
             else
             {
+                BackgroundWorkTelemetry.Outcome("failed");
                 _logger.LogWarning("Generate-order job: failed — {Error}", result.ErrorMessage);
             }
         }
         catch (Exception ex)
         {
+            BackgroundWorkTelemetry.Outcome("failed");
             _logger.LogError(ex, "Generate-order job: unhandled exception for personaType={PersonaType}", personaType);
         }
     }
@@ -443,6 +466,7 @@ public class AIJobProcessorFunction
 
         if (descriptions.Count == 0)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogInformation("Product-embeddings job: nothing to embed");
             return;
         }
@@ -460,6 +484,7 @@ public class AIJobProcessorFunction
         }
 
         _logger.LogInformation("Product-embeddings job: completed — {count} embeddings saved", total);
+        if (total < descriptions.Count) BackgroundWorkTelemetry.Outcome("partial");
     }
 
     private async Task ProcessReviewEmbeddingsJobAsync()
@@ -469,6 +494,7 @@ public class AIJobProcessorFunction
 
         if (reviews.Count == 0)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogInformation("Review-embeddings job: nothing to embed");
             return;
         }
@@ -486,6 +512,7 @@ public class AIJobProcessorFunction
         }
 
         _logger.LogInformation("Review-embeddings job: completed — {count} embeddings saved", total);
+        if (total < reviews.Count) BackgroundWorkTelemetry.Outcome("partial");
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -507,7 +534,7 @@ public class AIJobProcessorFunction
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to deserialise AI job message — dropping: {raw}", queueMessage.ToString());
+            _logger.LogError("Failed to deserialise AI job message — dropping ({ErrorType}).", ex.GetType().Name);
             return null;
         }
     }

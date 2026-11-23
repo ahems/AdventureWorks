@@ -59,13 +59,8 @@ public class HelpMeChoosePublicContractTests
     {
         const string traceId = "8d454f22361140e8b3f05a33c8f11d1f";
         const string traceParent = "00-" + traceId + "-0123456789abcdef-01";
-        var channel = new Channel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
-        telemetry.TelemetryInitializers.Add(new OperationCorrelationTelemetryInitializer());
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = new TelemetryClient(telemetry);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -85,7 +80,7 @@ public class HelpMeChoosePublicContractTests
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         var exception = Assert.Single(channel.Items.OfType<ExceptionTelemetry>());
-        Assert.Equal(traceId, exception.Context.Operation.Id);
+        Assert.Equal(traceId, exception.Properties["otel.trace_id"]);
         Assert.Same(outer, Activity.Current);
     }
 
@@ -94,13 +89,8 @@ public class HelpMeChoosePublicContractTests
     {
         const string traceId = "8d454f22361140e8b3f05a33c8f11d1f";
         const string traceParent = "00-" + traceId + "-0123456789abcdef-01";
-        var channel = new Channel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
-        telemetry.TelemetryInitializers.Add(new OperationCorrelationTelemetryInitializer());
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = new TelemetryClient(telemetry);
         var handler = new AIAgentFunctions(NullLogger<AIAgentFunctions>.Instance, null!, client, null!);
         using var context = new Context(traceParent);
@@ -110,7 +100,7 @@ public class HelpMeChoosePublicContractTests
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         var exception = Assert.Single(channel.Items.OfType<ExceptionTelemetry>());
-        Assert.Equal(traceId, exception.Context.Operation.Id);
+        Assert.Equal(traceId, exception.Properties["otel.trace_id"]);
         Assert.Same(outer, Activity.Current);
     }
 
@@ -172,13 +162,4 @@ public class HelpMeChoosePublicContractTests
             Task.FromResult(1L);
     }
 
-    private sealed class Channel : ITelemetryChannel
-    {
-        public List<ITelemetry> Items { get; } = [];
-        public bool? DeveloperMode { get; set; }
-        public string? EndpointAddress { get; set; }
-        public void Send(ITelemetry item) => Items.Add(item);
-        public void Flush() { }
-        public void Dispose() { }
-    }
 }

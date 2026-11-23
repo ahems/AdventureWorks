@@ -292,6 +292,7 @@ public class GenerateVerifiedReviewsFunction
     public async Task ProcessVerifiedReviewsQueueMessage(
         [QueueTrigger(VerifiedReviewsQueue.QueueName, Connection = "AzureWebJobsStorage")] BinaryData queueMessage)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("verified-reviews", queueMessage.ToString());
         VerifiedReviewsQueueMessage? message;
         try
         {
@@ -299,12 +300,14 @@ public class GenerateVerifiedReviewsFunction
         }
         catch (JsonException ex)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogError(ex, "Invalid verified-reviews queue message.");
             return;
         }
 
         if (message == null || string.IsNullOrWhiteSpace(message.JobId) || message.Product.ProductID <= 0)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("Skipping malformed verified-reviews queue message.");
             return;
         }
@@ -313,6 +316,7 @@ public class GenerateVerifiedReviewsFunction
         var state = await _reviewService.GetVerifiedReviewsJobStateAsync();
         if (!state.IsRunning || !string.Equals(state.JobId, message.JobId, StringComparison.Ordinal))
         {
+            attempt.SetOutcome("skipped");
             _logger.LogInformation("Ignoring verified-reviews message for inactive job {JobId}, ProductID={pid}",
                 message.JobId, product.ProductID);
             return;
@@ -342,9 +346,11 @@ public class GenerateVerifiedReviewsFunction
                             "Saved verified review {id} for CustomerID={cid}, ProductID={pid}",
                             reviewId, customer.CustomerID, product.ProductID);
                     }
+                    else attempt.SetOutcome("partial");
                 }
                 catch (Exception ex) when (ex is not FoundryToolPolicyException)
                 {
+                    attempt.SetOutcome("partial");
                     _logger.LogError(ex, "Error generating review for CustomerID={cid}, ProductID={pid}",
                         customer.CustomerID, product.ProductID);
                     error = $"Product '{product.Name}', CustomerID {customer.CustomerID}: {ex.Message}";
@@ -353,6 +359,7 @@ public class GenerateVerifiedReviewsFunction
                 var progress = await _reviewService.ReportVerifiedReviewProgressAsync(message.JobId, product.Name, error);
                 if (progress == null)
                 {
+                    attempt.SetOutcome(savedIds.Count > 0 ? "partial" : "skipped");
                     _logger.LogInformation("Verified-reviews job {JobId} stopped or replaced; abandoning ProductID={pid}",
                         message.JobId, product.ProductID);
                     return;
@@ -390,12 +397,14 @@ public class GenerateVerifiedReviewsFunction
                 }
                 catch (Exception ex) when (ex is not FoundryToolPolicyException)
                 {
+                    attempt.SetOutcome("partial");
                     _logger.LogWarning(ex, "Failed to generate replies for productId={pid}", product.ProductID);
                 }
             }
         }
         catch (FoundryToolPolicyException ex)
         {
+            attempt.SetOutcome(savedIds.Count > 0 ? "partial" : "failed");
             _logger.LogError(ex, "Verified-reviews job {JobId} stopped after a tool-policy violation", message.JobId);
             await _reviewService.StopVerifiedReviewsJobAsync(message.JobId, ex.Message);
             return;
@@ -403,6 +412,8 @@ public class GenerateVerifiedReviewsFunction
 
         var completed = await _reviewService.CompleteVerifiedReviewsProductAsync(
             message.JobId, product.ProductID, message.CustomerIds.Distinct().Count());
+        if (savedIds.Count == 0 && !message.CustomerIds.Any(eligible.ContainsKey)) attempt.SetOutcome("skipped");
+        attempt.Complete();
 
         _telemetryClient.TrackEvent("VerifiedReviewsBatchProductCompleted", new Dictionary<string, string>
         {

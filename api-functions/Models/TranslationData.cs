@@ -42,6 +42,7 @@ public class SavedDescriptionResult
 // Language file translation models
 public class TranslationOrchestrationInput
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     public string LanguageDataJson { get; set; } = string.Empty;
     public string TargetLanguageCode { get; set; } = string.Empty;
     public string TargetLanguageName { get; set; } = string.Empty;
@@ -50,6 +51,7 @@ public class TranslationOrchestrationInput
 
 public class SectionTranslationInput
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     public string SectionName { get; set; } = string.Empty;
     public string SectionDataJson { get; set; } = string.Empty;
     public string TargetLanguageCode { get; set; } = string.Empty;
@@ -73,6 +75,7 @@ public class TranslatedSection
 
 public class TranslationResultInput
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     public string InstanceId { get; set; } = string.Empty;
     public string JsonResult { get; set; } = string.Empty;
     public string TargetLanguageCode { get; set; } = string.Empty;

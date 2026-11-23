@@ -3,8 +3,9 @@ import App from "./App.tsx";
 import "./index.css";
 import { initAppInsights } from "./lib/appInsights";
 import { installFunctionsAuthInterceptor } from "./services/functionsAuthInterceptor";
+import { TelemetryErrorBoundary } from "./components/TelemetryErrorBoundary";
 
 initAppInsights();
 installFunctionsAuthInterceptor();
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(<TelemetryErrorBoundary><App /></TelemetryErrorBoundary>);

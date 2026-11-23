@@ -32,6 +32,7 @@ public class GenerateProductThumbnails
         [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("product-thumbnail", queueMessage.ToString());
         _logger.LogInformation("Queue trigger processing thumbnail generation");
 
         try
@@ -52,6 +53,7 @@ public class GenerateProductThumbnails
 
             if (photo == null)
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogWarning(
                     "ProductPhotoID {photoId} not found - skipping",
                     productPhotoId
@@ -62,6 +64,7 @@ public class GenerateProductThumbnails
             // Check if thumbnail already exists
             if (photo.ThumbNailPhoto != null && photo.ThumbNailPhoto.Length > 0)
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogInformation(
                     "ProductPhotoID {photoId} already has thumbnail - skipping",
                     productPhotoId
@@ -101,6 +104,7 @@ public class GenerateProductThumbnails
 
             // Save to database
             await _productService.SaveProductThumbnailAsync(productPhotoId, thumbnailData, thumbnailFileName);
+            attempt.Complete();
 
             _logger.LogInformation(
                 "Saved thumbnail for ProductPhotoID {photoId}",

@@ -125,6 +125,7 @@ live in this folder.
 ## 9. Testing
 
 - [Testing strategy](testing/testing-strategy.md) — test suites, what they cover and how to run them.
+- [Observability validation](testing/OBSERVABILITY_VALIDATION.md) — telemetry proof layers, bounded presenter scenarios, capture safety and deployed evidence.
 - [Authenticated deployment scripts](testing/AZURE_AUTHENTICATED_SCRIPTS.md) — call protected APIs with `azure-auth.py` tokens.
 - [AI and MCP testing guide](testing/AI_AND_MCP_TESTING_GUIDE.md) — testing Foundry agents and MCP tools.
 - [AI chat MCP testing](testing/AI_CHAT_MCP_TESTING.md) — testing chat agents' delegated MCP calls.

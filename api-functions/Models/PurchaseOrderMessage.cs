@@ -14,6 +14,7 @@ namespace api_functions.Models;
 /// </summary>
 public record PurchaseOrderMessage
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     /// <summary>"order-transition" or "vendor-restock"</summary>
     public string MessageType { get; set; } = string.Empty;
 

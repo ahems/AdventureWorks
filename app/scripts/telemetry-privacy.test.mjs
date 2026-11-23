@@ -97,3 +97,28 @@ test("storefront sign-in and sign-up events identify users only by BusinessEntit
     assert.deepEqual(keys, ["userId"]);
   }
 });
+
+for (const root of ["app", "app-admin", "app-manufacturing"]) {
+  test(`${root} outbound sanitizer removes nested/serialized credentials, error text and URL secrets`, async () => {
+    const source = readFileSync(join(repoRoot, root, "src/lib/telemetrySafety.ts"), "utf8");
+    const emitted = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
+    const { sanitizeTelemetry, classifyFailure, routeTemplate } = await import(`data:text/javascript;base64,${Buffer.from(emitted).toString("base64")}`);
+    const marker = "privateMarker";
+    const payload = {
+      baseData: { name: "GET /api/orders/123?code=privateMarker", url: `https://name:${marker}@example.test/oauth/callback?state=${marker}#${marker}`,
+        properties: {
+          nested: { authorization: `Bearer ${marker}`, apiKey: marker, accessKey: marker, connectionString: marker, cookies: marker, error: { detail: marker }, headers: { Authorization: marker } },
+          serialized: JSON.stringify({ nested: { password: marker, request: `/graphql?query=${marker}`, errors: [{ message: marker }] } }),
+          exception: new Error(marker),
+          detail: `GET /reset-password?token=${marker}`,
+        } },
+    };
+    const safe = JSON.stringify(sanitizeTelemetry(payload));
+    assert.ok(!safe.includes(marker), safe);
+    assert.equal(routeTemplate("/api/orders/123?password=x"), "/api/orders/:id");
+    assert.equal(classifyFailure({ response: { status: 200, errors: [{}] } }), "graphql-error");
+    assert.equal(classifyFailure({ name: "AbortError" }), "cancelled");
+    assert.equal(classifyFailure({ message: "The session has changed." }), "authorization-cancelled");
+    assert.equal(classifyFailure({ status: 429 }), "throttled");
+  });
+}

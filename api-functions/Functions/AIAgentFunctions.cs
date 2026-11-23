@@ -132,14 +132,6 @@ public class AIAgentFunctions
 
             var requestDuration = DateTimeOffset.UtcNow - requestStartTime;
 
-            // Track successful completion
-            _telemetryClient.TrackRequest(
-                "AIAgentChat",
-                requestStartTime,
-                requestDuration,
-                "200",
-                true);
-
             _telemetryClient.TrackEvent("Agent.ChatSuccess", new Dictionary<string, string>
             {
                 ["CustomerId"] = caller.CustomerId?.ToString() ?? "internal",
@@ -156,16 +148,9 @@ public class AIAgentFunctions
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing agent chat request");
+            _logger.LogError("Error processing agent chat request; type {FailureType}", ex.GetType().Name);
 
             var requestDuration = DateTimeOffset.UtcNow - requestStartTime;
-
-            _telemetryClient.TrackRequest(
-                "AIAgentChat",
-                requestStartTime,
-                requestDuration,
-                "500",
-                false);
 
             _telemetryClient.TrackException(ex, new Dictionary<string, string>
             {

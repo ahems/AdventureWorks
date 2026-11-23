@@ -66,7 +66,7 @@ public class ReviewBatchAgentService
     {
         if (reviews.Count == 0) return new Dictionary<int, string>();
 
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("ReviewBatchAgent.Replies");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("ReviewBatchAgent.Replies");
         operation.Telemetry.Properties["ReviewCount"] = reviews.Count.ToString();
 
         try

@@ -1,11 +1,17 @@
 import { ApplicationInsights } from "@microsoft/applicationinsights-web";
 import { ReactPlugin } from "@microsoft/applicationinsights-react-js";
+import { getFunctionsApiUrl, getGraphQLApiUrl, getApiMcpUrl } from "./utils";
+import { sanitizeTelemetry, classifyFailure } from "./telemetrySafety";
+import { startBrowserSignals } from "./browserSignals";
 
 // Create the React plugin for router tracking
 export const reactPlugin = new ReactPlugin();
 
 // Initialize Application Insights
 let appInsights: ApplicationInsights | null = null;
+const reportedErrors = new WeakSet<object>();
+const getCorrelationDomains = () => [getFunctionsApiUrl(), getGraphQLApiUrl(), getApiMcpUrl()]
+  .flatMap(value => { try { return [new URL(value).host]; } catch { return []; } });
 
 export const initAppInsights = () => {
   const connectionString = window.APP_CONFIG?.APPINSIGHTS_CONNECTIONSTRING;
@@ -31,8 +37,10 @@ export const initAppInsights = () => {
         autoTrackPageVisitTime: true,
         enableUnhandledPromiseRejectionTracking: true,
         enableCorsCorrelation: true,
-        enableRequestHeaderTracking: true,
-        enableResponseHeaderTracking: true,
+        distributedTracingMode: 2,
+        correlationHeaderDomains: getCorrelationDomains(),
+        enableRequestHeaderTracking: false,
+        enableResponseHeaderTracking: false,
         // Browsers are deprecating the 'unload' event (Permissions Policy violation).
         // Telemetry is still flushed via 'beforeunload', 'pagehide' and 'visibilitychange'.
         disablePageUnloadEvents: ["unload"],
@@ -43,7 +51,11 @@ export const initAppInsights = () => {
     appInsights.addTelemetryInitializer((item) => {
       item.tags = item.tags ?? {};
       item.tags["ai.cloud.role"] = "app-eshop";
+      item.tags["ai.application.ver"] = import.meta.env.VITE_BUILD_VERSION || "unknown";
+      const safe = sanitizeTelemetry(item) as typeof item;
+      Object.assign(item, safe);
     });
+    startBrowserSignals(trackEvent, getCorrelationDomains());
     // Auto route tracking only covers SPA navigations, so record the initial load explicitly.
     appInsights.trackPageView();
 
@@ -105,7 +117,7 @@ export const trackException = (
   properties?: Record<string, unknown>,
 ) => {
   if (appInsights) {
-    appInsights.trackException({ exception: error }, properties);
+    appInsights.trackException({ exception: new Error("Handled browser failure") }, { ...properties, errorClass: error.name });
   }
 };
 
@@ -140,15 +152,17 @@ export const trackError = (
 ) => {
   if (appInsights) {
     if (error instanceof Error) {
-      appInsights.trackException(
-        { exception: error },
-        { ...properties, message },
-      );
+      trackException(error, { ...properties, message });
     } else {
-      appInsights.trackException(
-        { exception: new Error(message) },
-        { ...properties, errorDetails: error },
-      );
+      trackException(new Error("Handled browser failure"), { ...properties, message, errorDetails: error });
     }
   }
 };
+
+export function reportHandledFailure(error: unknown, operation = "query") {
+  if (error && typeof error === "object") {
+    if (reportedErrors.has(error)) return;
+    reportedErrors.add(error);
+  }
+  trackEvent("browser.handled-outcome", { operation, outcome: classifyFailure(error) });
+}

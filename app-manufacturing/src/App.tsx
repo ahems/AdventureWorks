@@ -1,5 +1,6 @@
 import React from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
+import { reportHandledFailure } from "@/lib/appInsights";
 import {
   BrowserRouter,
   Outlet,
@@ -59,7 +60,10 @@ import WarehouseWorkforce from "@/pages/warehouse/WarehouseWorkforce";
 import WarehouseConfig from "@/pages/warehouse/WarehouseConfig";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: error => reportHandledFailure(error, "query") }),
+  mutationCache: new MutationCache({ onError: error => reportHandledFailure(error, "mutation") }),
+});
 
 const AuthenticatedLayout: React.FC = () => {
   const pushStatus = useRealTimeUpdates();

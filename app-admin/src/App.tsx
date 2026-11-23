@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
+import { reportHandledFailure } from "@/lib/appInsights";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/context/AuthContext";
@@ -37,8 +38,12 @@ import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
 import { LiveUpdatesNotice } from "./components/LiveUpdatesNotice";
 import RequireAuth from "./components/RequireAuth";
+import MonitoringPage from "./pages/MonitoringPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: error => reportHandledFailure(error, "query") }),
+  mutationCache: new MutationCache({ onError: error => reportHandledFailure(error, "mutation") }),
+});
 
 /** Wrapper component inside QueryClientProvider so hooks work. */
 const AppShell = () => {
@@ -110,6 +115,7 @@ const App = () => (
                   />
                   <Route path="/order-pipeline" element={<OrderPipelinePage />} />
                   <Route path="/warehouse" element={<WarehousePage />} />
+                  <Route path="/monitoring" element={<MonitoringPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Route>
               </Route>

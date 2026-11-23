@@ -8,6 +8,19 @@ related: [docs/services/manufacturing-agent.md, docs/features/manufacturing/manu
 
 # Manufacturing hosted agent (`manufacturing-agent/mcp-tools/`)
 
+## Telemetry
+
+AgentHost already initializes OpenTelemetry and export. Startup extends its
+existing tracing/metrics providers and enables the supported Agent Framework
+agent pipeline with sensitive-data capture disabled. Agent/model sources are
+subscribed without installing another Application Insights distro. Model usage
+and tool work remain separate from the host request. api-mcp owns actual remote
+tool execution spans. No prompts, tool bodies or hidden reasoning are enabled
+by this configuration, and it does not override Foundry-managed tracing.
+Unsafe immutable native span events are withheld before export and counted in
+`aw.telemetry.redacted_span.count`; safe outcome telemetry is not fabricated.
+Runtime ingestion/token correlation still needs post-deployment evidence.
+
 A **Microsoft Foundry hosted agent** (Microsoft Agent Framework, Responses protocol) that
 analyses sales orders with AdventureWorks manufacturing, inventory and supply-chain MCP
 tools. The Functions manufacturing queue trigger invokes its Responses endpoint and

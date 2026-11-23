@@ -7,6 +7,8 @@ using Microsoft.Extensions.ServiceDiscovery;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Logs;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -43,44 +45,22 @@ public static class Extensions
 
     public static IHostApplicationBuilder ConfigureOpenTelemetry(this IHostApplicationBuilder builder)
     {
-        builder.Logging.AddOpenTelemetry(logging =>
-        {
-            logging.IncludeFormattedMessage = true;
-            logging.IncludeScopes = true;
-        });
+        builder.Services.Configure<OpenTelemetryLoggerOptions>(logging => logging.IncludeScopes = false);
 
         builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService("api-mcp")
+                .AddAttributes(new Dictionary<string, object>
+                {
+                    ["deployment.environment.name"] = builder.Configuration["AZURE_ENV_NAME"] ?? "unconfigured"
+                }))
             .WithMetrics(metrics =>
             {
-                metrics.AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                metrics.AddRuntimeInstrumentation().AddMeter("AdventureWorks.Mcp", "AdventureWorks.GenAI", "AdventureWorks.Telemetry");
             })
             .WithTracing(tracing =>
             {
-                tracing.AddAspNetCoreInstrumentation()
-                    // Uncomment the following line to enable gRPC instrumentation (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
-                    //.AddGrpcClientInstrumentation()
-                    .AddHttpClientInstrumentation();
+                tracing.AddSource("AdventureWorks.Mcp", "AdventureWorks.GenAI", "Azure.*", "OpenAI*", "Experimental.OpenAI*");
             });
-
-        builder.AddOpenTelemetryExporters();
-
-        return builder;
-    }
-
-    private static IHostApplicationBuilder AddOpenTelemetryExporters(this IHostApplicationBuilder builder)
-    {
-        var useOtlpExporter = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
-
-        if (useOtlpExporter)
-        {
-            builder.Services.AddOpenTelemetry().UseOtlpExporter();
-        }
-
-        // Application Insights export is handled by the service's Application Insights SDK
-        // (AddApplicationInsightsTelemetry). Do not also call UseAzureMonitor() here: running both
-        // pipelines suppresses request telemetry and duplicates dependency telemetry.
 
         return builder;
     }

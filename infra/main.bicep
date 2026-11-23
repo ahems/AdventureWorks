@@ -56,6 +56,36 @@ param sqlDatabaseName string
 param skipLocalDevRoleAssignments bool = false
 @allowed([ 'User', 'ServicePrincipal' ])
 param deployerPrincipalType string = 'User'
+@description('Optional native Azure Monitor Grafana dashboard/definition. No Managed Grafana instance is created.')
+param enableMonitoringGrafana bool = false
+@description('Optional existing Azure Monitor action group resource ID; empty means portal alerts only.')
+param monitoringActionGroupId string = ''
+
+var monitoringWorkbookId = resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, 'adventureworks-monitoring'))
+var monitoringWorkbookUrl = 'https://portal.azure.com/#resource${monitoringWorkbookId}'
+var monitoringGrafanaId = resourceId('Microsoft.Dashboard/dashboards', 'aw-monitoring-${resourceToken}')
+var monitoringGrafanaUrl = enableMonitoringGrafana ? 'https://portal.azure.com/#resource${monitoringGrafanaId}' : ''
+var monitoringApplicationInsightsUrl = 'https://portal.azure.com/#resource${resourceId('Microsoft.Insights/components', appInsightsName)}'
+var monitoringSqlId = resourceId('Microsoft.Sql/servers/databases', sqlServerName, sqlDatabaseName)
+var monitoringFunctionsId = resourceId('Microsoft.Web/sites', 'av-func-${resourceToken}')
+// Standard native metrics only, including Flex-specific CPU; no copied AllMetrics stream.
+var monitoringMetricResources = [
+  { id: 'sql-cpu', resourceId: monitoringSqlId, metric: 'cpu_percent', aggregation: 'Maximum', unit: 'percent', limit: 100 }
+  { id: 'sql-data-io', resourceId: monitoringSqlId, metric: 'physical_data_read_percent', aggregation: 'Maximum', unit: 'percent', limit: 100 }
+  { id: 'sql-storage', resourceId: monitoringSqlId, metric: 'storage_percent', aggregation: 'Maximum', unit: 'percent', limit: 100 }
+  { id: 'sql-workers', resourceId: monitoringSqlId, metric: 'workers_percent', aggregation: 'Maximum', unit: 'percent', limit: 100 }
+  { id: 'blob-latency', resourceId: '${storage.outputs.storageAccountId}/blobServices/default', metric: 'SuccessE2ELatency', aggregation: 'Average', unit: 'milliseconds' }
+  { id: 'queue-latency', resourceId: '${storage.outputs.storageAccountId}/queueServices/default', metric: 'SuccessE2ELatency', aggregation: 'Average', unit: 'milliseconds' }
+  { id: 'table-latency', resourceId: '${storage.outputs.storageAccountId}/tableServices/default', metric: 'SuccessE2ELatency', aggregation: 'Average', unit: 'milliseconds' }
+  { id: 'dab-cpu', resourceId: resourceId('Microsoft.App/containerApps', 'av-api-${resourceToken}'), metric: 'UsageNanoCores', aggregation: 'Maximum', unit: 'nanocores', limit: 2000000000 }
+  { id: 'mcp-memory', resourceId: resourceId('Microsoft.App/containerApps', 'av-mcp-${resourceToken}'), metric: 'WorkingSetBytes', aggregation: 'Maximum', unit: 'bytes', limit: 2147483648 }
+  { id: 'functions-cpu', resourceId: monitoringFunctionsId, metric: 'CpuPercentage', aggregation: 'Average', unit: 'percent', limit: 100 }
+  { id: 'functions-on-demand', resourceId: monitoringFunctionsId, metric: 'OnDemandFunctionExecutionCount', aggregation: 'Total', unit: 'count' }
+  { id: 'foundry-requests', resourceId: resourceId('Microsoft.CognitiveServices/accounts', foundryname), metric: 'AzureOpenAIRequests', aggregation: 'Total', unit: 'count' }
+  { id: 'webpubsub-connections', resourceId: resourceId('Microsoft.SignalRService/webPubSub', 'av-wps-${resourceToken}'), metric: 'TotalConnectionCount', aggregation: 'Maximum', unit: 'count', limit: 20 }
+  { id: 'webpubsub-connection-quota', resourceId: resourceId('Microsoft.SignalRService/webPubSub', 'av-wps-${resourceToken}'), metric: 'ConnectionQuotaUtilization', aggregation: 'Maximum', unit: 'percent', limit: 100 }
+  { id: 'keyvault-availability', resourceId: resourceId('Microsoft.KeyVault/vaults', keyVaultName), metric: 'Availability', aggregation: 'Average', unit: 'percent' }
+]
 
 // Agent tool loops resend their growing context every round, so one order-generation run can
 // exceed 45K TPM on its own. Keep the 10% share but give chat a 150K TPM floor, capped at quota.
@@ -303,6 +333,11 @@ module apiFunctions 'modules/flex-api-functions.bicep' = {
     emailSenderDomain: communication.outputs.senderDomain
     foundryProjectEndpoint: aifoundry.outputs.projectEndpoint
     webPubSubHostName: webpubsub.outputs.webPubSubHostName
+    monitoringWorkspaceId: appinsights.outputs.workspaceCustomerId
+    monitoringMetricResources: monitoringMetricResources
+    monitoringWorkbookUrl: monitoringWorkbookUrl
+    monitoringGrafanaUrl: monitoringGrafanaUrl
+    monitoringApplicationInsightsUrl: monitoringApplicationInsightsUrl
     // The Functions resource server validates api-mcp-issued bearer tokens against the shared
     // OAuth issuer and the dedicated Functions audience ({issuer}/functions). Both are derived
     // from the deployed api-mcp FQDN (same value api-mcp advertises as MCP_PUBLIC_BASE_URL); no
@@ -314,6 +349,37 @@ module apiFunctions 'modules/flex-api-functions.bicep' = {
     virtualNetworkSubnetId: sqlPrivateNetwork.outputs.functionsSubnetId
   }
 }
+
+module monitoringAccess 'modules/monitoring-access.bicep' = {
+    name: 'Deploy-Monitoring-Access'
+    params: {
+      identityPrincipalId: identity.outputs.principalId
+      sqlServerName: sqlServerName
+      sqlDatabaseName: sqlDatabaseName
+      storageAccountName: storage.outputs.storageAccountName
+      functionsName: 'av-func-${resourceToken}'
+      dabName: 'av-api-${resourceToken}'
+      mcpName: 'av-mcp-${resourceToken}'
+      webPubSubName: 'av-wps-${resourceToken}'
+      foundryName: foundryname
+      keyVaultName: keyVaultName
+    }
+    dependsOn: [apiFunctions, containerAppApi, containerAppApiMcp, keyvault]
+  }
+
+module monitoringViews 'modules/monitoring.bicep' = {
+    name: 'Deploy-Monitoring-Views'
+    params: {
+      location: location
+      resourceToken: resourceToken
+      workspaceResourceId: appinsights.outputs.workspaceResourceId
+      webPubSubResourceId: resourceId('Microsoft.SignalRService/webPubSub', 'av-wps-${resourceToken}')
+      metricResources: monitoringMetricResources
+      enableGrafana: enableMonitoringGrafana
+      actionGroupId: monitoringActionGroupId
+    }
+    dependsOn: [webpubsub]
+  }
 
 module containerAppSeedJob 'modules/aca-seed-job.bicep' = {
   name: 'Deploy-Container-App-Seed-Job'
@@ -411,6 +477,11 @@ module containerAppManufacturing 'modules/aca-app-manufacturing.bicep' = {
 }
 
 output APP_URL string = staticWebAppFrontend.outputs.appRedirectUri
+output MONITORING_WORKSPACE_ID string = appinsights.outputs.workspaceCustomerId
+output MONITORING_WORKSPACE_RESOURCE_ID string = appinsights.outputs.workspaceResourceId
+output APPLICATIONINSIGHTS_RESOURCE_ID string = appinsights.outputs.resourceId
+output MONITORING_WORKBOOK_URL string = monitoringWorkbookUrl
+output MONITORING_GRAFANA_URL string = monitoringGrafanaUrl
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 output APP_ADMIN_URL string = containerAppAdmin.outputs.appAdminUrl
 output APP_MANUFACTURING_URL string = containerAppManufacturing.outputs.appManufacturingUrl

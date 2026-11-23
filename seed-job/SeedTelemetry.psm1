@@ -5,6 +5,9 @@ Set-StrictMode -Version Latest
 
 $script:TelemetryTarget = $null
 $script:TelemetryOperationId = $null
+$script:LifecycleTerminal = $false
+$script:LifecycleStages = @{}
+$script:TelemetryDiagnosticWritten = $false
 
 function ConvertFrom-AppInsightsConnectionString {
     param([string] $ConnectionString)
@@ -65,6 +68,9 @@ function Initialize-SeedTelemetry {
     param([string] $ConnectionString)
     $script:TelemetryTarget = ConvertFrom-AppInsightsConnectionString $ConnectionString
     $script:TelemetryOperationId = [guid]::NewGuid().ToString('N')
+    $script:LifecycleTerminal = $false
+    $script:LifecycleStages = @{}
+    $script:TelemetryDiagnosticWritten = $false
     return $null -ne $script:TelemetryTarget
 }
 
@@ -90,12 +96,44 @@ function Send-SeedTelemetryEvent {
         if ($Sender) { & $Sender $script:TelemetryTarget.Url $body }
         else {
             $null = Invoke-RestMethod -Method Post -Uri $script:TelemetryTarget.Url -Body $body `
-                -ContentType 'application/x-json-stream' -TimeoutSec 15
+                -ContentType 'application/x-json-stream' -TimeoutSec 2
         }
         return $true
     } catch {
+        if (-not $script:TelemetryDiagnosticWritten) {
+            $script:TelemetryDiagnosticWritten = $true
+            [Console]::Error.WriteLine('Seed telemetry: export_failed (console/system logs remain the fallback).')
+        }
         return $false
     }
+}
+
+function Send-SeedLifecycleEvent {
+    param(
+        [ValidateSet('started', 'stage', 'failed', 'completed')][string] $Phase,
+        [ValidateSet('startup', 'modules', 'configuration', 'identity', 'sql', 'data', 'assets', 'finalize')][string] $Stage = 'startup',
+        [string] $Mode = 'full', [string] $ScriptVersion = 'unknown',
+        [double] $DurationSeconds = 0, [scriptblock] $Sender
+    )
+    if ($script:LifecycleTerminal) { return $false }
+    if ($Phase -eq 'stage') {
+        if ($script:LifecycleStages.ContainsKey($Stage)) { return $false }
+        $script:LifecycleStages[$Stage] = $true
+    }
+    if ($Phase -in @('failed', 'completed')) { $script:LifecycleTerminal = $true }
+    $safeMode = if ($Mode -in @('full', 'guest-carts', 'realtime-notifications', 'manufacturing-overlays',
+        'manufacturing-overlays-verify')) { $Mode } else { 'unknown' }
+    $safeVersion = if ($ScriptVersion -match '^[0-9a-fA-F]{8}$') { $ScriptVersion } else { 'unknown' }
+    $name = switch ($Phase) {
+        'started' { 'Seed.Started' }
+        'stage' { 'Seed.Stage' }
+        'failed' { 'Seed.Failed' }
+        'completed' { 'Seed.Completed' }
+    }
+    $properties = [ordered]@{ Stage = $Stage; Mode = $safeMode; ScriptVersion = $safeVersion
+        Outcome = $(if ($Phase -eq 'completed') { 'succeeded' } else { $Phase })
+        DurationSeconds = [string][math]::Max(0, [math]::Floor($DurationSeconds)) }
+    return Send-SeedTelemetryEvent $name $properties $Sender
 }
 
 function Send-SeedSqlPrincipalEvent {
@@ -125,4 +163,5 @@ function Send-SeedSqlPrincipalEvent {
 }
 
 Export-ModuleMember -Function ConvertFrom-AppInsightsConnectionString, Get-ClientIdHash, Get-SqlPrincipalClassification,
-    Initialize-SeedTelemetry, New-SeedTelemetryEnvelope, Send-SeedTelemetryEvent, Send-SeedSqlPrincipalEvent
+    Initialize-SeedTelemetry, New-SeedTelemetryEnvelope, Send-SeedTelemetryEvent, Send-SeedSqlPrincipalEvent,
+    Send-SeedLifecycleEvent

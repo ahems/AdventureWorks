@@ -89,10 +89,21 @@ public class RoleScopeMappingTests
             {
                 Assert.Contains(OAuthScopes.McpAdmin, scopes);
             }
+
             else
             {
                 Assert.DoesNotContain(OAuthScopes.McpAdmin, scopes);
             }
+        }
+    }
+
+    [Fact]
+    public void Monitoring_grants_are_executive_only()
+    {
+        foreach (var (role, scopes) in ApplicationRoles.DefaultRoleScopes)
+        {
+            Assert.Equal(role == ApplicationRoles.ExecutiveAdmin, scopes.Contains(OAuthScopes.MonitoringRead));
+            Assert.Equal(role == ApplicationRoles.ExecutiveAdmin, scopes.Contains(OAuthScopes.MonitoringWrite));
         }
     }
 

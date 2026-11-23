@@ -89,7 +89,7 @@ public class OrderGenerationAgentService
             _logger.LogInformation("[OrderGen] {Message}", msg);
         }
 
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("OrderGeneration.Generate");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("OrderGeneration.Generate");
         operation.Telemetry.Properties["PersonaType"] = personaType;
 
         try

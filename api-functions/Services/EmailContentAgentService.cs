@@ -44,7 +44,7 @@ public class EmailContentAgentService
     /// </summary>
     public async Task<EmailContent> GenerateEmailContentAsync(EmailContentRequest request)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("EmailContentAgent.Generate");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("EmailContentAgent.Generate");
         operation.Telemetry.Properties["TemplateType"] = request.TemplateType;
 
         try

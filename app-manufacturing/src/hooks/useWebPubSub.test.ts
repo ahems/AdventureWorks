@@ -21,6 +21,7 @@ vi.mock("@azure/web-pubsub-client", () => ({
   },
 }));
 vi.mock("@/config/api", () => ({ WEB_PUBSUB_NEGOTIATE_URL: "/api/webpubsub/negotiate" }));
+vi.mock("@/lib/appInsights", () => ({ trackEvent: vi.fn() }));
 vi.mock("@/services/dabAuth", () => ({
   getFunctionsAccessToken: sdk.getFunctionsAccessToken,
   getTabAuthorizationGeneration: () => sdk.generation,

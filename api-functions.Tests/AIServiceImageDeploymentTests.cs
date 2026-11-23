@@ -11,7 +11,7 @@ public class AIServiceImageDeploymentTests
 {
     private static AIService Create(string? imageDeploymentName) =>
         new("https://foundry.example.invalid/", NullLogger<AIService>.Instance,
-            new TelemetryClient(new TelemetryConfiguration()), imageDeploymentName);
+            new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }), imageDeploymentName);
 
     [Fact]
     public void Uses_the_configured_image_deployment_name()

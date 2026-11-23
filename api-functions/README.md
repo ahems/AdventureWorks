@@ -23,6 +23,56 @@ published directly by azd (`host: function`, no container image; azd service
 `api-functions`). Two always-ready instances serve the SQL listeners
 `OrderPlacedSqlTrigger` and `DatabaseChanges`.
 
+## Telemetry ownership
+
+The Functions host uses `telemetryMode: OpenTelemetry`; Application Insights
+WorkerService **3.2** owns the worker's Azure Monitor exporters. The Functions
+worker OpenTelemetry integration prevents duplicate host/worker logs. Aspire and
+application sources extend that provider; never initialize another distro.
+SDK HTTP/SQL instrumentation, Azure SDK sources and .NET runtime metrics share
+the pipeline. Internal AI operations are dependencies, not additional requests.
+Default trace sampling is five traces/second; outcome/token metrics are unsampled
+and logs do not inherit trace sampling. Sampling does not guarantee every failed trace.
+Native event payloads are immutable; spans containing unsafe exception/content
+events are withheld before exporters, with unsampled `aw.telemetry.redacted_span.count`.
+Safe application outcome metrics and sanitized exception logs remain available.
+
+`AdventureWorks.GenAI` emits logical agent and per-response model spans. Usage
+includes approval rounds, explicit retries and empty-answer recovery; duplicate
+response IDs within an invocation are accounted once. Cached/reasoning token
+counts are subsets of input/output, not extra tokens. Missing usage is unknown.
+The canonical `gen_ai.client.token.usage` records only input/output totals;
+`aw.gen_ai.token.subset.usage` records cached/reasoning subsets separately.
+Embeddings and images record provider usage when returned; image output bytes
+are not a monetary cost estimate. SDK-internal failed retry usage is unavailable
+unless the provider returns it; HTTP dependencies still expose those attempts.
+
+Rich content defaults off. The Foundry client accepts only an internal admitted
+capture lease and revalidates it before bounded sanitized emission. No request
+header, trace ID or queue capture reference alone enables content. Existing
+chat callers use a server-generated `monitoringSessionId` persisted in response
+metadata alongside owner and agent. Continuations recover it only after existing
+ownership checks. An active session grant matching this ID admits one invocation
+root; approval rounds/retries share its lease. No identity-wide/global capture is
+installed. Job paths without verified persisted-state admission remain metadata-only.
+Capture lookup, admission and each emission are bounded to ten seconds and fail
+closed without changing model execution, cancellation or business retries.
+Sanitized captured content has one owner: `GenAI.Capture` custom events correlated
+to the actual ambient span (`aw.capture.span_id`), not duplicate rich span payloads.
+These logs do not inherit trace sampling, but export/ingestion/caps can still drop
+them. Head sampling cannot retroactively retain earlier request/provider spans;
+capture does not promise a complete trace. SDK3 standalone test configurations
+mutate `OTEL_SDK_DISABLED`, so mixed enabled/disabled fixtures run serially.
+Only returned official reasoning summaries can be captured. For a verified
+compatible deployment/protocol, optionally list exact deployment names in
+`FOUNDRY_REASONING_SUMMARY_DEPLOYMENTS` (comma-separated). An active admitted lease
+then requests only `reasoning.summary=auto`, never changes effort or mode, and
+never adds model calls. Do not list deployments using multi-agent orchestration,
+which does not support this parameter. Hidden/encrypted
+reasoning is never read or requested. Application toggles do not control
+provider-managed Foundry traces. Real ingestion/host Monitor behavior requires
+validation after user-run deployment, not merely a local build.
+
 ## Key folders
 
 | Path | Contents |
@@ -59,6 +109,42 @@ Key app settings: `SQL_CONNECTION_STRING` (Active Directory Default), identity-b
 queues, tables and containers are provisioned by Bicep; runtime code never creates
 them. See the [environment variables reference](../docs/reference/environment-variables.md)
 and [storage resources](../docs/reference/storage-resources.md).
+
+## Background telemetry
+
+`AdventureWorks.BackgroundWork` instruments app-owned queue attempts and Durable
+activities. Producers add optional `Telemetry` metadata (validated W3C parent, stable
+job ID, enqueue UTC, configured visibility delay and optional capture reference);
+consumers and explicit re-enqueues preserve it, including manufacturing retry counts
+and work-order slot/material state. Legacy payloads remain accepted. Attempt outcomes
+distinguish completed, rejected, skipped, partial, retrying and failed. These are
+attempts, not exactly-once logical job totals; runtime poison transfer is verified
+separately through approximate poison queue metadata, not inferred from an exception.
+
+Queue wait excludes the producer's declared visibility delay; unreported runtime
+retry delays cannot be subtracted. Durable outcomes run in activities/status observers,
+never orchestrator replay; `push-v1` and replay-safe loggers remain unchanged.
+SQL Change Tracking begins a causal boundary, not a continued browser trace. Order/run
+IDs join server-side timelines only; `orders` and `finance` broadcasts stay generic.
+Capture IDs are metadata, not permission: no content is enabled by trace headers or
+the queue helper. Manufacturing job capture looks up the canonical persisted
+`awManufacturingAgentRuns.RunId`, verifies matching order/customer and nonterminal
+state, ignores queue capture references, and claims a matching server-created grant.
+The persisted RunId is the stable root across retries; use its exact format when
+selecting a job in Monitoring. Other queue jobs remain metadata-only.
+
+For this supported flow, bounded `GenAI.Capture` events contain the application
+request input and parsed hosted findings/actions output. `MonitoringCaptureService`
+revalidates Stop/expiry and reserves the cumulative byte budget before each emission.
+Rich payloads are not duplicated on sampled background spans. This does not expose
+internal hosted tool arguments/results, hidden reasoning, or control provider-managed
+tracing. Official reasoning summaries are unavailable on this parsed hosted contract.
+The 32 KiB root budget is cumulative across input, output and every retry; re-acquiring
+the same RunId never resets it. Later attempts can capture remaining budget, then
+emit only omission metadata. Stop/expiry prevents further capture; the 100-root cap
+rejects new roots but does not revoke an already admitted root's remaining budget.
+
+Focused regression: `dotnet test api-functions.Tests --filter BackgroundWorkTelemetryTests`.
 
 ## Web PubSub changes and polling-free frontends
 

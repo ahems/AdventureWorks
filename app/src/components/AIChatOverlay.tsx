@@ -27,6 +27,7 @@ export const AIChatOverlay = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [threadId, setThreadId] = useState<string | undefined>(undefined);
+  const [monitoringSessionId, setMonitoringSessionId] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sessionVersion = useRef(0);
@@ -35,6 +36,7 @@ export const AIChatOverlay = () => {
     sessionVersion.current += 1;
     setMessages([]);
     setThreadId(undefined);
+    setMonitoringSessionId(undefined);
     setInput("");
     setIsLoading(false);
   }, [user?.businessEntityId]);
@@ -91,6 +93,7 @@ export const AIChatOverlay = () => {
         },
       ]);
       setThreadId(undefined);
+      setMonitoringSessionId(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLanguage, t, user?.firstName, isOpen]);
@@ -143,6 +146,7 @@ export const AIChatOverlay = () => {
 
       // Persist the thread for continued conversation
       setThreadId(agentResponse.threadId);
+      setMonitoringSessionId(agentResponse.monitoringSessionId);
 
       // Add assistant response
       const assistantMessage: Message = {
@@ -212,6 +216,7 @@ export const AIChatOverlay = () => {
               onClick={() => {
                 setIsOpen(false);
                 setThreadId(undefined);
+                setMonitoringSessionId(undefined);
               }}
               className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
             >
@@ -220,6 +225,11 @@ export const AIChatOverlay = () => {
           </div>
 
           {/* Suggested Questions */}
+          {monitoringSessionId && <details className="shrink-0 border-b p-2 text-xs">
+            <summary>Monitoring session ID</summary>
+            <input aria-label="Monitoring session ID" className="w-full bg-transparent" readOnly value={monitoringSessionId} onFocus={event => event.target.select()} />
+            <p>Server-issued conversation identifier for authorized diagnostics; it grants no access and does not enable capture.</p>
+          </details>}
           <div className="max-h-[35%] shrink-0 overflow-y-auto">
             <div className="p-3 border-b bg-muted/30">
               <p className="text-xs text-muted-foreground mb-2">

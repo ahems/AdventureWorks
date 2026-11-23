@@ -175,7 +175,7 @@ public class ManufacturingControlFunction
                 CostRateForLocation = (double)firstOp.CostRate,
             };
 
-            await queueClient.SendMessageAsync(
+            await queueClient.SendObservedMessageAsync(
                 JsonSerializer.Serialize(msg),
                 visibilityTimeout: TimeSpan.Zero);
 

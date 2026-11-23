@@ -70,22 +70,28 @@ public class OrderPlacedSqlTrigger
         foreach (var change in changes.Where(c => c.Operation == SqlChangeOperation.Insert))
         {
             var order = change.Item;
+            using var attempt = BackgroundWorkTelemetry.Begin("sql-order-placed",
+                context: new QueueTelemetryContext(JobId: Guid.NewGuid().ToString("N")));
+            attempt.Tag("causal.boundary", "sql-change-tracking");
+            attempt.Tag("order.id", order.SalesOrderID);
             _logger.LogInformation(
                 "SQL trigger: new order SalesOrderID={SalesOrderId}, CustomerID={CustomerId}",
                 order.SalesOrderID, order.CustomerID);
 
             // Independent of the manufacturing agent mode; the orders group sanitizes the payload.
             await _webPubSub.SendToGroupAsync("orders",
-                new { @event = "order-placed", salesOrderId = order.SalesOrderID, customerId = order.CustomerID });
+                new { @event = "order-placed" });
 
             try
             {
                 await EnqueueReceiptAndStatusAsync(order.SalesOrderID);
                 await EnqueueManufacturingAgentAsync(order.SalesOrderID, order.CustomerID);
                 await CheckAutoPromotionThresholdAsync(order.OnlineOrderFlag);
+                attempt.Complete();
             }
             catch (Exception ex)
             {
+                attempt.SetOutcome("partial");
                 _logger.LogError(ex,
                     "Error processing SQL trigger for SalesOrderID={SalesOrderId}",
                     order.SalesOrderID);
@@ -128,7 +134,7 @@ public class OrderPlacedSqlTrigger
                 }
                 : (object?)null
         });
-        await receiptQueueClient.SendMessageAsync(receiptMessage);
+        await receiptQueueClient.SendObservedMessageAsync(receiptMessage);
         _logger.LogInformation(
             "Enqueued receipt generation for SalesOrderID={SalesOrderId} (emailInfo={HasEmail})",
             salesOrderId, emailInfo.HasValue);
@@ -142,7 +148,7 @@ public class OrderPlacedSqlTrigger
         var minMin = (double)cfg.ProcessingToApprovedMinMinutes;
         var maxMin = (double)cfg.ProcessingToApprovedMaxMinutes;
         var visibilityMinutes = minMin + (maxMin - minMin) * Random.Shared.NextDouble();
-        await statusQueueClient.SendMessageAsync(
+        await statusQueueClient.SendObservedMessageAsync(
             statusMessage,
             visibilityTimeout: TimeSpan.FromMinutes(visibilityMinutes),
             timeToLive: null);
@@ -188,7 +194,7 @@ public class OrderPlacedSqlTrigger
             new ManufacturingAgentQueueMessage(salesOrderId, customerId, runId, RetryCount: 0),
             new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
-        await agentQueue.SendMessageAsync(msgPayload);
+        await agentQueue.SendObservedMessageAsync(msgPayload);
 
         _logger.LogInformation(
             "Enqueued manufacturing agent job for SalesOrderID={SalesOrderId}, RunId={RunId}, Mode={Mode}",
@@ -229,7 +235,7 @@ public class OrderPlacedSqlTrigger
     /// which already applies the single Base64 layer the Functions queue trigger decodes.
     /// </summary>
     public static Task EnqueueAutoPromotionAsync(QueueClient queue, string orderType) =>
-        queue.SendMessageAsync(AutoPromotionQueueTrigger.SerializeMessage(orderType));
+        queue.SendObservedMessageAsync(AutoPromotionQueueTrigger.SerializeMessage(orderType));
 }
 
 public class SalesOrderHeaderRow

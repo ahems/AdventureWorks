@@ -31,7 +31,7 @@ IDENTITIES = {
 SCOPES = {
     "admin": "mcp.access realtime.connect products.read sales.read customers.read customers.write "
              "inventory.read orders.read orders.write manufacturing.read "
-             "manufacturing.write admin.read admin.write mcp.admin",
+             "manufacturing.write admin.read admin.write mcp.admin monitoring.read monitoring.write",
     "manufacturing": "mcp.access realtime.connect products.read inventory.read "
                      "manufacturing.read manufacturing.write",
 }

@@ -52,7 +52,7 @@ public class CartRecoveryAgentService
     /// </summary>
     public async Task<List<CartRecoveryResult>> AnalyzeCartsAsync(List<CartRecoveryInput> carts)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("CartRecoveryAgent.Analyze");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("CartRecoveryAgent.Analyze");
         operation.Telemetry.Properties["CartCount"] = carts.Count.ToString();
 
         var results = new List<CartRecoveryResult>();

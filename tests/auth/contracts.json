@@ -26,6 +26,9 @@
     "NegotiateWebPubSub": "realtime.connect"
   },
   "safeFunctionReadRoutes": {
+    "MonitoringSummary": "monitoring/summary",
+    "MonitoringTrace": "monitoring/traces/{traceId}",
+    "MonitoringCaptureStatus": "monitoring/capture",
     "AIJobQueue_Status": "ai-job-queue/status",
     "AutoPromotion_GetConfig": "auto-promotion/config",
     "BankGetAccount": "bank/accounts/{currencyCode}",
@@ -124,6 +127,8 @@
     "WarehouseWorkforceDetail": "warehouse/workforce/detail"
   },
   "functionMutationDenialFixtures": {
+    "MonitoringCaptureStart:POST": {"route": "monitoring/capture", "body": {}, "regression": 403, "reason": "Handler requires a signed executive-admin monitoring.write identity before reading or creating a grant; default fixture callers are denied."},
+    "MonitoringCaptureStop:DELETE": {"route": "monitoring/capture/{id}", "path": {"id": "00000000000000000000000000000000"}, "regression": 403, "reason": "Handler requires a signed executive-admin monitoring.write identity before any table mutation."},
     "AnalyzeCartRecovery:POST": {"route": "carts/analyze-recovery", "body": {"carts": []}, "regression": 400, "reason": "Empty carts array rejected with 400 at CartRecoveryAnalysisFunction.cs:53 before any AI/SQL call."},
     "AnalyzeReviewsBatch:POST": {"route": "reviews/analyze-batch", "body": {"reviews": []}, "regression": 400, "reason": "Empty reviews array rejected with 400 at ReviewAnalysisFunction.cs:52 before any AI call."},
     "ApproveManufacturingProposal:POST": {"route": "manufacturing/proposals/{id}/approve", "path": {"id": "00000000-0000-0000-0000-000000000000"}, "regression": 404, "reason": "Relies on nonexistent proposal id: read-only Table lookup (GetProposalAsync) returns null -> 404 at ManufacturingProposalFunctions.cs:166 before any write. NotifyingTableClient only notifies on writes."},
@@ -222,6 +227,8 @@
     "justification": "Built-in preview role used because deployment users cannot safely receive roleDefinitions/write. It grants all Cognitive Services data actions at the Foundry project scope, broader than the former AIServices/* custom role, but no management actions, so no key retrieval or account changes. Agent business access remains bounded by OAuth-delegated MCP/API tokens and tool policies."
   },
   "azdRoleAssignmentAllowlist": [
+    "43d0d8ad-25c7-4714-9337-8ba259a9fe05",
+    "73c42c96-874c-492b-b04d-ab87d138a893",
     "09976791-48a7-449e-bb21-39d1a415f350",
     "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
     "0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb",

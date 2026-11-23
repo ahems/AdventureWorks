@@ -8,6 +8,7 @@ namespace api_functions.Models;
 /// </summary>
 public class AiJobMessage
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     /// <summary>
     /// Discriminator for the dispatcher. Values:
     /// "image"              – generate product photo(s) for one product

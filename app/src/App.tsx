@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
@@ -14,7 +14,7 @@ import { ProductNamesProvider } from "@/context/ProductNamesContext";
 import CompareBar from "@/components/CompareBar";
 import { AIChatOverlay } from "@/components/AIChatOverlay";
 import { AppInsightsContext } from "@microsoft/applicationinsights-react-js";
-import { initAppInsights, reactPlugin } from "@/lib/appInsights";
+import { initAppInsights, reactPlugin, reportHandledFailure } from "@/lib/appInsights";
 import "./i18n"; // Initialize i18next
 import Index from "./pages/Index";
 import CategoryPage from "./pages/CategoryPage";
@@ -38,7 +38,10 @@ import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
 import { LiveUpdatesNotice } from "./components/LiveUpdatesNotice";
 import RequireAuth from "./components/RequireAuth";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: error => reportHandledFailure(error, "query") }),
+  mutationCache: new MutationCache({ onError: error => reportHandledFailure(error, "mutation") }),
+});
 
 // Initialize Application Insights
 initAppInsights();

@@ -141,9 +141,9 @@ The three required URLs must be on different origins. Bicep sets them on the Con
 
 - **Names.** Each item is named with the method and a fixed route label. Known routes (`/`, `/health`, `/auth/login`, `/auth/logout`, `/oauth/callback`, `/inspector`, `/proxy/health`, `/proxy/config`, `/proxy/mcp`) keep their path. Other `/proxy/` paths become `/proxy/*` and everything else becomes `/assets/*`.
 - **Never sent.** Query strings (OAuth codes and state), headers, cookies, tokens, bodies and tool arguments.
-- **Result.** The status code and duration are recorded, and any status below 500 counts as success.
-- **Correlation.** The operation ID is the trace ID from an incoming W3C `traceparent` header, or a new random ID.
-- **Delivery.** Items are buffered (at most 500, oldest dropped first) and sent every 5 seconds, plus a final send when the container receives `SIGTERM` or `SIGINT`.
+- **Result.** Status and duration are recorded; HTTP status below 400 counts as transport success, not proof of a tool's logical success. Upstream dependency outcomes also distinguish cancellation and transport failure.
+- **Correlation.** Valid nonzero W3C trace/span IDs supply the request's parent. The gateway creates its own request span and a distinct upstream dependency span, forwarding that child's `traceparent` to the allowlisted MCP target. Invalid parents start a new trace.
+- **Delivery.** At most 500 items are buffered (oldest dropped first); one batch is sent at a time every 5 seconds and on shutdown, with a two-second deadline. Export remains best-effort and never blocks request handling. Rejected/partial ingestion, drops and network failures emit fixed, secret-free diagnostic codes at most once per minute.
 
 See [monitoring](../operations/monitoring.md#mcp-inspector-requests).
 

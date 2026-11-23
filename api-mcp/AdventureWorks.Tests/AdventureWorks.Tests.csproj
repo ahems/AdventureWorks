@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AdventureWorks\AdventureWorks.csproj" />
+    <Compile Include="..\..\api-functions.Tests\TelemetryTestCapture.cs" Link="TelemetryTestCapture.cs" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,26 @@ related: [docs/services/api-mcp.md, docs/features/mcp-oauth/README.md, docs/feat
 
 # OAuth and MCP server (`api-mcp/`)
 
+## Telemetry ownership
+
+Application Insights ASP.NET Core **3.2** owns all Azure Monitor signal exporters
+and automatic HTTP/SQL instrumentation. ServiceDefaults extends this same
+OpenTelemetry provider with runtime metrics and application sources; it does
+not create a second distro or OTLP export path. The role is `api-mcp`.
+Trace sampling defaults to five traces/second; tool-outcome metrics are
+unsampled and logs do not inherit trace sampling.
+Unsafe immutable native event payloads withhold that span before exporters
+(`aw.telemetry.redacted_span.count`); safe outcome metrics/logs remain available.
+
+MCP tools emit internal `execute_tool` spans rather than synthetic requests.
+Returned `IsError` results are application failures; input-required and
+cancellation are separate outcomes. Argument/result bodies and exception
+messages are not recorded by the wrapper. SQL principal hash evidence retains
+its existing credential/identity semantics. SDK3 tests use an in-memory
+OpenTelemetry log exporter, not removed channels or initializers.
+`Sdk3ProviderOwnershipTests` boots the actual service and checks one sanitized
+HTTP entry and one tracing, metrics and logging provider with the correct role.
+
 `api-mcp` is one ASP.NET Core (.NET 10) service with two jobs:
 
 - **OAuth 2.0 authorization server** (OpenIddict). It signs in AdventureWorks database

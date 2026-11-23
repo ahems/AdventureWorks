@@ -75,7 +75,7 @@ public class AIAgentService
         var resolvedAgentId = isAdmin && _adminAgentId != null ? _adminAgentId : _agentId;
         var sessionId = isAdmin ? "admin" : (customerId.HasValue ? $"customer-{customerId.Value}" : Guid.NewGuid().ToString());
 
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AgentChat");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("AgentChat");
         operation.Telemetry.Properties["SessionId"] = sessionId;
         operation.Telemetry.Properties["CustomerId"] = customerId?.ToString() ?? "anonymous";
         operation.Telemetry.Properties["CultureId"] = cultureId ?? "default";
@@ -157,7 +157,8 @@ public class AIAgentService
                 Response = agentResponse.ResponseText,
                 SuggestedQuestions = suggestions,
                 ToolsUsed = agentResponse.ToolsUsed.Distinct().ToList(),
-                ThreadId = agentResponse.ResponseId  // Foundry response ID — pass back as threadId for next turn
+                ThreadId = agentResponse.ResponseId, // Foundry response ID — pass back as threadId for next turn
+                MonitoringSessionId = agentResponse.MonitoringSessionId
             };
         }
         catch (FoundryGuardrailException)
@@ -186,14 +187,8 @@ public class AIAgentService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing agent message");
+            _logger.LogError("Error processing agent message; type {FailureType}", ex.GetType().Name);
             operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string>
-            {
-                ["Operation"] = "AgentChat",
-                ["SessionId"] = sessionId,
-                ["CustomerId"] = customerId?.ToString() ?? "anonymous"
-            });
             throw;
         }
     }
@@ -222,6 +217,7 @@ public class AgentChatMessage
 /// <summary>Agent response returned to the caller.</summary>
 public class AgentResponse
 {
+    public string? MonitoringSessionId { get; set; }
     public ChatSafetyResult? Safety { get; set; }
     public string Response { get; set; } = string.Empty;
     public List<string> SuggestedQuestions { get; set; } = new();

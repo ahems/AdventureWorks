@@ -114,6 +114,7 @@ public class VerifiedReviewsJobState
 /// </summary>
 public class VerifiedReviewsQueueMessage
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     public string JobId { get; set; } = string.Empty;
     public ProductForReviewGeneration Product { get; set; } = new();
     public List<int> CustomerIds { get; set; } = [];
@@ -134,6 +135,7 @@ public class PendingReviewModerationItem
 /// <summary>Queue payload for one review auto-moderation operation.</summary>
 public class ReviewModerationQueueMessage
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     public string JobId { get; set; } = string.Empty;
     public int ProductReviewId { get; set; }
     public int Rating { get; set; }

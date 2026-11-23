@@ -78,7 +78,7 @@ The job sets `SEED_SKIP_EXISTING=true`. If the core tables (`ProductModel`, `Pro
 | Trigger | Manual |
 | Timeout | 2,000 seconds per execution, no retries |
 | Logs | `/logs/seed-<timestamp>.log` on the `seed-job-logs` Azure Files share, mounted with the environment's managed identity (preview SMB OAuth mount) |
-| Telemetry | Application Insights custom events `Sql.SessionPrincipal` and `Seed.Completed` from [`SeedTelemetry.psm1`](../../seed-job/SeedTelemetry.psm1) |
+| Telemetry | Sparse lifecycle and `Sql.SessionPrincipal` events from [`SeedTelemetry.psm1`](../../seed-job/SeedTelemetry.psm1), with console/system-log fallback |
 
 Settings are listed in [environment variables](../reference/environment-variables.md#seed-job-seed-job).
 
@@ -96,7 +96,7 @@ az containerapp job execution list \
 
 - Query Application Insights (cloud role `seed-job`). Each run uses one operation ID and sends two custom events:
   - `Sql.SessionPrincipal`, sent after the SQL connection opens. It has scope `seed:<mode>` and compares the SQL principal with the seed identity's `AZURE_CLIENT_ID` (as hashes only), so `PrincipalMatch = match` confirms the job connected as the seed identity.
-  - `Seed.Completed`, sent when the run finishes, successfully or not. It carries `Mode` (`full`, `guest-carts`, `realtime-notifications`, `manufacturing-overlays` or `manufacturing-overlays-verify`), `Outcome` (`succeeded` or `failed`), `DurationSeconds` and `ScriptVersion` (the first 8 characters of the script's SHA-256 hash). A run that fails before it reaches the SQL connection step, for example because it can't get a token, sends neither event, so check the log or execution status too.
+  - `Seed.Started` after telemetry initialization; `Seed.Stage` once per fixed stage (modules, configuration, SQL and data); terminal `Seed.Completed` on success or `Seed.Failed` on failure. They share one operation ID and carry categorical stage/mode/outcome, duration and script hash, never exception text or row data. Sends have a two-second deadline and one fixed export-failure diagnostic per run. Failures before module initialization still rely on console/system logs and execution status; absent telemetry cannot prove success.
 
   Telemetry is turned off when `APPLICATIONINSIGHTS_CONNECTION_STRING` is missing or invalid. Send failures are ignored and never change the seed result. No SQL text, connection strings, tokens or row data are sent. The [monitoring](../operations/monitoring.md#diagnostic-queries) page has a KQL query for seed runs.
 

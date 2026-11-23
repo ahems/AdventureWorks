@@ -29,6 +29,18 @@ Fix problems in source code, Bicep, seed scripts or hooks, then redeploy. Do not
 
 Before the first deployment, the deploying identity needs Contributor plus a constrained role-assignment permission. See [Deployer permissions](../AZD_DEPLOYER_PERMISSIONS.md). For Windows, see [Deploying from Windows with WSL](wsl-deployment.md).
 
+The monitoring extension provisions `awMonitoringCapture`, workspace/resource-scoped
+read permissions, a reusable workbook and aggregated Azure Monitor alerts. These
+infrastructure changes require a **user-created fresh demo environment**, not an
+agent-run in-place repair. The reviewed deployer role allowlist now includes
+Monitoring Reader and Log Analytics Reader; a subscription administrator must
+update an older conditional deployment grant before the user's normal deployment.
+`ENABLE_MONITORING_GRAFANA` defaults to `false`. Enabling it adds only native
+`Microsoft.Dashboard/dashboards` and preview `dashboardDefinitions`, never a paid
+Managed Grafana/Essential instance. Unsupported preview deployment fails explicitly;
+the workbook/admin dashboard do not depend on it. An optional existing
+`MONITORING_ACTION_GROUP_ID` selects alert notifications; empty means portal only.
+
 ## Lifecycle overview
 
 ```mermaid

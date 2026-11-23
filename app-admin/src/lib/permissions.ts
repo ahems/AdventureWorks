@@ -16,6 +16,8 @@ export const Scopes = {
   AdminRead: "admin.read",
   AdminWrite: "admin.write",
   McpAdmin: "mcp.admin",
+  MonitoringRead: "monitoring.read",
+  MonitoringWrite: "monitoring.write",
 } as const;
 
 export type Scope = (typeof Scopes)[keyof typeof Scopes];

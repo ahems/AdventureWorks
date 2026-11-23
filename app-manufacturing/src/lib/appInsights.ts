@@ -1,5 +1,7 @@
 import { ApplicationInsights } from "@microsoft/applicationinsights-web";
 import { API_MCP_URL, MANUFACTURING_BASE, ODATA_BASE } from "@/config/api";
+import { sanitizeTelemetry, classifyFailure } from "./telemetrySafety";
+import { startBrowserSignals } from "./browserSignals";
 
 const CLOUD_ROLE_NAME = "app-manufacturing";
 
@@ -8,6 +10,7 @@ type AppWindow = Window & {
 };
 
 let appInsights: ApplicationInsights | null = null;
+const reportedErrors = new WeakSet<object>();
 
 // Only send W3C correlation headers to this solution's own APIs (never to identity providers or third parties).
 const getCorrelationDomains = (): string[] =>
@@ -42,8 +45,9 @@ export const initAppInsights = (): ApplicationInsights | null => {
         enableUnhandledPromiseRejectionTracking: true,
         enableCorsCorrelation: true,
         correlationHeaderDomains: getCorrelationDomains(),
-        enableRequestHeaderTracking: true,
-        enableResponseHeaderTracking: true,
+        distributedTracingMode: 2,
+        enableRequestHeaderTracking: false,
+        enableResponseHeaderTracking: false,
         // Browsers are deprecating the 'unload' event (Permissions Policy violation).
         disablePageUnloadEvents: ["unload"],
       },
@@ -52,7 +56,10 @@ export const initAppInsights = (): ApplicationInsights | null => {
     appInsights.addTelemetryInitializer((item) => {
       item.tags = item.tags ?? {};
       item.tags["ai.cloud.role"] = CLOUD_ROLE_NAME;
+      item.tags["ai.application.ver"] = import.meta.env.VITE_BUILD_VERSION || "unknown";
+      Object.assign(item, sanitizeTelemetry(item));
     });
+    startBrowserSignals(trackEvent, getCorrelationDomains());
     appInsights.trackPageView();
     return appInsights;
   } catch (error) {
@@ -65,9 +72,17 @@ export const initAppInsights = (): ApplicationInsights | null => {
 export const getAppInsights = () => appInsights;
 
 export const trackException = (error: Error, properties?: Record<string, unknown>) => {
-  appInsights?.trackException({ exception: error }, properties);
+  appInsights?.trackException({ exception: new Error("Handled browser failure") }, { ...properties, errorClass: error.name });
 };
 
 export const trackEvent = (name: string, properties?: Record<string, unknown>) => {
   appInsights?.trackEvent({ name }, properties);
 };
+
+export function reportHandledFailure(error: unknown, operation = "query") {
+  if (error && typeof error === "object") {
+    if (reportedErrors.has(error)) return;
+    reportedErrors.add(error);
+  }
+  trackEvent("browser.handled-outcome", { operation, outcome: classifyFailure(error) });
+}

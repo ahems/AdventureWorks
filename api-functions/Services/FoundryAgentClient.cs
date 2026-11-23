@@ -11,6 +11,7 @@ using Azure.Core;
 using Azure.Identity;
 using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Logging;
+using api_functions.DTOs;
 
 namespace api_functions.Services;
 
@@ -41,6 +42,8 @@ public class FoundryAgentClient
     private readonly string _projectEndpoint;
     private readonly string _responsesUrl;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly MonitoringCaptureService? _capture;
+    private readonly IReadOnlySet<string> _reasoningSummaryDeployments;
 
     // Fallback tool configuration used when agent definition fetch fails (e.g. 401 permission error).
     // Populated from environment variables (MCP_SERVICE_URL, API_URL) injected via Program.cs.
@@ -119,8 +122,12 @@ public class FoundryAgentClient
         string fallbackDabMcpUrl = "",
         string fallbackModelDeployment = "chat",
         McpServiceTokenProvider? serviceTokenProvider = null,
-        Guid? expectedClientId = null)
+        Guid? expectedClientId = null,
+        MonitoringCaptureService? capture = null,
+        IReadOnlySet<string>? reasoningSummaryDeployments = null)
     {
+        _capture = capture;
+        _reasoningSummaryDeployments = reasoningSummaryDeployments ?? new HashSet<string>();
         _serviceTokenProvider = serviceTokenProvider;
         _logger = logger;
         _telemetryClient = telemetryClient;
@@ -200,6 +207,7 @@ public class FoundryAgentClient
     /// <param name="requireAdminChatTools">Enforce the admin chat's exact delegated read-only MCP tool policy on the definition actually used.</param>
     /// <param name="requireCustomerGenerationTools">Enforce the customer generator's configured MCP tools and service scope.</param>
     /// <param name="requireOrderGenerationTools">Enforce the order generator's configured MCP tools and service scopes.</param>
+    /// <param name="captureLease">Optional server-admitted lease; never populated from browser trace headers.</param>
     public async Task<FoundryAgentResponse> InvokeAsync(
         string agentId,
         string userMessage,
@@ -220,8 +228,15 @@ public class FoundryAgentClient
         bool requireCustomerChatTools = false,
         bool requireAdminChatTools = false,
         bool requireCustomerGenerationTools = false,
-        bool requireOrderGenerationTools = false)
+        bool requireOrderGenerationTools = false,
+        CaptureLease? captureLease = null)
     {
+        using var invocation = GenAiTelemetry.Start("invoke_agent");
+        var accountedResponses = new HashSet<string>(StringComparer.Ordinal);
+        invocation.Tag("gen_ai.agent.id", agentId);
+        invocation.Tag("aw.capture.status", captureLease is null ? "off" : "requested");
+        try
+        {
         if ((!string.IsNullOrEmpty(previousResponseId) && string.IsNullOrWhiteSpace(conversationOwner)) ||
             (conversationOwner is not null && string.IsNullOrWhiteSpace(conversationOwner)))
             throw new ChatConversationException();
@@ -276,6 +291,10 @@ public class FoundryAgentClient
 
         if (guardedTools is not null)
             ValidateGuardedTools(def, guardedTools);
+        invocation.Tag("gen_ai.request.model", def.Model);
+        invocation.Tag("gen_ai.agent.version", def.VersionId);
+        invocation.Tag("aw.definition.fallback", def.IsFallback);
+        invocation.Tag("aw.tool.policy", toolPolicy);
 
         // --- Apply delegated MCP authorization (per-request, never cached) ------
         // When a caller supplies the end user's OAuth access token, inject it as an
@@ -338,8 +357,32 @@ public class FoundryAgentClient
             ["aw_chat_owner"] = conversationOwner,
             ["aw_chat_agent"] = agentId
         };
-        if (metadata is not null && !string.IsNullOrEmpty(previousResponseId))
-            await VerifyConversationOwnerAsync(httpClient, previousResponseId, metadata, cancellationToken);
+        string? monitoringSessionId = null;
+        if (metadata is not null)
+        {
+            monitoringSessionId = !string.IsNullOrEmpty(previousResponseId)
+                ? await VerifyConversationOwnerAsync(httpClient, previousResponseId, metadata, cancellationToken)
+                : Guid.NewGuid().ToString("N");
+            metadata["aw_monitoring_session"] = monitoringSessionId;
+            invocation.Tag("gen_ai.conversation.id", monitoringSessionId);
+            if (captureLease is null && _capture is not null)
+            {
+                try
+                {
+                    using var captureDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    captureDeadline.CancelAfter(TimeSpan.FromSeconds(10));
+                    var grant = await _capture.FindActiveAsync("session", monitoringSessionId, captureDeadline.Token);
+                    if (grant is not null)
+                        captureLease = await _capture.TryAcquireRootAsync(grant.Id, "session", monitoringSessionId,
+                            Guid.NewGuid().ToString("N"), captureDeadline.Token);
+                }
+                catch (Exception)
+                {
+                    _logger.LogWarning("Capture control unavailable; continuing metadata-only");
+                }
+            }
+            invocation.Tag("aw.capture.status", captureLease is null ? "off" : "admitted");
+        }
 
         // Resolve instructions once before the loop so the same resolved system prompt
         // is re-sent in every approval round. The Responses API `instructions` field
@@ -387,6 +430,7 @@ public class FoundryAgentClient
 
         for (int round = 0; round <= maxApprovalRounds; round++)
         {
+            invocation.Tag("aw.approval.rounds", round);
             if (round == maxApprovalRounds)
                 throw new InvalidOperationException($"Foundry agent '{agentId}' exceeded {maxApprovalRounds} approval rounds.");
 
@@ -432,6 +476,10 @@ public class FoundryAgentClient
                 ToolChoice = effectiveToolChoice
             };
             requestBody.Metadata = metadata;
+            if (_capture is not null && captureLease is not null &&
+                _reasoningSummaryDeployments.Contains(def.Model) &&
+                await IsCaptureActiveAsync(captureLease, cancellationToken))
+                requestBody.Reasoning = new { summary = "auto" };
 
             var json = JsonSerializer.Serialize(requestBody, _serializeOptions);
 
@@ -446,6 +494,12 @@ public class FoundryAgentClient
             string responseBody = string.Empty;
             for (int retry = 0; retry <= maxToolRetries; retry++)
             {
+                using var modelAttempt = GenAiTelemetry.Start("chat", def.Model);
+                modelAttempt.Tag("gen_ai.agent.id", agentId);
+                modelAttempt.Tag("gen_ai.agent.version", def.VersionId);
+                modelAttempt.Tag("aw.approval.round", round);
+                modelAttempt.Tag("aw.retry.attempt", retry);
+                modelAttempt.Tag("aw.definition.fallback", def.IsFallback || usingFallbackTools);
                 using var retryRequest = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
                 {
                     Content = new StringContent(json, Encoding.UTF8, "application/json")
@@ -456,11 +510,20 @@ public class FoundryAgentClient
                 if (!string.IsNullOrEmpty(userId))
                     retryRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
 
-                using var httpResponse = await httpClient.SendAsync(retryRequest, cancellationToken);
+                using var httpResponse = await SendModelAsync(httpClient, retryRequest, modelAttempt, cancellationToken);
                 if ((int)httpResponse.StatusCode is >= 300 and < 400)
                     throw new InvalidOperationException(
                         $"Foundry Responses API returned a redirect ({(int)httpResponse.StatusCode}); redirects are not followed.");
                 responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
+                modelAttempt.Tag("error.type", httpResponse.IsSuccessStatusCode ? null : SafeErrorField(responseBody, "code"));
+                if (httpResponse.Headers.TryGetValues("x-request-id", out var requestIds))
+                    modelAttempt.Tag("aw.provider.request.id", SafeShapeName(requestIds.FirstOrDefault()));
+                // Account before guardrail checks, retries or approval continuations can exit.
+                modelAttempt.RecordResponse(responseBody, (int)httpResponse.StatusCode,
+                    GenAiTelemetry.AdmitResponse(responseBody, accountedResponses));
+                await CaptureResponseAsync(modelAttempt, captureLease, userMessage, responseBody,
+                    requestBody.Reasoning is not null, cancellationToken);
+                modelAttempt.Dispose(); // Backoff and validation are agent work, not model-response latency.
 
                 ThrowIfGuardrailBlocked(responseBody);
                 if (httpResponse.IsSuccessStatusCode)
@@ -471,6 +534,8 @@ public class FoundryAgentClient
                 {
                     var delay = httpResponse.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(3 * (retry + 1));
                     delay = TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, 1, 15));
+                    invocation.Tag("aw.retry.backoff.seconds", delay.TotalSeconds);
+                    invocation.RecordRetry(delay.TotalSeconds);
                     _logger.LogWarning("Foundry agent {AgentId} returned {Status}; retrying after {Seconds}s",
                         agentId, (int)httpResponse.StatusCode, delay.TotalSeconds);
                     await Task.Delay(delay, cancellationToken);
@@ -484,6 +549,7 @@ public class FoundryAgentClient
                 if (isToolEnumError && retry < maxToolRetries)
                 {
                     var delayMs = (retry + 1) * 3000; // 3s, 6s
+                    invocation.RecordRetry(delayMs / 1000.0);
                     _logger.LogWarning(
                         "Foundry agent '{AgentId}' MCP tool enumeration failed (attempt {Attempt}/{Max}). " +
                         "Retrying in {Delay}ms. Response body omitted.",
@@ -647,6 +713,10 @@ public class FoundryAgentClient
                 ToolChoice = "none",
                 Metadata = metadata
             };
+            if (_capture is not null && captureLease is not null &&
+                _reasoningSummaryDeployments.Contains(def.Model) &&
+                await IsCaptureActiveAsync(captureLease, cancellationToken))
+                continuationBody.Reasoning = new { summary = "auto" };
 
             var continuationJson = JsonSerializer.Serialize(continuationBody, _serializeOptions);
             using var continuationRequest = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
@@ -659,8 +729,16 @@ public class FoundryAgentClient
             if (!string.IsNullOrEmpty(userId))
                 continuationRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
 
-            using var continuationHttpResponse = await httpClient.SendAsync(continuationRequest, cancellationToken);
+            using var continuationAttempt = GenAiTelemetry.Start("chat", def.Model);
+            continuationAttempt.Tag("gen_ai.agent.id", agentId);
+            continuationAttempt.Tag("aw.empty_text.recovery", true);
+            using var continuationHttpResponse = await SendModelAsync(httpClient, continuationRequest, continuationAttempt, cancellationToken);
             var continuationResponseBody = await continuationHttpResponse.Content.ReadAsStringAsync(cancellationToken);
+            continuationAttempt.RecordResponse(continuationResponseBody, (int)continuationHttpResponse.StatusCode,
+                GenAiTelemetry.AdmitResponse(continuationResponseBody, accountedResponses));
+            await CaptureResponseAsync(continuationAttempt, captureLease, null, continuationResponseBody,
+                continuationBody.Reasoning is not null, cancellationToken);
+            continuationAttempt.Dispose();
             ThrowIfGuardrailBlocked(continuationResponseBody);
 
             if (continuationHttpResponse.IsSuccessStatusCode)
@@ -698,7 +776,135 @@ public class FoundryAgentClient
             }
         }
 
+        parsedResponse.MonitoringSessionId = monitoringSessionId;
+        invocation.Complete(parsedResponse.Refused ? "refused" :
+            string.IsNullOrWhiteSpace(parsedResponse.ResponseText) ? "partial" : "success");
         return parsedResponse;
+        }
+        catch (Exception ex)
+        {
+            invocation.Complete(ex is OperationCanceledException ? "cancelled" :
+                ex is FoundryCapacityException ? "throttled" :
+                ex is FoundryGuardrailException ? "refused" :
+                ex is FoundryToolPolicyException ? "tool-policy" :
+                ex is ChatConversationException ? "forbidden" : "application-failure");
+            throw;
+        }
+    }
+
+    private static async Task<HttpResponseMessage> SendModelAsync(HttpClient client, HttpRequestMessage request,
+        GenAiTelemetry span, CancellationToken cancellationToken)
+    {
+        try { return await client.SendAsync(request, cancellationToken); }
+        catch (OperationCanceledException)
+        {
+            span.Complete(cancellationToken.IsCancellationRequested ? "cancelled" : "timeout");
+            throw;
+        }
+        catch (HttpRequestException)
+        {
+            span.Complete("upstream-failure");
+            throw;
+        }
+    }
+
+    private async Task CaptureResponseAsync(GenAiTelemetry span, CaptureLease? lease, string? input,
+        string responseBody, bool reasoningRequested, CancellationToken cancellationToken)
+    {
+        if (_capture is null || lease is null) return;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        cancellationToken = deadline.Token;
+        // Only officially exposed message text and reasoning summaries. Never capture the raw response,
+        // encrypted reasoning, hidden analysis, tool authorization headers, embeddings or image bytes.
+        try
+        {
+            if (!await _capture.IsActiveAsync(lease, cancellationToken)) return;
+            using var document = JsonDocument.Parse(responseBody);
+            var output = new StringBuilder();
+            var summary = new StringBuilder();
+            var toolArguments = new StringBuilder();
+            var toolResults = new StringBuilder();
+            if (document.RootElement.TryGetProperty("output", out var items) && items.ValueKind == JsonValueKind.Array)
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (!item.TryGetProperty("type", out var type)) continue;
+                    if (type.GetString() == "mcp_call")
+                    {
+                        if (item.TryGetProperty("arguments", out var arguments))
+                            toolArguments.AppendLine(arguments.ValueKind == JsonValueKind.String ? arguments.GetString() : arguments.GetRawText());
+                        if (item.TryGetProperty("output", out var result))
+                            toolResults.AppendLine(result.ValueKind == JsonValueKind.String ? result.GetString() : result.GetRawText());
+                    }
+                    var field = type.GetString() == "message" ? "content" :
+                        type.GetString() == "reasoning" ? "summary" : null;
+                    if (field is null || !item.TryGetProperty(field, out var parts) || parts.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var part in parts.EnumerateArray())
+                        if (part.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
+                            (field == "summary" ? summary : output).AppendLine(text.GetString());
+                }
+            var status = summary.Length == 0 ? reasoningRequested ? "not-returned" : "unsupported" : "returned";
+            span.Tag("aw.capture.id", lease.CaptureId);
+            span.Tag("aw.reasoning.summary.status", status);
+            await EmitCapturedFieldsAsync(_capture, _telemetryClient, lease, new Dictionary<string, string?>
+            {
+                ["input"] = input, ["output"] = output.ToString(),
+                ["toolArguments"] = toolArguments.Length == 0 ? null : toolArguments.ToString(),
+                ["toolResult"] = toolResults.Length == 0 ? null : toolResults.ToString(),
+                ["reasoningSummary"] = summary.Length == 0 ? null : summary.ToString()
+            }, span.SpanId, reasoningSummaryStatus: status, cancellationToken: cancellationToken);
+        }
+        catch (Exception)
+        {
+            _logger.LogWarning("Capture emission unavailable; continuing metadata-only");
+        }
+    }
+
+    private async Task<bool> IsCaptureActiveAsync(CaptureLease lease, CancellationToken cancellationToken)
+    {
+        if (_capture is null) return false;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        try { return await _capture.IsActiveAsync(lease, deadline.Token); }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>Emits bounded application content only for an already admitted, revalidated server lease.</summary>
+    public static async Task EmitCapturedFieldsAsync(MonitoringCaptureService capture, TelemetryClient telemetry,
+        CaptureLease lease, IReadOnlyDictionary<string, string?> fields, string? spanId = null,
+        string? jobId = null, string? sessionId = null, string reasoningSummaryStatus = "unsupported",
+        CancellationToken cancellationToken = default)
+    {
+        if ((jobId is not null && (lease.ScopeType != "job" || lease.ScopeId != jobId)) ||
+            (sessionId is not null && (lease.ScopeType != "session" || lease.ScopeId != sessionId))) return;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        cancellationToken = deadline.Token;
+        try
+        {
+            var sanitized = await capture.SanitizeFieldsAsync(lease, fields, cancellationToken);
+            if (!await capture.IsActiveAsync(lease, cancellationToken)) return;
+            var contentEvent = new Dictionary<string, string>
+            {
+                ["aw.capture.id"] = lease.CaptureId,
+                ["aw.capture.span_id"] = spanId ?? Activity.Current?.SpanId.ToHexString() ?? "unavailable",
+                ["aw.reasoning.summary.status"] = reasoningSummaryStatus is "returned" or "not-returned"
+                    ? reasoningSummaryStatus : "unsupported"
+            };
+            contentEvent[lease.ScopeType == "job" ? "job.id" : "gen_ai.conversation.id"] = lease.ScopeId;
+            foreach (var (key, field) in sanitized)
+            {
+                if (!field.Omitted && field.Text is not null) contentEvent["aw.capture." + key] = field.Text;
+                contentEvent["aw.capture." + key + ".original_bytes"] = field.OriginalBytes.ToString();
+                contentEvent["aw.capture." + key + ".truncated"] = field.Truncated.ToString().ToLowerInvariant();
+                contentEvent["aw.capture." + key + ".omitted"] = field.Omitted.ToString().ToLowerInvariant();
+            }
+            telemetry.TrackEvent("GenAI.Capture", contentEvent);
+        }
+        catch (Exception)
+        {
+            // Optional capture must never change model/job execution or retry behavior.
+        }
     }
 
     // ── Response parsing ───────────────────────────────────────────────────────
@@ -736,7 +942,11 @@ public class FoundryAgentClient
                 document.RootElement.TryGetProperty("error", out var error) &&
                 error.ValueKind == JsonValueKind.Object &&
                 error.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String)
-                return SafeShapeName(value.GetString());
+                return value.GetString() is "permission_denied" or "rate_limit_exceeded" or "insufficient_quota"
+                    or "content_filter" or "content_policy_violation" or "ResponsibleAIPolicyViolation"
+                    or "invalid_request_error" or "authentication_error" or "permission_error"
+                    or "rate_limit_error" or "server_error" or "tool_user_error" or "invalid_parameters"
+                    ? value.GetString()! : "other";
         }
         catch (JsonException)
         {
@@ -774,6 +984,7 @@ public class FoundryAgentClient
         }
 
         var responseText = new StringBuilder();
+        var refused = false;
         var toolsUsed = new List<string>();
         var completedMcpTools = new List<string>();
         // Type names only (never content) so empty-output responses can be diagnosed safely.
@@ -822,6 +1033,7 @@ public class FoundryAgentClient
                                 }
                                 else if (contentType == "refusal" && c.TryGetProperty("refusal", out var refusal))
                                 {
+                                    refused = true;
                                     responseText.Append(refusal.GetString());
                                 }
                             }
@@ -863,19 +1075,19 @@ public class FoundryAgentClient
         }
 
         // Token usage → App Insights metrics
-        int inputTokens = 0, outputTokens = 0;
+        int? inputTokens = null, outputTokens = null;
         var usageReported = root.TryGetProperty("usage", out var usageProp) && usageProp.ValueKind == JsonValueKind.Object;
         if (usageReported)
         {
-            if (usageProp.TryGetProperty("input_tokens", out var it)) inputTokens = it.GetInt32();
-            if (usageProp.TryGetProperty("output_tokens", out var ot)) outputTokens = ot.GetInt32();
+            if (usageProp.TryGetProperty("input_tokens", out var it) &&
+                it.ValueKind == JsonValueKind.Number && it.TryGetInt32(out var inputCount) && inputCount >= 0)
+                inputTokens = inputCount;
+            if (usageProp.TryGetProperty("output_tokens", out var ot) &&
+                ot.ValueKind == JsonValueKind.Number && ot.TryGetInt32(out var outputCount) && outputCount >= 0)
+                outputTokens = outputCount;
         }
         var outputItemTypes = outputShape.Count > 0 ? string.Join(",", outputShape.Distinct()) : "none";
 
-        _telemetryClient.TrackMetric("Foundry.Responses.InputTokens", inputTokens,
-            new Dictionary<string, string> { ["AgentId"] = agentId });
-        _telemetryClient.TrackMetric("Foundry.Responses.OutputTokens", outputTokens,
-            new Dictionary<string, string> { ["AgentId"] = agentId });
         _telemetryClient.TrackEvent("Foundry.Responses.Completed", new Dictionary<string, string>
         {
             ["AgentId"] = agentId,
@@ -890,8 +1102,8 @@ public class FoundryAgentClient
             ["ToolCallCount"] = toolsUsed.Count.ToString(),
             ["ToolsUsed"] = string.Join(",", toolsUsed.Distinct()),
             ["CompletedMcpTools"] = string.Join(",", completedMcpTools.Distinct()),
-            ["InputTokens"] = inputTokens.ToString(),
-            ["OutputTokens"] = outputTokens.ToString(),
+            ["InputTokens"] = inputTokens?.ToString() ?? "unknown",
+            ["OutputTokens"] = outputTokens?.ToString() ?? "unknown",
             ["OutputItemTypes"] = outputItemTypes,
             ["UsageReported"] = usageReported ? "true" : "false"
         });
@@ -911,6 +1123,7 @@ public class FoundryAgentClient
 
         return new FoundryAgentResponse
         {
+            Refused = refused,
             ResponseId = responseId,
             ResponseText = responseText.ToString(),
             ToolsUsed = toolsUsed.Distinct().ToList(),
@@ -944,7 +1157,7 @@ public class FoundryAgentClient
             || (error.TryGetProperty("inner_error", out var innerError) && IsContentFilterError(innerError));
     }
 
-    private async Task VerifyConversationOwnerAsync(
+    private async Task<string> VerifyConversationOwnerAsync(
         HttpClient client, string responseId, Dictionary<string, string> expected, CancellationToken cancellationToken)
     {
         var token = await _credential.GetTokenAsync(new TokenRequestContext([FoundryTokenScope]), cancellationToken);
@@ -969,6 +1182,9 @@ public class FoundryAgentClient
             _logger.LogWarning("Chat continuation rejected: conversation owner or agent mismatch");
             throw new ChatConversationException();
         }
+        return metadata.TryGetProperty("aw_monitoring_session", out var session) &&
+            session.ValueKind == JsonValueKind.String && Guid.TryParseExact(session.GetString(), "N", out var id)
+            ? id.ToString("N") : Guid.NewGuid().ToString("N");
     }
 
     private async Task<bool> IsMalformedResponseIdentifierAsync(
@@ -1522,6 +1738,7 @@ internal sealed class FoundryResponsesRequest
     public bool Store { get; set; } = true;
     public string? PreviousResponseId { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
+    public object? Reasoning { get; set; }
 
     /// <summary>Tools (MCP servers) from the agent definition, serialised as-is.</summary>
     public IReadOnlyList<JsonElement>? Tools { get; set; }
@@ -1565,6 +1782,8 @@ public class FoundryMessage
 /// <summary>Parsed response from a Foundry Responses API call.</summary>
 public class FoundryAgentResponse
 {
+    public string? MonitoringSessionId { get; set; }
+    public bool Refused { get; set; }
     /// <summary>
     /// Returned by Foundry (format: "resp_…"). Pass back as
     /// <c>previousResponseId</c> in subsequent calls to continue the conversation.
@@ -1578,8 +1797,8 @@ public class FoundryAgentResponse
     public List<string> ToolsUsed { get; set; } = new();
 
     /// <summary>Prompt token count (App Insights).</summary>
-    public int InputTokens { get; set; }
+    public int? InputTokens { get; set; }
 
     /// <summary>Completion token count (App Insights).</summary>
-    public int OutputTokens { get; set; }
+    public int? OutputTokens { get; set; }
 }

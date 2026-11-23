@@ -147,6 +147,9 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.33.0' = {
     tableServices: {
       tables: [
         {
+          name: 'awMonitoringCapture'
+        }
+        {
           name: 'shoppingSimulator'
         }
         {

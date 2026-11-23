@@ -10,17 +10,27 @@ export interface AgentMessage {
   content: string;
   toolsUsed?: string[];
   suggestedFollowUps?: string[];
+  threadId?: string;
+  monitoringSessionId?: string;
 }
 
 interface AgentApiResponse {
   response: string;
   suggestedQuestions: string[];
   toolsUsed: string[];
+  threadId?: string | null;
+  monitoringSessionId?: string | null;
+  Response?: string;
+  SuggestedQuestions?: string[];
+  ToolsUsed?: string[];
+  ThreadId?: string | null;
+  MonitoringSessionId?: string | null;
 }
 
 export async function sendAgentMessage(
   message: string,
   conversationHistory: AgentMessage[],
+  threadId?: string,
 ): Promise<AgentMessage> {
   const url = `${getFunctionsApiUrl()}/api/agent/chat`;
   const generation = getTabAuthorizationGeneration();
@@ -50,6 +60,7 @@ export async function sendAgentMessage(
         Content: m.content,
       })),
       isAdmin: true,
+      threadId,
     }),
   });
   ensureSession();
@@ -64,13 +75,17 @@ export async function sendAgentMessage(
 
   const data: AgentApiResponse = await response.json();
   ensureSession();
+  const returnedThreadId = data.ThreadId ?? data.threadId;
+  const returnedSessionId = data.MonitoringSessionId ?? data.monitoringSessionId;
   return {
     role: "assistant",
     content:
-      data.response ||
+      data.Response || data.response ||
       "I wasn't able to find an answer. Please try rephrasing your question.",
-    suggestedFollowUps: data.suggestedQuestions ?? [],
-    toolsUsed: data.toolsUsed ?? [],
+    suggestedFollowUps: data.SuggestedQuestions ?? data.suggestedQuestions ?? [],
+    toolsUsed: data.ToolsUsed ?? data.toolsUsed ?? [],
+    threadId: typeof returnedThreadId === "string" && returnedThreadId.length <= 256 ? returnedThreadId : undefined,
+    monitoringSessionId: typeof returnedSessionId === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(returnedSessionId) ? returnedSessionId : undefined,
   };
 }
 

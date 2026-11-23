@@ -14,5 +14,5 @@ public class VerifiedReviewsQueue(QueueClient client)
     public const string QueueName = "verified-reviews-queue";
 
     public virtual Task EnqueueAsync(VerifiedReviewsQueueMessage message, CancellationToken cancellationToken = default) =>
-        client.SendMessageAsync(JsonSerializer.Serialize(message), cancellationToken);
+        client.SendObservedMessageAsync(JsonSerializer.Serialize(message), cancellationToken);
 }

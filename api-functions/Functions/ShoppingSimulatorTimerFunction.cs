@@ -163,7 +163,7 @@ public class ShoppingSimulatorTimerFunction
                 }
             }
 
-            await queueClient.SendMessageAsync(
+            await queueClient.SendObservedMessageAsync(
                 JsonSerializer.Serialize(msg),
                 visibilityTimeout: TimeSpan.Zero,
                 timeToLive: TimeSpan.FromHours(24));

@@ -16,11 +16,11 @@ public sealed class UtilityLifecycleNotifications(WebPubSubService publisher)
 {
     public const string QueueName = "utility-status-queue";
     public sealed record Notification(string InstanceId, string JobType, string? LastStatus = null,
-        DateTimeOffset? LastUpdatedAt = null);
+        DateTimeOffset? LastUpdatedAt = null, QueueTelemetryContext? Telemetry = null);
 
-    public static Task RegisterAsync(TaskOrchestrationContext context, string jobType) =>
+    public static Task RegisterAsync(TaskOrchestrationContext context, string jobType, QueueTelemetryContext? telemetry = null) =>
         context.Version == "push-v1"
-            ? context.CallActivityAsync(nameof(RegisterUtilityLifecycle), new Notification(context.InstanceId, jobType))
+            ? context.CallActivityAsync(nameof(RegisterUtilityLifecycle), new Notification(context.InstanceId, jobType, Telemetry: telemetry))
             : Task.CompletedTask;
 
     private static QueueClient Queue()
@@ -36,7 +36,7 @@ public sealed class UtilityLifecycleNotifications(WebPubSubService publisher)
     [Function(nameof(RegisterUtilityLifecycle))]
     public Task RegisterUtilityLifecycle([ActivityTrigger] Notification notification) =>
         RegisterAndNotifyAsync(notification, async item =>
-            await Queue().SendMessageAsync(JsonSerializer.Serialize(item)));
+            await Queue().SendObservedMessageAsync(JsonSerializer.Serialize(item)));
 
     public async Task RegisterAndNotifyAsync(Notification notification, Func<Notification, Task> persist)
     {
@@ -55,12 +55,21 @@ public sealed class UtilityLifecycleNotifications(WebPubSubService publisher)
         [QueueTrigger(QueueName, Connection = "AzureWebJobsStorage")] Notification notification,
         [DurableClient] DurableTaskClient client)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("utility-status", context: notification.Telemetry);
+        attempt.Tag("durable.instance.id", notification.InstanceId);
         var metadata = await client.GetInstanceAsync(notification.InstanceId, getInputsAndOutputs: false);
         if (metadata == null)
             throw new InvalidOperationException("Registered utility instance was not found.");
 
         await NotifyAndContinueAsync(notification, metadata, async next =>
-            await Queue().SendMessageAsync(JsonSerializer.Serialize(next), visibilityTimeout: TimeSpan.FromSeconds(3)));
+            await Queue().SendObservedMessageAsync(JsonSerializer.Serialize(next), visibilityTimeout: TimeSpan.FromSeconds(3)));
+        attempt.SetOutcome(metadata.RuntimeStatus.ToString() switch
+        {
+            "Completed" => "completed",
+            "Failed" or "Terminated" => "failed",
+            "Canceled" => "cancelled",
+            _ => "retrying"
+        });
     }
 
     public async Task NotifyAndContinueAsync(Notification notification, OrchestrationMetadata metadata,

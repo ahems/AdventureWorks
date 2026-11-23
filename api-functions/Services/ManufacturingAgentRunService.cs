@@ -165,11 +165,11 @@ public class ManufacturingAgentRunService
     }
 
     /// <summary>Gets a single run by RunId, or null if not found.</summary>
-    public async Task<ManufacturingAgentRunEntity?> GetRunAsync(string runId)
+    public async Task<ManufacturingAgentRunEntity?> GetRunAsync(string runId, CancellationToken cancellationToken = default)
     {
         var table = await GetTableClientAsync();
         await foreach (var entity in table.QueryAsync<ManufacturingAgentRunEntity>(
-            e => e.PartitionKey == PartitionKey && e.RunId == runId))
+            e => e.PartitionKey == PartitionKey && e.RunId == runId, cancellationToken: cancellationToken))
         {
             return entity;
         }

@@ -232,6 +232,7 @@ az role definition list --name "AdventureWorks Demo azd Deployer" \
   --scope "/subscriptions/<target-subscription-id>" -o table
 
 # 2. Assign it with the allowlist condition.
+ROLE_IDS=$(jq -r '[.roleDefinitionIds[]] | join(", ")' infra/azd-role-assignment-allowlist.json)
 az role assignment create \
   --subscription "<target-subscription-id>" \
   --assignee-object-id "<deployer-object-id>" \
@@ -239,7 +240,7 @@ az role assignment create \
   --role "AdventureWorks Demo azd Deployer" \
   --scope "/subscriptions/<target-subscription-id>" \
   --condition-version 2.0 \
-  --condition "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {09976791-48a7-449e-bb21-39d1a415f350, 0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3, 0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb, 12cf5a90-567b-43ae-8102-96cf46c7d9b4, 19c28022-e58e-450d-a464-0b2a53034789, 4633458b-17de-408a-b874-0445c86b69e6, 5e0bd9bd-7b93-4f28-af87-19fc36ad61bd, 64702f94-c441-49e6-a78b-ef80e0188fee, 7f951dda-4ed3-4680-a7ca-43fe172d538d, 974c5e8b-45b9-4653-ba55-5f855dd0fb88, a001fd3d-188f-4b5d-821b-7da978bf7442, a235d3ee-5935-4cfb-8cc5-a3303ad5995e, a4417e6f-fecd-4de8-b567-7b0420556985, acdd72a7-3385-48ef-bd42-f606fba81ae7, b7e6dc6d-f1e8-4753-8033-0f276bb0955b, b8eda974-7b85-4f76-af95-65846b26df6d, ba92f5b4-2d11-453d-a403-e96b0029c9fe})) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {09976791-48a7-449e-bb21-39d1a415f350, 0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3, 0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb, 12cf5a90-567b-43ae-8102-96cf46c7d9b4, 19c28022-e58e-450d-a464-0b2a53034789, 4633458b-17de-408a-b874-0445c86b69e6, 5e0bd9bd-7b93-4f28-af87-19fc36ad61bd, 64702f94-c441-49e6-a78b-ef80e0188fee, 7f951dda-4ed3-4680-a7ca-43fe172d538d, 974c5e8b-45b9-4653-ba55-5f855dd0fb88, a001fd3d-188f-4b5d-821b-7da978bf7442, a235d3ee-5935-4cfb-8cc5-a3303ad5995e, a4417e6f-fecd-4de8-b567-7b0420556985, acdd72a7-3385-48ef-bd42-f606fba81ae7, b7e6dc6d-f1e8-4753-8033-0f276bb0955b, b8eda974-7b85-4f76-af95-65846b26df6d, ba92f5b4-2d11-453d-a403-e96b0029c9fe}))"
+  --condition "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLE_IDS})) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLE_IDS}))"
 ```
 
 Custom role names are unique per tenant. If the role already exists for another

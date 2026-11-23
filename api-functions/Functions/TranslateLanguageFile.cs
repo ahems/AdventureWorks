@@ -114,6 +114,8 @@ public class TranslateLanguageFile
             // Start the orchestration
             var orchestrationInput = new TranslationOrchestrationInput
             {
+                Telemetry = new QueueTelemetryContext(System.Diagnostics.Activity.Current?.Id,
+                    Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow),
                 LanguageDataJson = JsonSerializer.Serialize(request.LanguageData),
                 TargetLanguageCode = languageCode,
                 TargetLanguageName = languageName,
@@ -277,7 +279,8 @@ public class TranslateLanguageFile
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
         var logger = context.CreateReplaySafeLogger<TranslateLanguageFile>();
-        await UtilityLifecycleNotifications.RegisterAsync(context, "translate-language-file");
+        await UtilityLifecycleNotifications.RegisterAsync(context, "translate-language-file",
+            context.GetInput<TranslationOrchestrationInput>()?.Telemetry);
         var input = context.GetInput<TranslationOrchestrationInput>();
 
         if (input == null)
@@ -316,6 +319,7 @@ public class TranslateLanguageFile
 
                 var sectionInput = new SectionTranslationInput
                 {
+                    Telemetry = input.Telemetry,
                     SectionName = section.Key,
                     SectionDataJson = JsonSerializer.Serialize(section.Value),
                     TargetLanguageCode = input.TargetLanguageCode,
@@ -391,6 +395,7 @@ public class TranslateLanguageFile
                 nameof(SaveTranslationResultActivity),
                 new TranslationResultInput
                 {
+                    Telemetry = input.Telemetry,
                     InstanceId = context.InstanceId,
                     JsonResult = jsonResult!,
                     TargetLanguageCode = input.TargetLanguageCode,
@@ -412,6 +417,8 @@ public class TranslateLanguageFile
         [ActivityTrigger] SectionTranslationInput input,
         FunctionContext context)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("durable-translate-section", context: input.Telemetry,
+            kind: System.Diagnostics.ActivityKind.Internal, failureOutcome: "failed");
         var logger = context.GetLogger(nameof(TranslateSectionActivity));
         try
         {
@@ -429,6 +436,7 @@ public class TranslateLanguageFile
             {
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             });
+            attempt.Complete();
 
             return new TranslatedSection
             {
@@ -579,6 +587,7 @@ public class TranslateLanguageFile
             }
             catch (Exception ex) when (IsRateLimitException(ex))
             {
+                BackgroundWorkTelemetry.Retry();
                 retryCount++;
                 if (retryCount >= maxRetries)
                 {
@@ -699,6 +708,8 @@ public class TranslateLanguageFile
         [ActivityTrigger] TranslationResultInput input,
         FunctionContext context)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("durable-save-translation", context: input.Telemetry,
+            kind: System.Diagnostics.ActivityKind.Internal, failureOutcome: "failed");
         var logger = context.GetLogger(nameof(SaveTranslationResultActivity));
         logger.LogInformation("Saving translation result for instance {InstanceId}", input.InstanceId);
 
@@ -715,7 +726,9 @@ public class TranslateLanguageFile
                 new Uri($"https://{accountName}.blob.core.windows.net"),
                 new DefaultAzureCredential());
 
-            return await SaveToBlobAndGenerateSas(blobServiceClient, input, logger);
+            var result = await SaveToBlobAndGenerateSas(blobServiceClient, input, logger);
+            attempt.Complete();
+            return result;
         }
         catch (Exception ex)
         {

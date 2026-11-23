@@ -120,7 +120,7 @@ public class ReviewModerationQueueFunction
                     EnqueuedAt = DateTimeOffset.UtcNow
                 };
 
-                await queue.SendMessageAsync(JsonSerializer.Serialize(message));
+                await queue.SendObservedMessageAsync(JsonSerializer.Serialize(message));
             }
 
             _telemetryClient.TrackEvent("ReviewModeration.Started", new Dictionary<string, string>
@@ -174,6 +174,7 @@ public class ReviewModerationQueueFunction
     public async Task QueueTrigger(
         [QueueTrigger(QueueName, Connection = "AzureWebJobsStorage")] BinaryData queueMessage)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("review-moderation", queueMessage.ToString());
         ReviewModerationQueueMessage? message;
         try
         {
@@ -181,12 +182,14 @@ public class ReviewModerationQueueFunction
         }
         catch (Exception ex)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogError(ex, "Invalid review moderation queue message.");
             return;
         }
 
         if (message == null || message.ProductReviewId <= 0 || string.IsNullOrWhiteSpace(message.JobId))
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("Skipping malformed review moderation message.");
             return;
         }
@@ -194,6 +197,7 @@ public class ReviewModerationQueueFunction
         var state = await _reviewService.GetReviewModerationJobStateAsync();
         if (!state.IsRunning || !string.Equals(state.JobId, message.JobId, StringComparison.Ordinal))
         {
+            attempt.SetOutcome("skipped");
             _logger.LogInformation(
                 "Ignoring stale moderation message for ProductReviewId={ReviewId}, JobId={JobId}.",
                 message.ProductReviewId,
@@ -219,6 +223,7 @@ public class ReviewModerationQueueFunction
             var suggestedResponse = analysis?.SuggestedResponse?.Trim();
             if (string.IsNullOrWhiteSpace(suggestedResponse))
             {
+                attempt.SetOutcome("failed");
                 await _reviewService.IncrementReviewModerationProgressAsync(
                     message.JobId,
                     success: false,
@@ -231,6 +236,7 @@ public class ReviewModerationQueueFunction
             state = await _reviewService.GetReviewModerationJobStateAsync();
             if (!state.IsRunning || !string.Equals(state.JobId, message.JobId, StringComparison.Ordinal))
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogInformation(
                     "Skipping moderation write for stopped or replaced job {JobId}.", message.JobId);
                 return;
@@ -253,6 +259,7 @@ public class ReviewModerationQueueFunction
                 case ReviewModerationApplyOutcome.SkippedAlreadyModerated:
                 case ReviewModerationApplyOutcome.SkippedAlreadyReplied:
                 case ReviewModerationApplyOutcome.SkippedNotFound:
+                    attempt.SetOutcome("skipped");
                     await _reviewService.IncrementReviewModerationProgressAsync(
                         message.JobId,
                         success: false,
@@ -264,6 +271,7 @@ public class ReviewModerationQueueFunction
         }
         catch (FoundryToolPolicyException ex)
         {
+            attempt.SetOutcome("failed");
             _logger.LogError(ex, "Review moderation stopped after a tool-policy violation for ProductReviewId={ReviewId}",
                 message.ProductReviewId);
             await _reviewService.IncrementReviewModerationProgressAsync(
@@ -276,6 +284,7 @@ public class ReviewModerationQueueFunction
         }
         catch (Exception ex)
         {
+            attempt.SetOutcome("failed");
             _logger.LogError(ex, "Review moderation failed for ProductReviewId={ReviewId}", message.ProductReviewId);
             await _reviewService.IncrementReviewModerationProgressAsync(
                 message.JobId,
@@ -286,6 +295,7 @@ public class ReviewModerationQueueFunction
         }
 
         await _webPubSub.SendToGroupAsync("reviews", new { @event = "moderation-progress", jobId = message.JobId });
+        attempt.Complete();
     }
 
     private async Task<ReviewModerationJobState> ResetIfStaleAsync(ReviewModerationJobState state)

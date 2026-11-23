@@ -205,7 +205,7 @@ public class OrderPipelineControlFunction
             // Re-run the normal In Process step with ForceApprove so the processor approves
             // the order and hands it straight to the warehouse pick path (no direct status write).
             var message = JsonSerializer.Serialize(new { SalesOrderID = id, Status = 1, ForceApprove = true });
-            await queueClient.SendMessageAsync(message);  // immediate (no visibility delay)
+            await queueClient.SendObservedMessageAsync(message);  // immediate (no visibility delay)
         }
 
         _logger.LogInformation("[Pipeline] Enqueued {Count} In Process orders for forced approval and warehouse pick.", orderIds.Count);
@@ -241,7 +241,7 @@ public class OrderPipelineControlFunction
         foreach (var id in orderIds)
         {
             var message = JsonSerializer.Serialize(new { SalesOrderID = id, Status = 5 });
-            await queueClient.SendMessageAsync(message);  // immediate
+            await queueClient.SendObservedMessageAsync(message);  // immediate
         }
 
         _logger.LogInformation("[Pipeline] Promoted {Count} Approved/Backordered orders → Shipped (Status=5).", orderIds.Count);

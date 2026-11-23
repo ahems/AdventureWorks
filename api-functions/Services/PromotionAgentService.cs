@@ -64,7 +64,7 @@ public class PromotionAgentService
         string? previousResponseId = null,
         string? conversationOwner = null)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("PromotionAgent.Generate");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("PromotionAgent.Generate");
         operation.Telemetry.Properties["PromotionType"] = promotionType;
         operation.Telemetry.Properties["OfferCategory"] = offerCategory;
         operation.Telemetry.Properties["CategoryId"] = categoryId?.ToString() ?? "all";

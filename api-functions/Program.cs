@@ -15,8 +15,21 @@ using ApiFunctions.Auth;
 using Microsoft.OpenApi.Models;
 using Azure.AI.Projects;
 using Azure.AI.OpenAI;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Logs;
+using Microsoft.Azure.Functions.Worker.OpenTelemetry;
 
 var builder = FunctionsApplication.CreateBuilder(args);
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+builder.Logging.AddFilter("Azure", LogLevel.Warning);
+builder.Logging.AddConsole(options =>
+{
+    options.FormatterName = "adventureworks-safe";
+    options.LogToStandardErrorThreshold = LogLevel.Trace;
+}).AddConsoleFormatter<AdventureWorks.Telemetry.SafeConsoleFormatter, Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>();
 
 #if AUTH_ASSURANCE_HOST
 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -49,15 +62,28 @@ builder.UseMiddleware<FunctionsAuthorizationMiddleware>();
 builder.UseMiddleware<AuthAssurance.HandlerEntryProbe>();
 #endif
 
-// Register Application Insights for telemetry. Adaptive sampling is reinstalled without custom
-// events or exceptions so authorization and identity evidence events are never sampled out.
-builder.Services.AddApplicationInsightsTelemetryWorkerService(options => options.EnableAdaptiveSampling = false);
-builder.Services.Configure<Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration>(configuration =>
+// SDK 3 owns worker export; Functions host owns entry requests. Extend that provider, never
+// initialize a second Azure Monitor distro alongside it.
+builder.Services.AddApplicationInsightsTelemetryWorkerService(options =>
 {
-    var chain = configuration.DefaultTelemetrySink.TelemetryProcessorChainBuilder;
-    chain.UseAdaptiveSampling(maxTelemetryItemsPerSecond: 20, excludedTypes: "Event;Exception");
-    chain.Build();
+    options.TracesPerSecond = 5;
+    options.EnableTraceBasedLogsSampler = false;
 });
+builder.Services.AddOpenTelemetry().UseFunctionsWorkerDefaults()
+    .ConfigureResource(resource => resource.AddService("api-functions")
+        .AddAttributes(new Dictionary<string, object>
+        {
+            ["deployment.environment.name"] = builder.Configuration["AZURE_ENV_NAME"] ?? "unconfigured"
+        }))
+    .WithTracing(tracing => tracing.AddSource("AdventureWorks.GenAI", "AdventureWorks.BackgroundWork", "Azure.*", "OpenAI*", "Experimental.OpenAI*")
+        .AddProcessor(new AdventureWorks.Telemetry.TelemetryPrivacyProcessor()))
+    .WithMetrics(metrics => metrics.AddRuntimeInstrumentation()
+        .AddMeter("AdventureWorks.GenAI", "AdventureWorks.BackgroundWork", "AdventureWorks.Telemetry"));
+// Only explicit structured attributes are exported; arbitrary logging scopes can contain credentials.
+builder.Services.Configure<OpenTelemetryLoggerOptions>(logging => logging.IncludeScopes = false);
+builder.Services.ConfigureOpenTelemetryLoggerProvider(logging =>
+    logging.AddProcessor(new AdventureWorks.Telemetry.TelemetryLogPrivacyProcessor()));
+builder.Services.AddHostedService<AdventureWorks.Telemetry.ExporterDiagnostics>();
 builder.Services.AddSingleton(sp => new AdventureWorks.Telemetry.SqlPrincipalTelemetry(
     sp.GetRequiredService<TelemetryClient>(),
     sp.GetRequiredService<ILogger<AdventureWorks.Telemetry.SqlPrincipalTelemetry>>(),
@@ -86,6 +112,9 @@ var defaultCredential = new DefaultAzureCredential(new DefaultAzureCredentialOpt
     ManagedIdentityClientId = managedIdentityClientId // Use user-assigned MI when specified
 });
 builder.Services.AddSingleton(defaultCredential);
+builder.Services.AddSingleton<MonitoringQueryService>();
+builder.Services.AddSingleton<IMonitoringCaptureStore, TableMonitoringCaptureStore>();
+builder.Services.AddSingleton<MonitoringCaptureService>();
 
 // Register HttpClient (retained for services that still need it)
 builder.Services.AddHttpClient();
@@ -290,7 +319,11 @@ builder.Services.AddSingleton<FoundryAgentClient>(sp =>
 
     return new FoundryAgentClient(logger, telemetryClient, credential, projectEndpoint, httpClientFactory,
         mcpServiceUrl, dabMcpUrl, modelDeployment, serviceTokenProvider,
-        Guid.TryParse(managedIdentityClientId, out var expectedClientId) ? expectedClientId : null);
+        Guid.TryParse(managedIdentityClientId, out var expectedClientId) ? expectedClientId : null,
+        sp.GetRequiredService<MonitoringCaptureService>(),
+        (configuration["FOUNDRY_REASONING_SUMMARY_DEPLOYMENTS"] ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.Ordinal));
 });
 
 // Backend service credential for api-mcp: exchanges the managed identity's Entra token for an

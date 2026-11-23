@@ -89,7 +89,7 @@ public class GenerateOrdersBulkFunction
                     SeedCustomerId = seedCustomerId
                 };
 
-                await queueClient.SendMessageAsync(JsonSerializer.Serialize(msg));
+                await queueClient.SendObservedMessageAsync(JsonSerializer.Serialize(msg));
                 queued++;
             }
 

@@ -42,7 +42,7 @@ public class ReviewAnalysisAgentService
     /// </summary>
     public async Task<List<ReviewAnalysisResult>> AnalyzeReviewsAsync(List<ReviewInput> reviews)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("ReviewAnalysisAgent.Analyze");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("ReviewAnalysisAgent.Analyze");
         operation.Telemetry.Properties["ReviewCount"] = reviews.Count.ToString();
 
         var results = new List<ReviewAnalysisResult>();

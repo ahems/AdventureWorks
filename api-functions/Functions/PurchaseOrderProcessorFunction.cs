@@ -43,6 +43,7 @@ public class PurchaseOrderProcessorFunction
         string messageText,
         FunctionContext context)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("purchase-order", messageText);
         PurchaseOrderMessage? msg;
         try
         {
@@ -60,12 +61,14 @@ public class PurchaseOrderProcessorFunction
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to deserialise queue message: {Raw}", messageText);
-            return; // dead-letter via retry policy rather than throwing
+            attempt.SetOutcome("rejected");
+            _logger.LogError("Failed to deserialise supply-chain queue message ({ErrorType}).", ex.GetType().Name);
+            return; // Existing policy deletes invalid messages rather than retrying.
         }
 
         if (msg == null)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("Received null or empty supply-chain queue message.");
             return;
         }
@@ -81,9 +84,11 @@ public class PurchaseOrderProcessorFunction
                 break;
 
             default:
+                attempt.SetOutcome("skipped");
                 _logger.LogWarning("Unknown MessageType '{Type}' on supply-chain queue.", msg.MessageType);
                 break;
         }
+        attempt.Complete();
     }
 
     // ── Order state machine ───────────────────────────────────────────────────
@@ -93,6 +98,7 @@ public class PurchaseOrderProcessorFunction
         // Self-scheduling: if the message arrived early (clock drift / retry), requeue
         if (msg.ScheduledAtUtc > DateTime.UtcNow.AddSeconds(2))
         {
+            BackgroundWorkTelemetry.Outcome("retrying");
             int waitSec = (int)(msg.ScheduledAtUtc - DateTime.UtcNow).TotalSeconds;
             _logger.LogDebug("Order {OrderId} transition to '{Status}' not yet due; requeuing with {Wait}s visibility.",
                 msg.OrderId, msg.TargetStatus, waitSec);
@@ -108,6 +114,7 @@ public class PurchaseOrderProcessorFunction
             var order = await _svc.GetOrderAsync(msg.OrderId);
             if (order == null || order.Status != "approved")
             {
+                BackgroundWorkTelemetry.Outcome("skipped");
                 _logger.LogWarning("Order {OrderId}: expected status 'approved' for delivery roll, got '{Status}'. Skipping.",
                     msg.OrderId, order?.Status ?? "not found");
                 return;
@@ -126,6 +133,7 @@ public class PurchaseOrderProcessorFunction
         bool ok = await _svc.TransitionOrderAsync(msg.OrderId, resolvedTarget);
         if (!ok)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogWarning("TransitionOrder({OrderId}, {Status}) failed — order may be cancelled or already completed.",
                 msg.OrderId, resolvedTarget);
             return;
@@ -195,7 +203,7 @@ public class PurchaseOrderProcessorFunction
         var queueClient = await GetQueueClientAsync();
         string json     = JsonSerializer.Serialize(msg);
         string encoded  = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
-        await queueClient.SendMessageAsync(
+        await queueClient.SendObservedMessageAsync(
             encoded,
             visibilityTimeout: TimeSpan.FromSeconds(Math.Max(0, visibilityDelaySec)));
     }

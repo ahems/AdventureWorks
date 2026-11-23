@@ -137,6 +137,7 @@ All use `unittest`. Run one module with
 | File | Covers | In offline profile |
 | --- | --- | --- |
 | [`test_azure_auth.py`](test_azure_auth.py) | `scripts/utilities/azure-auth.py` login, PKCE, refresh and request handling | Yes |
+| [`test_observability_verifier.py`](test_observability_verifier.py) | Selected-trace metadata query bounds, role/parent evidence, missing data and duplicate spans | No |
 | [`test_hosted_agent_mcp_trust.py`](test_hosted_agent_mcp_trust.py) | Hosted Manufacturing agent trust configuration for api-mcp | Yes |
 | [`test_agent_tools_config.py`](test_agent_tools_config.py) | Foundry agent definition tool lists | Yes |
 | [`test_manufacturing_agent_tools.py`](test_manufacturing_agent_tools.py) | The hosted Manufacturing agent's MCP tool service and its authentication | Yes |
@@ -161,6 +162,13 @@ tiers, capacity, fallback and policy errors. It needs Bash and `jq` and does not
 touch the azd environment: `bash tests/scripts/test-chat-model-selection.sh`.
 
 ## Authentication tests
+
+For one-shot, read-only trace metadata verification, use
+[`test-observability.py`](test-observability.py) with a known W3C trace ID and
+an existing output directory. It queries the selected workspace with the
+operator's Azure CLI identity and never queries prompt or log-message content.
+See [observability validation](../../docs/testing/OBSERVABILITY_VALIDATION.md)
+for arguments, exit codes and what the result does and does not prove.
 
 [`validate-auth.sh`](validate-auth.sh) runs `python3 -B tests/auth/validate.py`
 with the same arguments; [`test-ai-chat-and-mcp.sh`](test-ai-chat-and-mcp.sh) runs

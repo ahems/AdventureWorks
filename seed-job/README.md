@@ -30,7 +30,7 @@ in the `azd up` result.
 | `seed-database.ps1` | Entry point: schema, CSV loads, images, overlays, date shift, Change Tracking, outbox, grants |
 | `RuntimeDatabaseAccess.psm1` | Creates the runtime identity's SQL user by SID and grants runtime access |
 | `ManufacturingOverlays.psm1` | Validated, transactional import of the approved manufacturing overlays |
-| `SeedTelemetry.psm1` | Application Insights custom events `Sql.SessionPrincipal` (scope `seed:<mode>`, hashed seed-identity comparison) and `Seed.Completed` (mode, outcome, duration, script hash); no SQL text, tokens or row data |
+| `SeedTelemetry.psm1` | Sparse `Seed.Started`, deduplicated `Seed.Stage`, `Seed.Failed`/`Seed.Completed` lifecycle events plus `Sql.SessionPrincipal` hashed identity evidence; two-second best-effort sends and console/system-log fallback; no SQL text, tokens or row data |
 | `sql/` | Schema scripts and CSV data ([catalog](sql/README.md)) |
 | `images/` | 1,770 product PNG files |
 | `tests/` | Pester and Python tests |

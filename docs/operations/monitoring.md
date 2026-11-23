@@ -12,13 +12,119 @@ related:
 
 # Monitoring and telemetry
 
-All AdventureWorks services send telemetry to one solution-wide Application Insights resource (`av-appinsights-<token>`), which is backed by a Log Analytics workspace. Each service reports its own `cloud_RoleName`, so it appears as a separate node in the Application Map. Monitoring is read-only. Use it to diagnose problems, then fix them in source and redeploy, as described in [Deployment lifecycle](deployment.md).
+AdventureWorks configures one solution-wide workspace-based Application Insights resource (`av-appinsights-<token>`). Configuration is not proof of export or ingestion: service roles, timestamps, sampling and source failures determine observed coverage. The protected admin `/monitoring` dashboard complements readiness, not replaces it. Snapshot reads are pure; explicit capture controls mutate bounded control metadata. Fix problems in source/IaC and follow the [demo deployment policy](deployment.md), never repair Azure in place. See the [signal contract](../reference/telemetry-contract.md) and [validation walkthrough](../testing/OBSERVABILITY_VALIDATION.md).
 
 ## Resources
 
+### Protected snapshots and capture controls
+
+| Route | Scope | Contract |
+| --- | --- | --- |
+| `GET /api/monitoring/summary?range=1h` | `monitoring.read` | Ranges `1h` (default), `6h`, `24h`; fixed server-owned queries only |
+| `GET /api/monitoring/traces/{traceId}` | `monitoring.read` | Lower-case 32-character W3C ID; last 24 hours, at most 100 projected spans |
+| `GET /api/monitoring/capture` | `monitoring.read` | Pure read; at most 100 recent control grants |
+| `POST /api/monitoring/capture` | `monitoring.write` | `{"scopeType":"session" or "job","scopeId":"stable-id"}`; fixed 15 minutes / 100 roots |
+| `DELETE /api/monitoring/capture/{id}` | `monitoring.write` | Explicit Stop; does not delete already ingested telemetry |
+
+Both scopes are initially **executive-admin only**, with scope/internal-category
+middleware and handler checks. The browser gets no Azure management token. Functions
+uses its selected managed identity for Log Analytics and native metrics with
+workspace/resource-scoped read RBAC, not subscription permissions.
+
+Responses include `asOf`, selected range, sampling/ingestion notes and per-source
+`available`, `no-data`, `stale`, `forbidden`, `throttled` or `unavailable` status/reason.
+Summary overall status is `available`, `no-data`, `partial` or `unavailable`.
+Returned columns are fixed and bounded, never arbitrary KQL, resource IDs, SQL
+text, exception messages or credential payloads. A failed source is not zero-filled.
+Queries have a 10-second upstream budget, at most four concurrent source reads,
+60-second process cache and coalesced identical reads. Native metric snapshots
+report units/declared limits and observed points; absent platform counters remain
+unavailable. Queue reads use approximate **per-queue** `GetProperties` metadata,
+never peek/consume or the daily account-wide `QueueMessageCount`.
+
+The admin UI invalidates through existing push groups, initial load, selection,
+reconnect and focus; no network interval or manual refresh. Push events indicate
+application changes, not completed Azure ingestion.
+
+Rich capture is default-off, session/job-scoped, atomically admitted and UTF-8
+bounded by [the signal contract](../reference/telemetry-contract.md#privacy-and-capture).
+The `MonitoringCaptureService` helper requires a trusted admitted lease; trace
+headers/queue references alone cannot enable content. Chat-session capture uses
+the server-minted monitoring session ID after conversation/agent ownership
+verification; trace rows expose it as `sessionId`. Manufacturing job capture uses
+the persisted run's canonical GUID (`jobId` in trace rows), after matching its
+order/customer and nonterminal state. It captures application input and hosted
+findings/actions output, not hosted internal tools or hidden reasoning. Retries
+share a stable admitted root and cumulative content budget. Other jobs without
+persisted capture provenance remain metadata-only, not automatically linked.
+Successful new root admissions publish only the generic
+`utilities` / `monitoring-capture-changed` invalidation after persistence, so live
+counts/exhaustion update without polling. Duplicate retry admissions and GETs do
+not publish; best-effort delivery failure cannot undo admission.
+Admitted content is also emitted as bounded `GenAI.Capture` custom events because
+the HTTP parent's head-sampling decision precedes owned-session lookup. These
+events preserve real trace/parent IDs but do not retroactively retain every span.
+Unsampled logs are still subject to exporter failures/caps; missing third-party
+or parent segments remain explicit. Trace queries project only this known event,
+never arbitrary event bodies.
+Fields are sanitized and marked truncated/omitted; officially returned reasoning
+summaries are optional, hidden raw reasoning unsupported. Stop/expiry affects future
+application content only. Foundry server-managed tracing/content is configured
+independently and remains subject to its own policy/retention.
+
+### Workbooks, portal Grafana and actionable alerts
+
+[`infra/monitoring/workbook.json`](../../infra/monitoring/workbook.json) is a compact
+shared workbook for request/browser latency, dependency edges, agent/tool spans,
+background outcomes, worker termination, ingestion and cap evidence. IaC injects
+workspace identity and links to standard native metrics. Operator portal links
+require separate Entra permissions; seeded admin OAuth is not portal authorization.
+
+[`infra/monitoring/grafana.json`](../../infra/monitoring/grafana.json) is reusable
+Azure Monitor dashboard content with a viewer-selected Azure Monitor datasource.
+`ENABLE_MONITORING_GRAFANA=false` by default. Opt-in creates native
+`Microsoft.Dashboard/dashboards@2025-09-01-preview` plus a
+`dashboardDefinitions` child with `serializedData`, using the
+[documented ARM schema](https://learn.microsoft.com/azure/templates/microsoft.dashboard/dashboards/dashboarddefinitions).
+The target subscription/cloud must support the feature; an unsupported opt-in
+fails explicitly, never silently produces a fake dashboard URL.
+
+No new Managed Grafana Essential workspaces can be created; Essential retirement
+is March 31, 2027. This design creates no paid Managed Grafana instance, new
+Prometheus workspace or collector. Portal dashboards add no dedicated compute
+charge; normal telemetry/query/alert costs remain.
+
+`infra/modules/monitoring.bicep` defines six aggregated rules: unexpected
+application/agent/background failure burst, rolling 24-hour ingestion warning at
+800 MB, actual `_LogOperation` OverQuota evidence, observed ACA OOM/crash/backoff
+Web PubSub connection quota pressure at 80%, and model throttling observed in
+three separate five-minute windows rather than one recovered retry. The rolling warning is **not**
+the workspace-specific daily reset window or an invoice estimate. Empty
+`MONITORING_ACTION_GROUP_ID` means alerts visible in the portal without a personal
+notification destination. Tune source volume/sampling before hitting the cap.
+
+Native metrics are selected for SQL CPU/IO/storage/workers, blob/queue/table
+latency, DAB CPU/MCP memory, Flex-specific CPU/on-demand execution, Foundry model
+requests, Web PubSub connections and Key Vault availability. Existing ACA
+console/system and ACR diagnostics are reused. Broad Storage reads, SQL query
+text/deadlock payloads, OAuth audit bodies, Foundry request content and Web PubSub
+per-message logs are not enabled: available diagnostic categories are not proof
+they are safe or necessary. Email disabled/attempted/failed semantics remain
+application telemetry; provider delivery is not inferred from acceptance.
+
+Known tier limits are presented without fabricated remaining quota. SQL free-limit
+mode is disabled by default; intentional scale-to-zero is not outage. Web PubSub
+Free has 20 connections/20K daily messages, but outbound bytes cannot establish
+remaining billed messages. Exact token quota, invoice cost, independently hosted
+agent compute pressure and unsupported counters remain unavailable.
+
+These new storage/RBAC/view definitions require the user's normal fresh demo
+provisioning, not agent-run Azure changes. See [deployment](deployment.md) and
+[environment settings](../reference/environment-variables.md).
+
 | Resource | Configuration ([`infra/modules/applicationinsights.bicep`](../../infra/modules/applicationinsights.bicep)) |
 | --- | --- |
-| Log Analytics workspace | `PerGB2018`, 30-day retention, 1 GB/day ingestion cap. Once the cap is reached, telemetry stops until the next day. |
+| Log Analytics workspace | `PerGB2018`, 30-day retention, 1 GB/day emergency cap. Billable ingestion stops until the workspace-specific reset; overshoot can be billed. The cap is not an exact billing ceiling. |
 | Application Insights | Workspace-based web component. Local (connection-string) authentication stays enabled because browser SDKs cannot use managed identity. |
 
 The connection string is **not a secret**. It only allows telemetry to be sent, not read, so it is safe to place in browser configuration.
@@ -31,25 +137,17 @@ The connection string is **not a secret**. It only allows telemetry to be sent, 
 | `app-admin` | `@microsoft/applicationinsights-web` ([`appInsights.ts`](../../app-admin/src/lib/appInsights.ts)) | `app-admin` |
 | `app-manufacturing` | `@microsoft/applicationinsights-web` ([`appInsights.ts`](../../app-manufacturing/src/lib/appInsights.ts)) | `app-manufacturing` |
 | `api` (DAB) | Built-in DAB telemetry (`runtime.telemetry.application-insights` in [`dab-config.json`](../../api/dab-config.json)) | `DataApiBuilder` |
-| `api-functions` | Functions host plus `Microsoft.ApplicationInsights.WorkerService` and [`InvocationTraceMiddleware`](../../api-functions/Functions/InvocationTraceMiddleware.cs) | `av-func-<token>` |
-| `api-mcp` | `Microsoft.ApplicationInsights.AspNetCore`, with a cloud-role-name telemetry initializer | `api-mcp` |
+| `api-functions` | OpenTelemetry-mode Functions host + supported worker defaults and Application Insights 3.x worker provider | `av-func-<token>` / configured worker resource |
+| `api-mcp` | Compatible Application Insights 3.x/OpenTelemetry provider, one exporter owner | `api-mcp` |
 | `manufacturing-agent` | Hosted-agent OpenTelemetry (`OTEL_SERVICE_NAME` in [`azure.yaml`](../../azure.yaml)) | `manufacturing-agent` |
 | `mcp-inspector` | [`telemetry.mjs`](../../mcp-inspector/telemetry.mjs): request telemetry with fixed route labels | `mcp-inspector` |
 | `seed-job` | [`SeedTelemetry.psm1`](../../seed-job/SeedTelemetry.psm1): custom events only | `seed-job` |
 
-Server-side services read `APPLICATIONINSIGHTS_CONNECTION_STRING`. When the value is missing or invalid, the Inspector gateway and the seed job simply send nothing. Do not add the OpenTelemetry Azure Monitor distro (`UseAzureMonitor`) to `api-mcp`. Combining it with the classic SDK suppresses request telemetry and duplicates dependencies.
+Server-side services read `APPLICATIONINSIGHTS_CONNECTION_STRING`. Missing configuration does not prove health. Do not initialize a second Azure Monitor distro alongside Application Insights 3.x; each service has one export owner. The hosted agent retains its built-in exporter and DAB its vendor-supported pipeline.
 
 ## Sampling and trace correlation
 
-**Sampling.** Adaptive sampling keeps telemetry volume down, but it never drops custom events or exceptions, so authorization decisions, identity evidence and business events are always complete.
-
-| Component | Setting | Never sampled |
-| --- | --- | --- |
-| Functions host | [`host.json`](../../api-functions/host.json) `samplingSettings` | Requests, events, exceptions |
-| Functions worker ([`Program.cs`](../../api-functions/Program.cs)) | SDK default sampling turned off, then adaptive sampling re-added at 20 items per second | Events, exceptions |
-| api-mcp ([`Program.cs`](../../api-mcp/AdventureWorks/Program.cs)) | Same as the Functions worker | Events, exceptions |
-
-Dependencies and traces (and api-mcp requests) can be sampled. When you count them, use `sum(itemCount)` rather than `count()`.
+**Sampling.** Trace sampling reduces volume but does not guarantee every failing root/parent is retained. Unsampled outcome metrics and sparse events also remain subject to exporter/ingestion failures and caps. Host/worker/provider settings are separate; inspect their current source and prove emitted payloads rather than assuming completeness. `count()` describes observed rows; `sum(itemCount)` estimates sampled request/event counts, not complete trace chains. Percentiles describe ingested observations.
 
 **Correlation.** Application Insights links telemetry through the W3C trace ID, which appears as `operation_Id`.
 
@@ -63,8 +161,8 @@ flowchart LR
 ```
 
 - **Functions.** In the isolated worker, the current trace is not always the host invocation's trace. [`InvocationTraceMiddleware`](../../api-functions/Functions/InvocationTraceMiddleware.cs) runs for every invocation. When the trace differs, it starts an `Invocation` activity parented to the host's `traceparent`, so custom events, SQL dependencies and outbound calls share the caller's `operation_Id`. AI routes also start named activities and request operations (listed under [Azure Functions](#azure-functions)).
-- **api-mcp.** Each tool call runs inside an `MCP_{tool}` request operation. Functions passes a W3C `traceparent` to the MCP tools that Foundry agents call.
-- **Browsers.** The admin and manufacturing apps send W3C correlation headers only to their own DAB, Functions and MCP hosts (`correlationHeaderDomains`). The storefront turns on CORS correlation for its API calls.
+- **api-mcp.** Tool activities report protocol/business outcomes separately from HTTP entry requests. Functions passes validated W3C context where the protocol supports it.
+- **Browsers.** All three first-party apps restrict W3C correlation to configured solution hosts and sanitize telemetry URLs/headers.
 - **MCP Inspector.** The gateway reuses the trace ID from an incoming `traceparent` header and otherwise generates one.
 - **Seed job.** All events from one run share a random operation ID.
 
@@ -87,7 +185,7 @@ Custom event properties carry no email addresses or names; users are identified 
 
 ### Browser telemetry in all three frontends
 
-The storefront, admin and manufacturing apps share the same baseline. Each sends a page view for the initial load (automatic route tracking only covers later in-app navigations), plus route changes, page visit time, AJAX dependencies and unhandled exceptions and promise rejections. Every item is tagged with the app's own `cloud_RoleName`. The admin and manufacturing apps send no custom events.
+All three apps emit initial/route page views, AJAX dependencies, bounded handled/global outcomes, realtime connection outcomes and available LCP/INP/CLS observations. Items use their app role. Availability and logical failures (including GraphQL errors on HTTP 200) are distinct from ordinary HTTP success.
 
 To confirm that each deployed site's telemetry reaches Application Insights, run [`tests/scripts/test-frontend-telemetry.mjs`](../../tests/scripts/test-frontend-telemetry.mjs). It loads each site anonymously in headless Chromium (Playwright from `app/node_modules`) and blocks every request except the page, its assets and the telemetry POST. It then checks that Application Insights accepted the batch and that every item carries only that site's role. It signs nobody in and makes no API calls.
 
@@ -109,7 +207,7 @@ node tests/scripts/test-frontend-telemetry.mjs --output .auth-results/frontend-t
 | AI agents | `OrderGeneration.Success`, `PromotionAgent.Success`, `ProductContentAgent.Success`, `CartRecoveryAgent.Complete`, `TranslationAgent.ProductTranslated`, `EmbeddingsGenerated` |
 | Business workflows | `SupplyChainOrder`, `BankTransaction`, `BankSeeded`, `OrderDelivery.BatchProcessed`, `AutoPromotion.Created`, `AutoPromotion.ExpiredOutOfStock` |
 
-AI calls are wrapped in request operations, so one operation ID links each call with its Foundry dependencies. The operations are:
+Internal AI calls use dependency/GenAI activities rather than adding another server-entry request. Operation names include:
 
 - `AgentChat`
 - `HelpMeChoose.GetQuestions`, `HelpMeChoose.GetRecommendations`
@@ -144,7 +242,7 @@ Help me choose, order generation and the manufacturing content and diagram agent
 | `MCP_ToolExecuted` | api-mcp | tool |
 | `McpToolAuthorization` | api-mcp | tool, subject, category, app, requiredScope, outcome, allowed (`true`/`false`), correlationId |
 | `Sql.SessionPrincipal` | api-mcp, api-functions, seed job | Which SQL principal served the connections (see below) |
-| `Seed.Completed` | seed job | Mode, Outcome (`succeeded`/`failed`), DurationSeconds, ScriptVersion |
+| `Seed.Started`, `Seed.Stage`, `Seed.Failed`, `Seed.Completed` | seed job | Stage, Mode, categorical Outcome, DurationSeconds, ScriptVersion |
 
 ### SQL session principal (`Sql.SessionPrincipal`)
 
@@ -167,11 +265,40 @@ A non-`match` probe result is also logged as a warning (`SQL session principal c
 
 ### Seed job runs (`Seed.Completed`)
 
-The seed job sends `Seed.Completed` from its final block when a run that reached the SQL connection step finishes, successfully or not. `Mode` is `full`, `guest-carts`, `realtime-notifications`, `manufacturing-overlays` or `manufacturing-overlays-verify`. `ScriptVersion` is the first 8 characters of the script's SHA-256 hash. Telemetry failures are ignored, so they never change the seed result. The seed job sends no SQL text, row data or tokens. See [Seed job](../services/seed-job.md#monitoring).
+The seed job emits sparse `Seed.Started`/deduplicated `Seed.Stage` events after telemetry initialization, followed by `Seed.Completed` on success or `Seed.Failed` on failure. Fixed stage/mode/outcome labels and the script hash share one operation ID; exception text, SQL, row data and tokens are excluded. Export has a two-second deadline and a fixed failure diagnostic once per run. Startup failures before initialization still require console/system logs and job execution status; telemetry absence is not success. See [Seed job](../services/seed-job.md#monitoring).
 
 ### MCP Inspector requests
 
-The Inspector gateway sends one request item per HTTP request. The item holds the method, a fixed route label, the status code, the duration and success (status below 500). Known routes such as `/auth/login`, `/oauth/callback` and `/proxy/mcp` keep their path. Other `/proxy/` paths are reported as `/proxy/*` and everything else as `/assets/*`. Query strings (which carry OAuth codes and state), headers, cookies and bodies are never sent. Items are buffered (up to 500, oldest dropped first) and sent every 5 seconds, and again when the container stops. See [MCP Inspector](../apps/mcp-inspector.md#telemetry).
+The Inspector gateway records fixed-route request spans and upstream HTTP dependencies. A validated incoming W3C parent links to a new gateway span and distinct forwarded upstream span. URLs are fixed/sanitized; queries, headers, cookies and bodies are excluded. HTTP status below 400 means transport success only, not logical MCP success. A 500-item buffer, one concurrent batch and two-second export deadline keep monitoring nonblocking. Fixed drop/rejection/network diagnostics are rate-limited to once per minute. See [MCP Inspector](../apps/mcp-inspector.md#telemetry).
+
+### Queue, Durable and SQL causal boundaries
+
+App-owned queues carry optional validated `Telemetry` context: W3C parent, job ID,
+enqueue time, declared visibility delay and capture reference. Attempt metrics
+(`background.attempt.outcomes`/`duration`) distinguish rejected, skipped, partial,
+retrying and completed work; recovered retries have a separate counter. They are not
+exactly-once logical job totals. Queue wait subtracts only known producer visibility
+delay, not unknown runtime retry backoff. A failed invocation does not confirm poison
+transfer; use on-demand approximate poison-queue metadata. Capture references alone
+never authorize content collection. The supported rich job flow is a manufacturing
+run: use the canonical persisted `awManufacturingAgentRuns.RunId` as the capture
+scope. The consumer verifies the persisted order/customer and nonterminal state,
+ignores queue capture references, and finds/claims a matching server-created grant.
+Retries share that stable root and its cumulative budget. Other queues remain
+metadata-only.
+
+Manufacturing capture emits bounded, unsampled `GenAI.Capture` custom events for the
+application request input and parsed hosted findings/actions output, after grant
+revalidation and sanitization. It does not duplicate content onto sampled background
+spans, expose internal hosted tools/hidden reasoning, or control provider-managed
+tracing. The hosted response contract does not supply official reasoning summaries.
+
+Durable instrumentation runs in activities and persisted status observers, not
+orchestrator replay; `push-v1` is retained. SQL notifications expose age/batch
+measurements and coalescing-call outcomes, not proof of browser receipt. DAB/SQL
+Change Tracking does not preserve the initiating browser trace: order/run IDs provide
+server-side causal joins instead. No private record IDs or values enter `orders` or
+`finance` signals. See [Functions background telemetry](../../api-functions/README.md#background-telemetry).
 
 ## How browser apps get the connection string
 
@@ -284,7 +411,7 @@ union requests, dependencies, customEvents, exceptions, traces
 ```kusto
 customEvents
 | where timestamp > ago(7d) and cloud_RoleName == "seed-job"
-| where name in ("Seed.Completed", "Sql.SessionPrincipal")
+| where name in ("Seed.Started", "Seed.Stage", "Seed.Failed", "Seed.Completed", "Sql.SessionPrincipal")
 | project timestamp, name, operation_Id, mode = tostring(customDimensions.Mode),
           outcome = tostring(customDimensions.Outcome), seconds = toint(customDimensions.DurationSeconds),
           scope = tostring(customDimensions.Scope), principalMatch = tostring(customDimensions.PrincipalMatch)

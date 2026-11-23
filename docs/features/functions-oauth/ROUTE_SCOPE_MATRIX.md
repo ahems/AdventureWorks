@@ -1,6 +1,6 @@
 ---
 title: Functions route-to-scope authorization matrix
-summary: Authoritative per-route OAuth tier, required scope, access mode and ownership key for all 205 HTTP-triggered Azure Functions in api-functions.
+summary: Authoritative per-route OAuth tier, required scope, access mode and ownership key for all 210 HTTP-triggered Azure Functions in api-functions.
 audience: [developer, security-reviewer, ai-agent]
 components: [api-functions, api-mcp]
 related:
@@ -17,7 +17,7 @@ related:
 > [`TOOL_SCOPE_MATRIX.md`](../mcp-oauth/TOOL_SCOPE_MATRIX.md). It reuses the same
 > business-domain scopes ([`OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs))
 > and the same authorization server in `api-mcp`. It classifies **every** one of the
-> **205** HTTP-triggered Functions discovered in `api-functions` — no route is left
+> **210** HTTP-triggered Functions discovered in `api-functions` — no route is left
 > unclassified. Non-HTTP triggers (queue / SQL / timer) are internal and not part of
 > this matrix.
 
@@ -42,8 +42,8 @@ implements this matrix, and `FUNCTIONS_OAUTH_MODE=enforced` is provisioned.
 | **P** | Anonymous | 20 |
 | **A** | Authenticated (handler-scoped) | 1 |
 | **C** | Consumer (ownership) | 20 |
-| **I** | Internal-only (40 of them also MCP-proxied) | 164 |
-| | **Total** | **205** |
+| **I** | Internal-only (40 of them also MCP-proxied) | 169 |
+| | **Total** | **210** |
 
 ### Function policies per required scope (all protected tiers)
 
@@ -59,6 +59,8 @@ implements this matrix, and `FUNCTIONS_OAUTH_MODE=enforced` is provisioned.
 | `orders.read` | 7 | yes |
 | `customers.read` | 5 | yes |
 | `realtime.connect` | 1 | **new — added by this work** |
+| `monitoring.read` | 3 | yes; initially executive-admin only |
+| `monitoring.write` | 2 | yes; initially executive-admin only |
 
 The `realtime.connect` scope is granted to signed-in roles, but is not sufficient
 by itself to obtain any business-data group. Each group also requires its mapped
@@ -89,6 +91,21 @@ MCP tools use native Managed Identity SQL reads, matching the other MCP data too
 These reads are no longer part of the Functions authorization surface.
 
 ## Matrix by functional area
+
+### Monitoring (executive-only; 5)
+
+| Method / route | Tier | Required scope | Access mode | Ownership key |
+| --- | --- | --- | --- | --- |
+| `GET /api/monitoring/summary?range=1h` | I | `monitoring.read` | Internal-only + executive-admin | — |
+| `GET /api/monitoring/traces/{traceId}` | I | `monitoring.read` | Internal-only + executive-admin | — |
+| `GET /api/monitoring/capture` | I | `monitoring.read` | Internal-only + executive-admin | — |
+| `POST /api/monitoring/capture` | I | `monitoring.write` | Internal-only + executive-admin | Server-validated session/job grant |
+| `DELETE /api/monitoring/capture/{id}` | I | `monitoring.write` | Internal-only + executive-admin | Server-created capture ID |
+
+GET routes do not start/extend/prune capture. Grant creation uses fixed 15-minute
+expiry/100 root admissions and UTF-8 rich-text budgets. Monitoring scopes are not
+in the api-mcp service-token grant. Azure query access uses managed identity,
+separate from the application token. See [monitoring](../../operations/monitoring.md).
 
 ### Platform & discovery (public) (6)
 

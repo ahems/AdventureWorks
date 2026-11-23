@@ -77,6 +77,7 @@ public class WorkOrderOperationProcessorFunction
         [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")]
         BinaryData queueMessage)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("work-order-operation", queueMessage.ToString());
         WorkOrderOperationMessage? msg;
         try
         {
@@ -84,12 +85,14 @@ public class WorkOrderOperationProcessorFunction
         }
         catch (Exception ex)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogError(ex, "Failed to deserialise WorkOrderOperationMessage — dropping message.");
             return; // Let runtime delete the message; avoids poison-queue loops on bad payloads
         }
 
         if (msg == null || msg.WorkOrderId <= 0)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("Received null or invalid WorkOrderOperationMessage — discarding.");
             return;
         }
@@ -98,6 +101,7 @@ public class WorkOrderOperationProcessorFunction
             await ProcessCompletionPhaseAsync(msg);
         else
             await ProcessStartPhaseAsync(msg);
+        attempt.Complete();
     }
 
     // ── Phase 1: Start ────────────────────────────────────────────────────────
@@ -118,6 +122,7 @@ public class WorkOrderOperationProcessorFunction
             {
                 // Not yet time — re-enqueue with remaining delay
                 var remaining = msg.ScheduledStartUtc - now;
+                BackgroundWorkTelemetry.Outcome("retrying");
                 await RequeueAsync(queueClient, msg, remaining);
                 return;
             }
@@ -155,6 +160,7 @@ public class WorkOrderOperationProcessorFunction
                     await _webPubSub.SendCoalescedAsync("manufacturing-ops", "shortage-updated", new { @event = "shortage-updated", productId = componentProductId, workOrderId = msg.WorkOrderId });
 
                     var retryMsg = msg with { MaterialRetryCount = msg.MaterialRetryCount + 1 };
+                    BackgroundWorkTelemetry.Outcome("retrying");
                     await RequeueAsync(queueClient, retryMsg, TimeSpan.FromSeconds(retryDelaySec));
                     return;
                 }
@@ -176,6 +182,7 @@ public class WorkOrderOperationProcessorFunction
 
         if (!claimed)
         {
+            BackgroundWorkTelemetry.Outcome("retrying");
             // ETag conflict — short backoff, try again
             _logger.LogDebug("ETag conflict claiming slot for Location={LocationId}, re-enqueueing with backoff.", msg.LocationId);
             await RequeueAsync(queueClient, msg, TimeSpan.FromSeconds(5));
@@ -194,6 +201,7 @@ public class WorkOrderOperationProcessorFunction
 
         if (startDelay > TimeSpan.Zero)
         {
+            BackgroundWorkTelemetry.Outcome("retrying");
             // Location busy — slot reserved for a future time; re-enqueue to fire at slot-start
             _logger.LogDebug(
                 "Location={LocationId} busy; slot reserved, starts in {Delay:F0}s for WO={WorkOrderId}.",
@@ -263,6 +271,7 @@ public class WorkOrderOperationProcessorFunction
         // Self-reschedule: if not yet due, put message back with remaining visibility
         if (msg.ScheduledCompletionUtc > DateTime.UtcNow)
         {
+            BackgroundWorkTelemetry.Outcome("retrying");
             var remaining = msg.ScheduledCompletionUtc - DateTime.UtcNow;
             _logger.LogDebug(
                 "[Complete] WO={WorkOrderId} Op={OpSeq} not yet due (in {Sec:F0}s) — rescheduling.",
@@ -290,6 +299,7 @@ public class WorkOrderOperationProcessorFunction
 
         if (!completed)
         {
+            BackgroundWorkTelemetry.Outcome("skipped");
             _logger.LogDebug(
                 "ActualEndDate already set for WO={WorkOrderId} Op={OpSeq} — idempotent skip.",
                 msg.WorkOrderId, msg.OperationSequence);
@@ -338,6 +348,7 @@ public class WorkOrderOperationProcessorFunction
 
         if (isScrapped)
         {
+            BackgroundWorkTelemetry.Outcome("partial");
             int reasonId = scrapConfig.ScrapReasonIds[
                 Random.Shared.Next(scrapConfig.ScrapReasonIds.Length)];
             string reasonName = await _sim.GetScrapReasonNameAsync(reasonId);
@@ -496,7 +507,7 @@ public class WorkOrderOperationProcessorFunction
             ? TimeSpan.FromDays(7)
             : visibility < TimeSpan.Zero ? TimeSpan.Zero : visibility;
 
-        await queueClient.SendMessageAsync(
+        await queueClient.SendObservedMessageAsync(
             JsonSerializer.Serialize(msg),
             visibilityTimeout: safeVisibility,
             timeToLive: null);

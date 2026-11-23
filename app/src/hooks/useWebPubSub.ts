@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { trackEvent } from "@/lib/appInsights";
 import {
   getEshopAccessToken,
   getEshopSessionGeneration,
@@ -18,6 +19,7 @@ export function subscribeWebPubSubStatus(listener: () => void) {
 }
 
 function publishStatus(status: WebPubSubStatus) {
+  if (connectionStatus !== status) trackEvent("browser.realtime-outcome", { outcome: status });
   connectionStatus = status;
   statusListeners.forEach(listener => listener());
 }
@@ -94,6 +96,8 @@ export function useWebPubSub(
         client.on("disconnected", () => setStatus("disconnected"));
         client.on("stopped", () => setStatus("disconnected"));
         client.on("rejoin-group-failed", () => {
+          if (cancelled) return;
+          trackEvent("browser.realtime-outcome", { outcome: "rejoin-failed" });
           console.warn("[WebPubSub] Failed to rejoin a subscribed group; live updates may be incomplete.");
           setStatus("failed");
         });

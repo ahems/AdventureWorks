@@ -72,7 +72,7 @@ public class OrderStatusFunctions
         var minMin = (double)cfg.ProcessingToApprovedMinMinutes;
         var maxMin = (double)cfg.ProcessingToApprovedMaxMinutes;
         var visibilityMinutes = minMin + (maxMin - minMin) * Random.Shared.NextDouble();
-        await queueClient.SendMessageAsync(
+        await queueClient.SendObservedMessageAsync(
             message,
             visibilityTimeout: TimeSpan.FromMinutes(visibilityMinutes),
             timeToLive: null);
@@ -113,7 +113,7 @@ public class OrderStatusFunctions
         // No visibility timeout: the queue trigger processes this immediately
         // so the DB is updated and shipped email + bank credit fire promptly.
         var message = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 5 });
-        await queueClient.SendMessageAsync(message);
+        await queueClient.SendObservedMessageAsync(message);
 
         _logger.LogInformation("ShipOrder: enqueued Status=5 for SalesOrderID={SalesOrderId}", salesOrderId);
 

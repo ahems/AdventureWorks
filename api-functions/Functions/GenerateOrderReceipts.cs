@@ -114,7 +114,7 @@ public class GenerateOrderReceipts
                     SalesOrderNumber = salesOrderNumber.Trim()
                 });
 
-                await queueClient.SendMessageAsync(message);
+                await queueClient.SendObservedMessageAsync(message);
                 enqueued++;
                 enqueuedOrders.Add(salesOrderNumber.Trim());
 
@@ -150,6 +150,7 @@ public class GenerateOrderReceipts
         [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("receipt", queueMessage.ToString());
         try
         {
             // Parse queue message
@@ -158,6 +159,7 @@ public class GenerateOrderReceipts
 
             if (string.IsNullOrEmpty(salesOrderNumber))
             {
+                attempt.SetOutcome("rejected");
                 _logger.LogError("Invalid queue message: SalesOrderNumber is null or empty");
                 return;
             }
@@ -169,6 +171,7 @@ public class GenerateOrderReceipts
 
             if (receiptData == null)
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogWarning("Order not found: {orderNumber}", salesOrderNumber);
                 return;
             }
@@ -227,12 +230,13 @@ public class GenerateOrderReceipts
                     SalesOrderId = salesOrderId
                 });
 
-                await emailQueueClient.SendMessageAsync(emailMessage);
+                await emailQueueClient.SendObservedMessageAsync(emailMessage);
                 _logger.LogInformation(
                     "Enqueued email delivery for {orderNumber}",
                     salesOrderNumber
                 );
             }
+            attempt.Complete();
         }
         catch (Exception ex)
         {

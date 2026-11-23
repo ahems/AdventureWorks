@@ -62,6 +62,8 @@ The `preup` hook ([`preup.sh`](../../scripts/hooks/preup.sh)) writes these value
 | `imageModelName`, `imageDeploymentVersion`, `imageSkuName`, `imageModelFormat`, `availableImageDeploymentCapacity` | `imageDeploymentModelName`, `imageDeploymentVersion`, `imageDeploymentSkuName`, `imageModelFormat`, `availableImageDeploymentCapacity` | — |
 | `skipLocalDevRoleAssignments` | `SKIP_LOCAL_DEV_ROLE_ASSIGNMENTS` | `false` |
 | `deployerPrincipalType` | `DEPLOYER_PRINCIPAL_TYPE` | `User` |
+| `enableMonitoringGrafana` | `ENABLE_MONITORING_GRAFANA` | `false`; optional native portal dashboard/definition, not paid Managed Grafana |
+| `monitoringActionGroupId` | `MONITORING_ACTION_GROUP_ID` | Empty; optional existing user-selected action group |
 | `restoreOpenAi`, `useFreeLimit` | fixed | `false` |
 
 `location` is not mapped; Bicep uses the resource group's location, which `preup.sh` creates in `AZURE_LOCATION`.
@@ -82,6 +84,8 @@ azd saves every `output` of `infra/main.bicep` into the environment.
 | `API_MCP_URL`, `MCP_SERVICE_URL` | api-mcp MCP endpoint, including `/mcp`. Strip it to get the OAuth issuer |
 | `MCP_INSPECTOR_URL`, `MCP_INSPECTOR_APP_URL` | MCP Inspector container app URL |
 | `WEB_PUBSUB_HOST_NAME` | Web PubSub host name |
+| `MONITORING_WORKBOOK_URL` | Shared Azure Monitor workbook; viewer needs separate Entra/RBAC access |
+| `MONITORING_GRAFANA_URL` | Optional Azure Monitor Grafana dashboard; empty by default |
 
 ### Resources and identities
 
@@ -98,6 +102,19 @@ azd saves every `output` of `infra/main.bicep` into the environment.
 | `AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN` | Static Web App deployment token (secret) |
 | `COMMUNICATION_SERVICE_NAME`, `COMMUNICATION_SERVICE_ENDPOINT`, `EMAIL_SENDER_DOMAIN` | Communication Services and email sender domain |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING`, `APPINSIGHTS_CONNECTIONSTRING`, `APPINSIGHTS_INSTRUMENTATIONKEY` | Application Insights |
+| `APPLICATIONINSIGHTS_RESOURCE_ID` | Shared workspace-based component ARM resource ID |
+| `MONITORING_WORKSPACE_ID` | Workspace customerId GUID for fixed Log Analytics queries (not its ARM ID) |
+| `MONITORING_WORKSPACE_RESOURCE_ID` | Shared workspace ARM resource ID for RBAC/workbooks |
+
+### Monitoring Functions runtime settings
+
+`infra/modules/flex-api-functions.bicep` injects `MONITORING_WORKSPACE_ID`,
+`MONITORING_METRIC_RESOURCES` (server-owned allowlisted resource/metric/aggregation/unit/limit JSON),
+`MONITORING_LINK_WORKBOOK`, `MONITORING_LINK_GRAFANA` and
+`MONITORING_LINK_APPLICATIONINSIGHTS`. The query service uses the existing selected
+managed identity, not application-user tokens. `STORAGE_ACCOUNT_NAME` selects the
+provisioned `awMonitoringCapture` table. There is no global sensitive-content
+environment switch or runtime table creation. See [monitoring](../operations/monitoring.md).
 
 ### AI
 

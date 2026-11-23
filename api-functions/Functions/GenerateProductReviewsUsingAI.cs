@@ -91,7 +91,7 @@ public class GenerateProductReviewsUsingAI
                     JobType = "review",
                     ProductIds = batch
                 });
-                await aiJobQueueClient.SendMessageAsync(message);
+                await aiJobQueueClient.SendObservedMessageAsync(message);
                 enqueued++;
             }
 

@@ -10,6 +10,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using api_functions.Models;
 using api_functions.Services;
+using api_functions.DTOs;
+using Microsoft.ApplicationInsights;
 
 namespace api_functions.Functions;
 
@@ -55,6 +57,8 @@ public class ManufacturingAgentQueueTrigger
     private readonly string                                  _projectEndpoint;
     private readonly string                                  _functionsBaseUrl;
     private readonly string                                  _queueServiceUri;
+    private readonly MonitoringCaptureService?               _capture;
+    private readonly TelemetryClient?                        _telemetry;
 
     // Token scope for Azure AI Foundry hosted agents
     private const string FoundryTokenScope = "https://ai.azure.com/.default";
@@ -66,7 +70,9 @@ public class ManufacturingAgentQueueTrigger
         IHttpClientFactory httpClientFactory,
         DefaultAzureCredential credential,
         WebPubSubService webPubSub,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        MonitoringCaptureService? capture = null,
+        TelemetryClient? telemetry = null)
     {
         _logger            = logger;
         _configService     = configService;
@@ -74,6 +80,8 @@ public class ManufacturingAgentQueueTrigger
         _httpClientFactory = httpClientFactory;
         _credential        = credential;
         _webPubSub         = webPubSub;
+        _capture           = capture;
+        _telemetry         = telemetry;
 
         _agentEndpoint  = configuration["MANUFACTURING_AGENT_ENDPOINT"] ?? string.Empty;
         _projectEndpoint = configuration["AI_FOUNDRY_PROJECT_ENDPOINT"] ?? string.Empty;
@@ -89,6 +97,7 @@ public class ManufacturingAgentQueueTrigger
         [QueueTrigger(QueueName, Connection = "AzureWebJobsStorage")]
         BinaryData queueMessage)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("manufacturing-agent", queueMessage.ToString());
         ManufacturingAgentQueueMessage? msg;
         try
         {
@@ -97,18 +106,24 @@ public class ManufacturingAgentQueueTrigger
         }
         catch (Exception ex)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogError(ex, "[AgentQueue] Failed to deserialise message — dropping.");
             return;
         }
 
         if (msg == null || string.IsNullOrEmpty(msg.RunId))
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("[AgentQueue] Null or invalid message — discarding.");
             return;
         }
+        attempt.Tag("run.id", msg.RunId);
+        attempt.Tag("order.id", msg.SalesOrderId);
+        if (Guid.TryParse(msg.RunId, out _)) attempt.Tag("job.id", msg.RunId);
 
         if (string.IsNullOrEmpty(_agentEndpoint))
         {
+            attempt.SetOutcome("skipped");
             _logger.LogWarning(
                 "[AgentQueue] MANUFACTURING_AGENT_ENDPOINT is not configured. " +
                 "Skipping invocation for RunId={RunId}.", msg.RunId);
@@ -122,6 +137,7 @@ public class ManufacturingAgentQueueTrigger
         // complete the run record (no tokens consumed) and discard the message.
         if (mode == ManufacturingAgentMode.Off)
         {
+            attempt.SetOutcome("skipped");
             _logger.LogInformation(
                 "[AgentQueue] Agent is Off — discarding RunId={RunId} without invoking hosted agent.",
                 msg.RunId);
@@ -135,6 +151,11 @@ public class ManufacturingAgentQueueTrigger
         var stepCallback = string.IsNullOrEmpty(_functionsBaseUrl)
             ? null
             : $"{_functionsBaseUrl}/api/manufacturing/agent-runs/{msg.RunId}/step";
+
+        var captureLease = await ClaimManufacturingCaptureAsync(_telemetry is null ? null : _capture, msg,
+            (runId, cancellationToken) => _runService.GetRunAsync(runId, cancellationToken));
+        attempt.Tag("aw.capture.status", captureLease is null ? "off" : "admitted");
+        if (captureLease is not null) attempt.Tag("job.id", captureLease.ScopeId);
 
         await _runService.StartRunAsync(msg.RunId);
 
@@ -151,7 +172,7 @@ public class ManufacturingAgentQueueTrigger
 
         try
         {
-            var result = await InvokeHostedAgentAsync(msg, mode, stepCallback);
+            var result = await InvokeHostedAgentAsync(msg, mode, stepCallback, captureLease);
 
             // In ProposePending mode: the agent returns recommendedActions (structured
             // list of what it thinks should be done). The trigger creates the actual
@@ -172,11 +193,7 @@ public class ManufacturingAgentQueueTrigger
                 result.ActionsExecuted);
 
             _logger.LogInformation(
-                "[AgentQueue] RunId={RunId} completed. Findings: {Summary}",
-                msg.RunId,
-                result.FindingsSummary?.Length > 120
-                    ? result.FindingsSummary[..120] + "…"
-                    : result.FindingsSummary ?? "(none)");
+                "[AgentQueue] RunId={RunId} completed.", msg.RunId);
 
             await _webPubSub.SendToGroupAsync("manufacturing-agent", new
             {
@@ -185,6 +202,7 @@ public class ManufacturingAgentQueueTrigger
                 salesOrderId = msg.SalesOrderId,
                 status = "completed"
             });
+            attempt.Complete();
         }
         catch (ManufacturingAgentThrottledException ex)
         {
@@ -207,7 +225,8 @@ public class ManufacturingAgentQueueTrigger
     private async Task<AgentInvocationResult> InvokeHostedAgentAsync(
         ManufacturingAgentQueueMessage msg,
         ManufacturingAgentMode mode,
-        string? stepCallbackUrl)
+        string? stepCallbackUrl,
+        CaptureLease? captureLease)
     {
         // Format the user message. The agent's instructions explain how to interpret
         // these fields and which tools to call based on Mode.
@@ -229,8 +248,62 @@ public class ManufacturingAgentQueueTrigger
         };
 
         var json = JsonSerializer.Serialize(requestBody, JsonOpts);
-        return await SendHostedResponseAsync(_httpClientFactory, _credential, _projectEndpoint,
+        await TryEmitCaptureAsync(captureLease, new Dictionary<string, string?> { ["input"] = userMessage });
+        var result = await SendHostedResponseAsync(_httpClientFactory, _credential, _projectEndpoint,
             _agentEndpoint, json, CancellationToken.None);
+        await TryEmitCaptureAsync(captureLease, new Dictionary<string, string?>
+        {
+            ["output"] = JsonSerializer.Serialize(new
+            {
+                result.FindingsSummary, result.ToolsUsed, result.ProposalIds,
+                result.ActionsExecuted, result.RecommendedActions
+            }, JsonOpts)
+        });
+        return result;
+    }
+
+    internal static async Task<CaptureLease?> ClaimManufacturingCaptureAsync(
+        MonitoringCaptureService? capture, ManufacturingAgentQueueMessage message,
+        Func<string, CancellationToken, Task<ManufacturingAgentRunEntity?>> readRun,
+        CancellationToken cancellationToken = default)
+    {
+        if (capture is null || !Guid.TryParse(message.RunId, out _)) return null;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            var run = await readRun(message.RunId, deadline.Token);
+            if (run is null || !string.Equals(run.RunId, message.RunId, StringComparison.Ordinal)
+                || run.SalesOrderId != message.SalesOrderId || run.CustomerId != message.CustomerId
+                || run.CompletedAt is not null || run.Status is not ("pending" or "running" or "retrying"))
+                return null;
+
+            // The queue's capture reference is never consulted. Scope comes from persisted server state.
+            var grant = await capture.FindActiveAsync("job", run.RunId, deadline.Token);
+            return grant is null ? null : await capture.TryAcquireRootAsync(
+                grant.Id, "job", run.RunId, run.RunId, deadline.Token);
+        }
+        catch (Exception)
+        {
+            // Capture/read failures must not alter the existing job or its retry side effects.
+            return null;
+        }
+    }
+
+    private async Task TryEmitCaptureAsync(CaptureLease? lease, IReadOnlyDictionary<string, string?> fields)
+    {
+        if (_capture is null || _telemetry is null || lease is null) return;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            await FoundryAgentClient.EmitCapturedFieldsAsync(_capture, _telemetry, lease, fields,
+                spanId: System.Diagnostics.Activity.Current?.SpanId.ToHexString(),
+                jobId: lease.ScopeId, reasoningSummaryStatus: "unsupported", cancellationToken: deadline.Token);
+        }
+        catch (Exception)
+        {
+            _logger.LogWarning("[AgentQueue] Optional job capture emission unavailable.");
+        }
     }
 
     internal static async Task<AgentInvocationResult> SendHostedResponseAsync(
@@ -507,14 +580,15 @@ public class ManufacturingAgentQueueTrigger
                 }
                 else
                 {
-                    var err = await response.Content.ReadAsStringAsync();
+                    BackgroundWorkTelemetry.Outcome("partial");
                     _logger.LogWarning(
-                        "[AgentQueue] Proposal creation failed for product {ProductId}: {Status} {Error}",
-                        rec.ProductId, (int)response.StatusCode, err[..Math.Min(200, err.Length)]);
+                        "[AgentQueue] Proposal creation failed for product {ProductId}: {Status}",
+                        rec.ProductId, (int)response.StatusCode);
                 }
             }
             catch (Exception ex)
             {
+                BackgroundWorkTelemetry.Outcome("partial");
                 _logger.LogError(ex, "[AgentQueue] Proposal creation threw for product {ProductId}", rec.ProductId);
             }
         }
@@ -531,12 +605,13 @@ public class ManufacturingAgentQueueTrigger
 
         if (retryCount > MaxRetries)
         {
+            BackgroundWorkTelemetry.Outcome("failed");
             _logger.LogError(
                 "[AgentQueue] RunId={RunId} exceeded {Max} retries — marking as failed.",
                 msg.RunId, MaxRetries);
             await _runService.FailRunAsync(msg.RunId,
                 $"Max retries ({MaxRetries}) exceeded. Last error: {errorMessage}");
-            // Do NOT re-enqueue; let the runtime route to poison queue via maxDequeueCount
+            // Runtime retries still apply; poison transfer is not confirmed here.
             throw new InvalidOperationException($"Max retries exceeded for RunId={msg.RunId}");
         }
 
@@ -558,9 +633,10 @@ public class ManufacturingAgentQueueTrigger
         var queueSvcClient = new QueueServiceClient(new Uri(_queueServiceUri), new DefaultAzureCredential(),
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         var queueClient    = queueSvcClient.GetQueueClient(QueueName);
-        await queueClient.SendMessageAsync(
+        await queueClient.SendObservedMessageAsync(
             BinaryData.FromString(newMsgJson),
             visibilityTimeout: backoffDelay);
+        BackgroundWorkTelemetry.Outcome("retrying");
 
         // Return normally so the current message is deleted by the runtime (not re-queued by Azure)
     }

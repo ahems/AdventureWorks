@@ -49,6 +49,9 @@ function Write-Log {
 
 # Global error handler
 trap {
+    if (Get-Command Send-SeedLifecycleEvent -ErrorAction SilentlyContinue) {
+        $null = Send-SeedLifecycleEvent -Phase failed -Stage startup -Mode $seedMode -ScriptVersion $ScriptVersion
+    }
     Write-Log "FATAL ERROR TRAPPED: $($_.Exception.Message)"
     Write-Log "Error Type: $($_.Exception.GetType().FullName)"
     Write-Log "Stack Trace: $($_.ScriptStackTrace)"
@@ -70,6 +73,10 @@ try {
 # Capture start time for duration tracking
 $scriptStartTime = Get-Date
 $script:seedSuccess = $false  # Set to $true only on successful completion
+if ($seedTelemetryEnabled) {
+    $null = Send-SeedLifecycleEvent -Phase started -Mode $seedMode -ScriptVersion $ScriptVersion
+    $null = Send-SeedLifecycleEvent -Phase stage -Stage modules -Mode $seedMode -ScriptVersion $ScriptVersion
+}
 Write-Log "=========================================="
 Write-Log "DATABASE SEEDING SCRIPT STARTED"
 Write-Log "Seed script version: $ScriptVersion"
@@ -87,6 +94,9 @@ try {
     Import-Module Az.Resources -ErrorAction Stop
     Write-Log "  ✓ Az.Resources imported"
 } catch {
+    if ($seedTelemetryEnabled) {
+        $null = Send-SeedLifecycleEvent -Phase failed -Stage modules -Mode $seedMode -ScriptVersion $ScriptVersion
+    }
     Write-Log "FATAL: Failed to import required modules: $($_.Exception.Message)"
     Write-Log "Stack trace: $($_.ScriptStackTrace)"
     exit 1
@@ -101,6 +111,9 @@ $tenantId = $env:TENANT_ID
 $azureClientId = $env:AZURE_CLIENT_ID
 
 # Validate required environment variables
+if ($seedTelemetryEnabled) {
+    $null = Send-SeedLifecycleEvent -Phase stage -Stage configuration -Mode $seedMode -ScriptVersion $ScriptVersion
+}
 if ([string]::IsNullOrWhiteSpace($resourceGroupName)) {
     Write-Error "AZURE_RESOURCE_GROUP environment variable is not set"
     exit 1
@@ -489,6 +502,10 @@ catch {
 $serverFqdn = "$sqlServerName.database.windows.net"
 
 Write-Log "`nConnecting to SQL Database..."
+if ($seedTelemetryEnabled) {
+    $null = Send-SeedLifecycleEvent -Phase stage -Stage sql -Mode $seedMode -ScriptVersion $ScriptVersion `
+        -DurationSeconds ((Get-Date) - $scriptStartTime).TotalSeconds
+}
 Write-Log "  Server: $serverFqdn"
 Write-Log "  Database: $sqlDatabaseName"
 
@@ -508,6 +525,10 @@ try {
         $null = Send-SeedSqlPrincipalEvent -Connection $conn -Scope "seed:$seedMode" -ExpectedClientId $env:AZURE_CLIENT_ID
     }
     $cmd = $conn.CreateCommand()
+    if ($seedTelemetryEnabled) {
+        $null = Send-SeedLifecycleEvent -Phase stage -Stage data -Mode $seedMode -ScriptVersion $ScriptVersion `
+            -DurationSeconds ((Get-Date) - $scriptStartTime).TotalSeconds
+    }
 
     if ($GuestCartsOnly) {
         Initialize-GuestCartSchema -Connection $conn
@@ -2710,8 +2731,7 @@ catch {
     Write-Log "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
     Write-Log "=========================================="
     if ($seedTelemetryEnabled) {
-        $null = Send-SeedTelemetryEvent 'Seed.Completed' ([ordered]@{
-            Mode = $seedMode; Outcome = $(if ($script:seedSuccess) { 'succeeded' } else { 'failed' })
-            DurationSeconds = [string][math]::Floor($scriptDuration.TotalSeconds); ScriptVersion = $ScriptVersion })
+        $null = Send-SeedLifecycleEvent -Phase $(if ($script:seedSuccess) { 'completed' } else { 'failed' }) `
+            -Stage finalize -Mode $seedMode -ScriptVersion $ScriptVersion -DurationSeconds $scriptDuration.TotalSeconds
     }
 }

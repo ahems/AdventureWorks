@@ -1,0 +1,134 @@
+{
+  "title": "AdventureWorks application and agent observability",
+  "uid": "adventureworks-monitoring",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "utc",
+  "tags": ["AdventureWorks", "demo"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Signal and cost limitations",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 4},
+      "options": {
+        "mode": "markdown",
+        "content": "Demo/POC. No data is not healthy. Traces are sampled; ItemCount estimates are not complete traces. Ingestion is delayed. 30-day retention / 1 GB daily emergency cap (overshoot billed). Stop cannot remove ingested content or control provider-managed Foundry tracing. Daily message balance/token quota/invoice cost are unavailable. Native resource metrics are in the admin snapshot/workbook resource links. No dedicated Grafana instance or Prometheus workspace."
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Service request samples and latency",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 9},
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${DS_AZURE_MONITOR}"},
+      "targets": [{
+        "refId": "A", "queryType": "Azure Log Analytics",
+        "azureLogAnalytics": {
+          "resources": ["__WORKSPACE__"],
+          "query": "AppRequests | where $__timeFilter(TimeGenerated) and isnotempty(Url) and isempty(tostring(Properties['messaging.operation.type'])) | summarize observed=count(),estimated=sum(ItemCount),failed=countif(Success == false),p95Ms=percentile(DurationMs,95),lastSeen=max(TimeGenerated) by AppRoleName | take 30",
+          "resultFormat": "table"
+        }
+      }]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Agent/model/tool outcomes",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 9},
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${DS_AZURE_MONITOR}"},
+      "targets": [{
+        "refId": "A", "queryType": "Azure Log Analytics",
+        "azureLogAnalytics": {
+          "resources": ["__WORKSPACE__"],
+          "query": "AppDependencies | where $__timeFilter(TimeGenerated) and tostring(Properties['gen_ai.operation.name']) != '' | summarize observedSpans=count(),failed=countif(Success == false),p95Ms=percentile(DurationMs,95) by AppRoleName,operation=tostring(Properties['gen_ai.operation.name']),model=tostring(Properties['gen_ai.request.model']) | take 50",
+          "resultFormat": "table"
+        }
+      }]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Background outcomes",
+      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 9},
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${DS_AZURE_MONITOR}"},
+      "targets": [{
+        "refId": "A", "queryType": "Azure Log Analytics",
+        "azureLogAnalytics": {
+          "resources": ["__WORKSPACE__"],
+          "query": "union (AppEvents | where Name startswith 'Workflow.' or Name startswith 'BackgroundWork.'),(AppRequests | where tostring(Properties['messaging.operation.type']) == 'process'),(AppDependencies | where tostring(Properties['messaging.operation.type']) == 'process') | where $__timeFilter(TimeGenerated) | summarize observed=count(),lastSeen=max(TimeGenerated) by AppRoleName,Name,outcome=tostring(Properties['outcome']) | take 50",
+          "resultFormat": "table"
+        }
+      }]
+    },
+    {
+          "id": 5,
+          "type": "table",
+          "title": "Browser Web Vitals and logical outcomes",
+          "gridPos": {"x": 0, "y": 22, "w": 12, "h": 9},
+          "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${DS_AZURE_MONITOR}"},
+          "targets": [{
+            "refId": "A", "queryType": "Azure Log Analytics",
+            "azureLogAnalytics": {
+              "resources": ["__WORKSPACE__"],
+              "query": "AppEvents | where $__timeFilter(TimeGenerated) and Name startswith 'browser.' | summarize observed=count(),p75=percentile(todouble(Properties['value']),75),lastSeen=max(TimeGenerated) by AppRoleName,Name,metric=tostring(Properties['metric']),availability=tostring(Properties['availability']),outcome=tostring(Properties['outcome']) | take 50",
+              "resultFormat": "table"
+            }
+          }]
+        },
+        {
+          "id": 6,
+          "type": "table",
+          "title": "Ingestion volume and last seen (not invoice totals)",
+          "gridPos": {"x": 12, "y": 22, "w": 12, "h": 9},
+          "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${DS_AZURE_MONITOR}"},
+          "targets": [{
+            "refId": "A", "queryType": "Azure Log Analytics",
+            "azureLogAnalytics": {
+              "resources": ["__WORKSPACE__"],
+              "query": "union withsource=tableName AppRequests,AppDependencies,AppEvents,AppTraces,AppExceptions,AppMetrics,AppPageViews | where $__timeFilter(TimeGenerated) | summarize billableBytes=sumif(_BilledSize,_IsBillable == 'true'),lastSeen=max(TimeGenerated),observed=count() by tableName,AppRoleName | take 50",
+              "resultFormat": "table"
+            }
+          }]
+        },
+        {
+          "id": 7,
+          "type": "table",
+          "title": "Safe recent transaction IDs and parent links",
+          "gridPos": {"x": 0, "y": 31, "w": 12, "h": 9},
+          "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${DS_AZURE_MONITOR}"},
+          "targets": [{
+            "refId": "A", "queryType": "Azure Log Analytics",
+            "azureLogAnalytics": {
+              "resources": ["__WORKSPACE__"],
+              "query": "AppDependencies | where $__timeFilter(TimeGenerated) | project TimeGenerated,AppRoleName,OperationId,Id,ParentId,Type,DurationMs,Success | top 100 by TimeGenerated desc",
+              "resultFormat": "table"
+            }
+          }]
+        },
+        {
+          "id": 8,
+          "type": "table",
+          "title": "Dependency edges and failed samples",
+          "gridPos": {"x": 12, "y": 31, "w": 12, "h": 9},
+          "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${DS_AZURE_MONITOR}"},
+          "targets": [{
+            "refId": "A", "queryType": "Azure Log Analytics",
+            "azureLogAnalytics": {
+              "resources": ["__WORKSPACE__"],
+              "query": "AppDependencies | where $__timeFilter(TimeGenerated) | summarize observed=count(),failed=countif(Success == false),p95Ms=percentile(DurationMs,95) by AppRoleName,Type | take 50",
+              "resultFormat": "table"
+            }
+          }]
+        }
+  ],
+  "templating": {
+    "list": [{
+      "name": "DS_AZURE_MONITOR", "label": "Azure Monitor datasource",
+      "type": "datasource", "query": "grafana-azure-monitor-datasource",
+      "current": {}, "hide": 0
+    }]
+  }
+}

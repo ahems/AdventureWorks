@@ -45,6 +45,22 @@ The storefront has no `npm test` script; run the `node --test` files directly. T
 cross-frontend live-updates regression is
 `node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs` (from the repo root).
 
+## Browser observability
+
+The existing Application Insights browser SDK sends W3C correlation only to configured
+solution API hosts. Request/response header capture is disabled; the outbound
+`telemetrySafety` gate removes URL queries/fragments, normalizes identifier-bearing
+routes and redacts nested/serialized credential and error content.
+React boundaries and query/mutation cache callbacks report failures without changing
+toasts, retries or error screens. HTTP-200 GraphQL errors are distinct from transport
+success. Bounded response inspection is supplemented by GraphQL-client handled errors.
+LCP, INP and CLS are reported once per document when measurable; missing measurements
+are explicitly unavailable. Realtime telemetry records connection outcomes, not messages
+or signed negotiate URLs. `VITE_BUILD_VERSION` identifies a supplied build, otherwise
+version is explicitly unknown. Storefront `/health` remains a separate diagnostics view.
+
+Run `node --test scripts/telemetry-privacy.test.mjs` for all three apps' redaction tests.
+
 ## Configuration
 
 Runtime values come from `window.APP_CONFIG` in `/config.js` (generated during

@@ -42,6 +42,7 @@ interface AgentChatResponse {
   suggestedQuestions: string[];
   toolsUsed: string[];
   threadId?: string;
+  monitoringSessionId?: string;
   safety?: {
     source: string;
     policy?: string;
@@ -101,6 +102,7 @@ export const chatWithAgent = async (
     }
 
     const data = await response.json();
+    const monitoringSessionId = data.MonitoringSessionId || data.monitoringSessionId;
 
     // Map API response (capital case) to interface (lowercase)
     const result: AgentChatResponse = {
@@ -109,6 +111,7 @@ export const chatWithAgent = async (
         data.SuggestedQuestions || data.suggestedQuestions || [],
       toolsUsed: data.ToolsUsed || data.toolsUsed || [],
       threadId: data.ThreadId || data.threadId,
+      monitoringSessionId: typeof monitoringSessionId === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(monitoringSessionId) ? monitoringSessionId : undefined,
       safety: data.safety || data.Safety,
     };
     if (!result.response.trim()) {

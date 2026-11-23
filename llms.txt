@@ -110,6 +110,7 @@ Start with README.md and QUICKSTART.md. Use docs/glossary.md for terminology. Ag
 ## Testing
 
 - [Testing strategy](docs/testing/testing-strategy.md): Test suites, coverage and how to run them.
+- [Observability validation](docs/testing/OBSERVABILITY_VALIDATION.md): Telemetry proof layers, bounded demo scenarios, rich-capture safety and deployed evidence.
 - [Authenticated deployment scripts](docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md): Call protected APIs using azure-auth.py tokens.
 - [AI and MCP testing guide](docs/testing/AI_AND_MCP_TESTING_GUIDE.md): Testing Foundry agents and MCP tools.
 - [AI chat MCP testing](docs/testing/AI_CHAT_MCP_TESTING.md): Testing chat agents' delegated MCP calls.

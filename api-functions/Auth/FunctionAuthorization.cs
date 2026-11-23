@@ -56,6 +56,8 @@ public static class FunctionScopes
     public const string AdminRead = "admin.read";
     public const string AdminWrite = "admin.write";
     public const string RealtimeConnect = "realtime.connect";
+    public const string MonitoringRead = "monitoring.read";
+    public const string MonitoringWrite = "monitoring.write";
 }
 
 /// <summary>

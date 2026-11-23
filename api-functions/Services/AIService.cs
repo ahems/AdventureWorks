@@ -41,7 +41,7 @@ public class AIService
 
     public async Task<List<ProductDescriptionEmbedding>> GenerateEmbeddingsAsync(List<ProductDescriptionData> descriptions)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("GenerateEmbeddings");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("GenerateEmbeddings");
         operation.Telemetry.Properties["DescriptionCount"] = descriptions.Count.ToString();
 
         try
@@ -78,7 +78,9 @@ public class AIService
 
                         try
                         {
+                            using var model = GenAiTelemetry.Start("embeddings", _embeddingDeploymentName);
                             var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(enrichedText);
+                            model.RecordResponse(embeddingResponse.GetRawResponse().Content.ToString(), embeddingResponse.GetRawResponse().Status);
                             embeddingVector = embeddingResponse.Value.ToFloats();
                             embeddingOperation.Telemetry.Success = true;
                         }
@@ -130,20 +132,16 @@ public class AIService
             operation.Telemetry.Success = true;
             return embeddings;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string>
-            {
-                ["Operation"] = "GenerateEmbeddings",
-                ["DescriptionCount"] = descriptions.Count.ToString()
-            });
             throw;
         }
     }
 
     public async Task<List<ProductNameEmbedding>> GenerateProductNameEmbeddingsAsync(List<ProductNameEmbeddingData> names)
     {
+        using var batch = GenAiTelemetry.Start("batch_embeddings", _embeddingDeploymentName);
         var credential = new DefaultAzureCredential();
         var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
         var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
@@ -152,9 +150,11 @@ public class AIService
 
         foreach (var item in names)
         {
+            using var model = GenAiTelemetry.Start("embeddings", _embeddingDeploymentName);
             try
             {
                 var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(item.Name);
+                model.RecordResponse(embeddingResponse.GetRawResponse().Content.ToString(), embeddingResponse.GetRawResponse().Status);
                 embeddings.Add(new ProductNameEmbedding
                 {
                     ProductID = item.ProductID,
@@ -168,6 +168,7 @@ public class AIService
             }
         }
 
+        batch.Complete(embeddings.Count == names.Count ? "success" : "partial");
         return embeddings;
     }
 
@@ -244,8 +245,10 @@ public class AIService
 
             try
             {
+                using var model = GenAiTelemetry.Start("embeddings", _embeddingDeploymentName);
                 // Generate embedding for the review comments
                 var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(review.Comments);
+                model.RecordResponse(embeddingResponse.GetRawResponse().Content.ToString(), embeddingResponse.GetRawResponse().Status);
                 var embeddingVector = embeddingResponse.Value.ToFloats();
 
                 // Store as float array for VECTOR column
@@ -280,6 +283,7 @@ public class AIService
 
     public async Task<float[]> GenerateQueryEmbeddingAsync(string queryText)
     {
+        using var model = GenAiTelemetry.Start("embeddings", _embeddingDeploymentName);
         var credential = new DefaultAzureCredential();
         var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
         var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
@@ -291,6 +295,7 @@ public class AIService
 
         // Generate embedding for the query text
         var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(queryText);
+        model.RecordResponse(embeddingResponse.GetRawResponse().Content.ToString(), embeddingResponse.GetRawResponse().Status);
         var embeddingVector = embeddingResponse.Value.ToFloats();
 
         // Return float array for VECTOR comparison
@@ -440,14 +445,15 @@ public class AIService
                 while (true)
                 {
                     attempt++;
+                    using var model = GenAiTelemetry.Start("image_generation", _imageDeploymentName);
+                    model.Tag("aw.retry.attempt", attempt - 1);
                     try
                     {
                         _logger.LogInformation(
-                            "Generating image {index} for ProductID {productId} (attempt {attempt}): {prompt}",
+                            "Generating image {index} for ProductID {productId} (attempt {attempt})",
                             i + 1,
                             product.ProductID,
-                            attempt,
-                            prompts[i].Substring(0, Math.Min(100, prompts[i].Length))
+                            attempt
                         );
 
                         var imageOptions = new ImageGenerationOptions
@@ -458,7 +464,9 @@ public class AIService
                         };
 
                         var imageResult = await imageClient.GenerateImageAsync(prompts[i], imageOptions);
+                        model.RecordResponse(imageResult.GetRawResponse().Content.ToString(), imageResult.GetRawResponse().Status);
                         var imageBytes = imageResult.Value.ImageBytes.ToArray();
+                        model.Tag("aw.image.output.bytes", imageBytes.Length);
 
                         var photoNumber = product.ExistingPhotoCount + i + 1;
                         var fileName = $"product_{product.ProductID}_photo_{photoNumber}.png";

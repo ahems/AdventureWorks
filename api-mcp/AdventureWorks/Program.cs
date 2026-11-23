@@ -7,24 +7,30 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Localization;
 using ModelContextProtocol.Extensions.Tasks;
 using ModelContextProtocol.Protocol;
+using AdventureWorks.Telemetry;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Logs;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddFilter("OpenIddict", LogLevel.Warning);
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+builder.Logging.AddFilter("Azure", LogLevel.Warning);
 builder.Logging.AddConsole(consoleLogOptions =>
 {
 	// Configure all logs to go to stderr
 	consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
-});
+	consoleLogOptions.FormatterName = "adventureworks-safe";
+}).AddConsoleFormatter<SafeConsoleFormatter, Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>();
 
-// Add Application Insights telemetry. Adaptive sampling is reinstalled without custom events or
-// exceptions so authorization and identity evidence events are never sampled out.
-builder.Services.AddApplicationInsightsTelemetry(options => options.EnableAdaptiveSampling = false);
-builder.Services.Configure<Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration>(configuration =>
+// SDK 3 owns HTTP/SQL instrumentation and all Azure Monitor exporters.
+builder.Services.AddApplicationInsightsTelemetry(options =>
 {
-	var chain = configuration.DefaultTelemetrySink.TelemetryProcessorChainBuilder;
-	chain.UseAdaptiveSampling(maxTelemetryItemsPerSecond: 20, excludedTypes: "Event;Exception");
-	chain.Build();
+	options.TracesPerSecond = 5;
+	options.EnableTraceBasedLogsSampler = false;
 });
-builder.Services.AddSingleton<Microsoft.ApplicationInsights.Extensibility.ITelemetryInitializer, CloudRoleNameTelemetryInitializer>();
+builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor(new TelemetryPrivacyProcessor()));
+builder.Services.ConfigureOpenTelemetryLoggerProvider(logging => logging.AddProcessor(new TelemetryLogPrivacyProcessor()));
+builder.Services.AddHostedService<ExporterDiagnostics>();
 
 // Configure localization (Microsoft.Extensions.Localization is actively used by services below)
 // Services inject IStringLocalizer<Strings> for multilingual message formatting in OrderService, ProductService, ReviewService, and others
@@ -154,28 +160,19 @@ builder.Services
 		   // Centralized Application Insights telemetry for every tool call
 		   filters.AddCallToolFilter(next => async (context, ct) =>
 		   {
-			   var telemetry = context.Services.GetRequiredService<TelemetryClient>();
 			   var toolName = context.Params?.Name ?? "unknown";
-			   using var operation = telemetry.StartOperation<RequestTelemetry>($"MCP_{toolName}");
+			   using var operation = McpToolTelemetry.Start(toolName);
 			   using var sqlScope = AdventureWorks.Telemetry.SqlPrincipalTelemetry.EnterScope("tool:" + toolName);
-
-			   if (context.Params?.Arguments is { } args)
-			   {
-				   foreach (var kvp in args)
-					   operation.Telemetry.Properties[kvp.Key] = kvp.Value.ToString()[..Math.Min(kvp.Value.ToString().Length, 200)];
-			   }
 
 			   try
 			   {
 				   var result = await next(context, ct);
-				   operation.Telemetry.Success = true;
-				   telemetry.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", toolName } });
+				   operation.Complete(result);
 				   return result;
 			   }
-			   catch (Exception ex) when (ex is not InputRequiredException)
+			   catch (Exception ex)
 			   {
-				   operation.Telemetry.Success = false;
-				   telemetry.TrackException(ex, new Dictionary<string, string> { { "tool", toolName } });
+				   operation.Fail(ex);
 				   throw;
 			   }
 		   });

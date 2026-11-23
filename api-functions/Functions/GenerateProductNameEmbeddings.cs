@@ -114,9 +114,12 @@ public class GenerateProductNameEmbeddings
     public async Task<List<ProductNameEmbeddingData>> FetchProductNamesActivity(
         [ActivityTrigger] FunctionContext context)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("durable-fetch-product-names",
+            kind: System.Diagnostics.ActivityKind.Internal, failureOutcome: "failed");
         _logger.LogInformation("Fetching ProductName rows with NULL embeddings from database");
         var names = await _productService.GetProductNamesForEmbeddingAsync();
         _logger.LogInformation("Fetched {count} rows", names.Count);
+        attempt.SetOutcome(names.Count == 0 ? "skipped" : "completed");
         return names;
     }
 
@@ -125,9 +128,12 @@ public class GenerateProductNameEmbeddings
         [ActivityTrigger] List<ProductNameEmbeddingData> names,
         FunctionContext context)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("durable-name-embeddings",
+            kind: System.Diagnostics.ActivityKind.Internal, failureOutcome: "failed");
         _logger.LogInformation("Generating embeddings for {count} product names", names.Count);
         var embeddings = await _aiService.GenerateProductNameEmbeddingsAsync(names);
         _logger.LogInformation("Generated {count} embeddings", embeddings.Count);
+        attempt.SetOutcome(embeddings.Count < names.Count ? "partial" : "completed");
         return embeddings;
     }
 
@@ -136,11 +142,14 @@ public class GenerateProductNameEmbeddings
         [ActivityTrigger] List<ProductNameEmbedding> embeddings,
         FunctionContext context)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("durable-save-name-embeddings",
+            kind: System.Diagnostics.ActivityKind.Internal, failureOutcome: "failed");
         _logger.LogInformation("Saving {count} product name embeddings to database", embeddings.Count);
         foreach (var embedding in embeddings)
         {
             await _productService.SaveProductNameEmbeddingAsync(embedding);
         }
         _logger.LogInformation("Saved {count} product name embeddings", embeddings.Count);
+        attempt.Complete();
     }
 }

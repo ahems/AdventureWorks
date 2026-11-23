@@ -22,6 +22,11 @@ param agentEmailContentId string = ''
 param agentCatalogSuggestionId string = ''
 param agentManufacturingContentId string = 'manufacturing-content-agent'
 param webPubSubHostName string = ''
+param monitoringWorkspaceId string = ''
+param monitoringMetricResources array = []
+param monitoringWorkbookUrl string = ''
+param monitoringGrafanaUrl string = ''
+param monitoringApplicationInsightsUrl string = ''
 // api-mcp OAuth issuer + dedicated Functions audience used by the Functions resource server
 // to validate bearer tokens (api-functions/Auth reads FUNCTIONS_JWT_ISSUER / FUNCTIONS_JWT_AUDIENCE).
 // Derived from the deployed api-mcp FQDN in main.bicep; no hard-coded hostnames. When empty (e.g. a
@@ -111,6 +116,26 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
     }
     siteConfig: {
       appSettings: [
+        {
+          name: 'MONITORING_WORKSPACE_ID'
+          value: monitoringWorkspaceId
+        }
+        {
+          name: 'MONITORING_METRIC_RESOURCES'
+          value: string(monitoringMetricResources)
+        }
+        {
+          name: 'MONITORING_LINK_WORKBOOK'
+          value: monitoringWorkbookUrl
+        }
+        {
+          name: 'MONITORING_LINK_GRAFANA'
+          value: monitoringGrafanaUrl
+        }
+        {
+          name: 'MONITORING_LINK_APPLICATIONINSIGHTS'
+          value: monitoringApplicationInsightsUrl
+        }
         {
           name: 'SQL_CONNECTION_STRING'
           value: sqlConnectionString

@@ -84,7 +84,7 @@ public class GenerateProductImages
                     JobType = "image",
                     ProductId = product.ProductID
                 });
-                await aiJobQueueClient.SendMessageAsync(message);
+                await aiJobQueueClient.SendObservedMessageAsync(message);
                 enqueued++;
             }
 
@@ -132,7 +132,7 @@ public class GenerateProductImages
                 JobType = "image",
                 ProductId = product.ProductID
             });
-            await aiJobQueueClient.SendMessageAsync(message);
+            await aiJobQueueClient.SendObservedMessageAsync(message);
 
             _logger.LogInformation("Enqueued image generation job for product {id}: {name}", product.ProductID, product.Name);
 

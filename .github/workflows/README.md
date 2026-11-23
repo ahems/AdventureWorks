@@ -269,9 +269,11 @@ ALLOWED_ROLE_IDS=(
   0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb # Storage File Data SMB Share Contributor
   12cf5a90-567b-43ae-8102-96cf46c7d9b4 # Web PubSub Service Owner
   19c28022-e58e-450d-a464-0b2a53034789 # Cognitive Services Data Contributor (Preview)
+  43d0d8ad-25c7-4714-9337-8ba259a9fe05 # Monitoring Reader (resource-scoped queries)
   4633458b-17de-408a-b874-0445c86b69e6 # Key Vault Secrets User
   5e0bd9bd-7b93-4f28-af87-19fc36ad61bd # Cognitive Services OpenAI User
   64702f94-c441-49e6-a78b-ef80e0188fee # Azure AI Developer
+  73c42c96-874c-492b-b04d-ab87d138a893 # Log Analytics Reader (demo workspace only)
   7f951dda-4ed3-4680-a7ca-43fe172d538d # AcrPull
   974c5e8b-45b9-4653-ba55-5f855dd0fb88 # Storage Queue Data Contributor
   a001fd3d-188f-4b5d-821b-7da978bf7442 # Cognitive Services OpenAI Contributor

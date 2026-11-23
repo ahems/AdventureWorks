@@ -23,9 +23,7 @@ public class AIService
 
     public async Task<float[]> GenerateQueryEmbeddingAsync(string queryText)
     {
-        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("Generate Query Embedding");
-        operation.Telemetry.Type = "OpenAI";
-        operation.Telemetry.Data = $"Embedding for query (length: {queryText.Length})";
+        using var operation = api_functions.Services.GenAiTelemetry.Start("embeddings", _embeddingDeploymentName);
 
         try
         {
@@ -40,6 +38,7 @@ public class AIService
 
             // Generate embedding for the query text
             var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(queryText);
+            operation.RecordResponse(embeddingResponse.GetRawResponse().Content.ToString(), embeddingResponse.GetRawResponse().Status);
             var embeddingVector = embeddingResponse.Value.ToFloats();
 
             // Return float array for VECTOR comparison
@@ -50,17 +49,14 @@ public class AIService
                 floatArray.Length
             );
 
-            operation.Telemetry.Properties["dimensions"] = floatArray.Length.ToString();
-            operation.Telemetry.Properties["queryLength"] = queryText.Length.ToString();
-            operation.Telemetry.Success = true;
+            operation.Tag("aw.embedding.dimensions", floatArray.Length);
+            operation.Complete();
 
             return floatArray;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating query embedding");
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex);
             throw;
         }
     }

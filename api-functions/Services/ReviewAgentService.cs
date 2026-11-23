@@ -59,7 +59,7 @@ public class ReviewAgentService
         ProductForReviewGeneration product,
         CustomerWithDeliveredOrder customer)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("ReviewAgent.GenerateReview");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("ReviewAgent.GenerateReview");
         operation.Telemetry.Properties["ProductID"] = product.ProductID.ToString();
         operation.Telemetry.Properties["CustomerID"] = customer.CustomerID.ToString();
 
@@ -137,8 +137,8 @@ public class ReviewAgentService
                 ["CustomerID"] = customer.CustomerID.ToString(),
                 ["Sentiment"] = sentimentDescription,
                 ["Rating"] = rating.ToString(),
-                ["InputTokens"] = agentResponse.InputTokens.ToString(),
-                ["OutputTokens"] = agentResponse.OutputTokens.ToString()
+                ["InputTokens"] = agentResponse.InputTokens?.ToString() ?? "unknown",
+                ["OutputTokens"] = agentResponse.OutputTokens?.ToString() ?? "unknown"
             });
 
             operation.Telemetry.Success = true;

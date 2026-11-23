@@ -67,7 +67,8 @@ public record ManufacturingAgentQueueMessage(
     int SalesOrderId,
     int CustomerId,
     string RunId,
-    int RetryCount = 0);
+    int RetryCount = 0,
+    api_functions.Services.QueueTelemetryContext? Telemetry = null);
 
 /// <summary>Step update payload posted by the hosted agent to the step-callback endpoint.</summary>
 public record ManufacturingAgentStepUpdate(

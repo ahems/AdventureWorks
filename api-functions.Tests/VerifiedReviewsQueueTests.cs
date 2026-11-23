@@ -70,6 +70,12 @@ public sealed class VerifiedReviewsQueueTests
         Assert.Equal(2, queue.Messages.Count);
         var messages = queue.Messages.Select(text => JsonSerializer.Deserialize<VerifiedReviewsQueueMessage>(text)!).ToList();
         Assert.All(messages, message => Assert.Equal(jobId, message.JobId));
+        Assert.All(messages, message =>
+        {
+            Assert.Equal(Guid.Parse(jobId!).ToString("N"), message.Telemetry?.JobId);
+            Assert.NotNull(message.Telemetry?.EnqueuedAt);
+            Assert.Null(message.Telemetry?.CaptureId);
+        });
         Assert.Equal([42, 43], messages.Select(m => m.Product.ProductID));
         Assert.Equal([11, 12], messages[0].CustomerIds);
         Assert.All(queue.Messages, text => Assert.DoesNotContain("example.invalid", text, StringComparison.Ordinal));

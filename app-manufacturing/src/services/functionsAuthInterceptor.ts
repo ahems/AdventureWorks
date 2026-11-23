@@ -3,6 +3,7 @@
 // on all manufacturing routes, so pages need no per-call token plumbing. Requests
 // that already carry an Authorization header are left untouched.
 import { MANUFACTURING_BASE } from "@/config/api";
+import { reportHandledFailure } from "@/lib/appInsights";
 import {
   getFunctionsAccessToken,
   getTabAuthorizationGeneration,
@@ -59,7 +60,9 @@ export function installFunctionsAuthInterceptor(): void {
     const generation = getTabAuthorizationGeneration();
     const ensureSession = () => {
       if (!isTabAuthorizationGenerationCurrent(generation)) {
-        throw new Error("Your session has expired. Please sign in again.");
+        const error = new Error("Your session has expired. Please sign in again.");
+        reportHandledFailure(error, "functions-authorization");
+        throw error;
       }
     };
     const send = async (force: boolean) => {

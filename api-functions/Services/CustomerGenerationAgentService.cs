@@ -49,7 +49,7 @@ public class CustomerGenerationAgentService
     /// </summary>
     public async Task<GenerateCustomerResult> GenerateCustomerAsync(string locale)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("CustomerGeneration.Generate");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("CustomerGeneration.Generate");
         operation.Telemetry.Properties["Locale"] = locale;
 
         var structuredInputs = new Dictionary<string, object>

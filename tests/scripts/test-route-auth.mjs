@@ -49,7 +49,12 @@ async function loadApp(app) {
         Navigate: props => { state.redirects.push(props); return null; },
       };
       else if (specifier === "@/context/AuthContext") exports = { AuthProvider: passthrough, useAuth: () => state };
-      else if (specifier === "@tanstack/react-query") exports = { QueryClient: class {}, QueryClientProvider: passthrough };
+      else if (specifier === "@tanstack/react-query") exports = {
+        QueryClient: class {},
+        QueryCache: class {},
+        MutationCache: class {},
+        QueryClientProvider: passthrough,
+      };
       else if (specifier.includes("useRealTimeUpdates")) exports = {
         useRealTimeUpdates: () => { state.subscriptions++; return "live"; },
       };

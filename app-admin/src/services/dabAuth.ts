@@ -119,6 +119,8 @@ export const DAB_ADMIN_REQUESTED_SCOPES = [
   "admin.read",
   "admin.write",
   "mcp.admin",
+  "monitoring.read",
+  "monitoring.write",
 ];
 
 export interface DabTokenClaims {

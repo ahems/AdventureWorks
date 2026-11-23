@@ -48,9 +48,13 @@ public sealed class DatabaseChangeNotifications(WebPubSubService publisher)
         [SqlTrigger("[dbo].[RealtimeNotificationOutbox]", "SQL_CONNECTION_STRING", "Notifications_RealtimeNotificationOutbox")]
         IReadOnlyList<SqlChange<Row>> changes)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("sql-notifications");
+        attempt.Tag("causal.boundary", "sql-change-tracking");
         var notifications = changes.Where(c => c.Operation == SqlChangeOperation.Insert).Select(c => c.Item).ToArray();
+        BackgroundWorkTelemetry.RecordNotificationBatch(notifications.Length);
         foreach (var row in notifications)
         {
+            BackgroundWorkTelemetry.RecordNotificationAge(row.CreatedAt);
             if (!Groups.ContainsKey(row.Entity) || row.ChangeType is not ("Insert" or "Update" or "Delete"))
                 throw new InvalidOperationException("Invalid realtime notification entity or change type.");
         }
@@ -65,6 +69,9 @@ public sealed class DatabaseChangeNotifications(WebPubSubService publisher)
             foreach (var group in Groups[entity.Key])
                 await publisher.SendCoalescedAsync(group, entity.Key, payload);
         }
+        // This means coalescing accepted the call, not delivery to a browser.
+        attempt.Tag("publish.stage", "coalescing-call");
+        attempt.Complete();
     }
 
 }

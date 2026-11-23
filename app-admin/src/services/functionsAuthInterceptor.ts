@@ -4,6 +4,7 @@
 // Requests that already carry an Authorization header (e.g. the AI agent chat,
 // which forwards a per-user MCP token) are left untouched.
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { reportHandledFailure } from "@/lib/appInsights";
 import {
   getFunctionsAccessToken,
   getTabAuthorizationGeneration,
@@ -46,7 +47,9 @@ export function installFunctionsAuthInterceptor(): void {
     const generation = getTabAuthorizationGeneration();
     const ensureSession = () => {
       if (!isTabAuthorizationGenerationCurrent(generation)) {
-        throw new Error("Your session has expired. Please sign in again.");
+        const error = new Error("Your session has expired. Please sign in again.");
+        reportHandledFailure(error, "functions-authorization");
+        throw error;
       }
     };
     const send = async (force: boolean) => {

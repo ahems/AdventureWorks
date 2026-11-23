@@ -29,6 +29,7 @@ public enum WarehouseOperationType
 /// </summary>
 public record WarehouseOperationMessage
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     /// <summary>Unique identifier for this warehouse operation.</summary>
     public string OperationId { get; set; } = string.Empty;
 

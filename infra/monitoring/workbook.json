@@ -1,0 +1,127 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "name": "scope-and-limits",
+      "content": {
+        "json": "# AdventureWorks observability\nDemo/POC only. These queries use the viewer's separate Entra workspace access, not the admin application's OAuth token. No data does not prove health. Request counts and percentiles describe ingested samples; ItemCount estimates do not recreate complete traces. Normal retention is 30 days, emergency cap 1 GB/day (overshoot can be billed). Azure Monitor query/alert charges remain.\n\nSQL-change boundaries are causal joins, not uninterrupted browser traces. Stop affects future application capture only, not independently configured Foundry server tracing. Hidden reasoning is not available. Exact Web PubSub daily message balance, invoice cost, model remaining quota and hosted-agent native compute pressure are unavailable unless a supported source proves them."
+      }
+    },
+    {
+      "type": 3,
+      "name": "service-performance",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Server requests: observed samples, estimated requests and latency",
+        "query": "AppRequests | where isnotempty(Url) and isempty(tostring(Properties['messaging.operation.type'])) | summarize observed=count(),estimated=sum(ItemCount),failures=countif(Success == false),p50Ms=percentile(DurationMs,50),p95Ms=percentile(DurationMs,95),p99Ms=percentile(DurationMs,99),lastSeen=max(TimeGenerated) by AppRoleName | take 30",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 3600000},
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "browser-vitals",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Browser outcomes and LCP/INP/CLS (p75; availability explicit)",
+        "query": "AppEvents | where Name startswith 'browser.' | summarize observed=count(),p75=percentile(todouble(Properties['value']),75),lastSeen=max(TimeGenerated) by AppRoleName,Name,metric=tostring(Properties['metric']),availability=tostring(Properties['availability']),outcome=tostring(Properties['outcome']) | take 50",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 3600000},
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "dependencies-map",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Application dependency edges (safe map; no SQL text or URLs)",
+        "query": "AppDependencies | summarize observed=count(),failed=countif(Success == false),p95Ms=percentile(DurationMs,95) by AppRoleName,Type | take 50",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 3600000},
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "agents",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Agent/model/tool spans (not distinct logical invocation totals)",
+        "query": "AppDependencies | where tostring(Properties['gen_ai.operation.name']) != '' | summarize observedSpans=count(),failures=countif(Success == false),p95Ms=percentile(DurationMs,95),lastSeen=max(TimeGenerated) by AppRoleName,operation=tostring(Properties['gen_ai.operation.name']),model=tostring(Properties['gen_ai.request.model']) | take 50",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 3600000},
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "background",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Background outcomes (retrying is not poisoned)",
+        "query": "union (AppEvents | where Name startswith 'Workflow.' or Name startswith 'BackgroundWork.'),(AppRequests | where tostring(Properties['messaging.operation.type']) == 'process'),(AppDependencies | where tostring(Properties['messaging.operation.type']) == 'process') | summarize observed=count(),lastSeen=max(TimeGenerated) by AppRoleName,Name,outcome=tostring(Properties['outcome']) | take 50",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 3600000},
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "termination",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Observed worker termination evidence (existing ACA system logs)",
+        "query": "ContainerAppSystemLogs_CL | where Reason_s in ('OOMKilled','ContainerCrashing','ContainerBackOff') | summarize observed=count(),lastSeen=max(TimeGenerated) by ContainerAppName_s,Reason_s | take 30",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 3600000},
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "ingestion",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Ingested billable bytes and last seen, not an invoice or health verdict",
+        "query": "union withsource=tableName AppRequests,AppDependencies,AppEvents,AppTraces,AppExceptions,AppMetrics,AppPageViews | summarize billableBytes=sumif(_BilledSize,_IsBillable == 'true'),lastSeen=max(TimeGenerated),rows=count() by tableName,AppRoleName | take 50",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 86400000},
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "cap",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Daily cap stop evidence (absence does not prove uninterrupted ingestion)",
+        "query": "_LogOperation | where Category =~ 'Ingestion' and Detail contains 'OverQuota' | project TimeGenerated,Category | take 10",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["__WORKSPACE__"],
+        "queryTimeRange": {"durationMs": 86400000},
+        "visualization": "table"
+      }
+    }
+  ],
+  "isLocked": false,
+  "fallbackResourceIds": ["__WORKSPACE__"],
+  "fromTemplateId": "adventureworks-observability"
+}

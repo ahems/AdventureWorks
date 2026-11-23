@@ -111,17 +111,11 @@ public class SqlPrincipalTelemetryTests
 
     private static SqlPrincipalTelemetry Create(List<ITelemetry> sent)
     {
-        var configuration = new TelemetryConfiguration { TelemetryChannel = new CapturingChannel(sent) };
+        var capture = new ApiFunctions.Tests.TelemetryTestCapture();
+        var configuration = capture.CreateConfiguration();
+        capture.Target = sent;
         return new SqlPrincipalTelemetry(new TelemetryClient(configuration), NullLogger<SqlPrincipalTelemetry>.Instance,
             "api-mcp", ConnectionString, ClientId.ToString());
     }
 
-    private sealed class CapturingChannel(List<ITelemetry> sent) : ITelemetryChannel
-    {
-        public bool? DeveloperMode { get; set; }
-        public string EndpointAddress { get; set; } = string.Empty;
-        public void Send(ITelemetry item) => sent.Add(item);
-        public void Flush() { }
-        public void Dispose() { }
-    }
 }

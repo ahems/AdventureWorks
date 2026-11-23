@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Azure.Core.Pipeline;
+using Azure.Monitor.OpenTelemetry.Exporter;
 
 namespace AdventureWorks.Tests;
 
@@ -68,6 +70,18 @@ public sealed class OAuthTestFactory : WebApplicationFactory<Program>
 
         builder.ConfigureTestServices(services =>
         {
+            // SDK3 requires a connection string. Keep every exporter entirely offline in auth tests.
+            services.Configure<Microsoft.ApplicationInsights.AspNetCore.Extensions.ApplicationInsightsServiceOptions>(options =>
+            {
+                options.ConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000";
+            });
+            services.Configure<AzureMonitorExporterOptions>(options =>
+            {
+                options.ConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000";
+                options.Transport = new HttpClientTransport(new HttpClient(new ApiFunctions.Tests.TelemetryTestCapture.OfflineHandler()));
+                options.EnableLiveMetrics = false;
+                options.DisableOfflineStorage = true;
+            });
             // Replace the SQL-backed directory with an in-memory fake.
             var existing = services.Where(d => d.ServiceType == typeof(IUserDirectory)).ToList();
             foreach (var d in existing)

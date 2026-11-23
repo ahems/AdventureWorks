@@ -97,7 +97,7 @@ public class DependencyHealthService(
         "shoppingSimulator", "awOrderPipelineConfig", "awSupplyChain", "awManufacturing",
         "awBankAccounts", "awBankTransactions", "awWarehouse", "awManufacturingAgentConfig",
         "awManufacturingAgentRuns", "awManufacturingProposals", "verifiedReviewsJob",
-        "reviewModerationJob", "awAutoPromotionConfig", "aiRateLimits"
+        "reviewModerationJob", "awAutoPromotionConfig", "aiRateLimits", "awMonitoringCapture"
     ];
     public static readonly string[] ApplicationContainers = [
         "adventureworks-receipts", "locales", "function-releases"

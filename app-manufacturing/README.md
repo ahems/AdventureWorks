@@ -44,6 +44,22 @@ npm run build
 npm run illustrations:export # regenerate the illustration export via Functions
 ```
 
+## Browser observability
+
+The existing Application Insights browser SDK sends W3C correlation only to configured
+solution APIs. Header capture is disabled; `telemetrySafety` removes URL queries,
+fragments, nested/serialized credentials and free-form error content and normalizes
+identifier-bearing routes. React boundaries and common query/mutation/network reporting
+preserve existing retries, skeletons and error UI, including distinct authorization
+generation cancellation, user cancellation, throttling and logical-failure outcomes.
+LCP, INP and CLS are measured once per document where supported; absent metrics are
+unavailable rather than zero. Realtime reporting records connection outcomes only,
+never every message or signed negotiate URLs, without adding a connection or polling.
+Use `VITE_BUILD_VERSION` to identify a supplied build; missing version is unknown.
+
+`npm test -- src/hooks/useWebPubSub.test.ts` validates unchanged connection behavior.
+The storefront's `scripts/telemetry-privacy.test.mjs` checks all three outbound gates.
+
 ## Configuration
 
 At container start `docker-entrypoint.sh` writes `window.APP_CONFIG`; `src/config/api.ts`

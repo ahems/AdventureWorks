@@ -5,7 +5,7 @@ import { request as httpRequest } from "node:http";
 import test from "node:test";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { configuration, createGateway, oauth, validateToken } from "./gateway.mjs";
-import { createTelemetry, parseConnectionString, routeLabel } from "./telemetry.mjs";
+import { beginTrace, createTelemetry, parseConnectionString, routeLabel } from "./telemetry.mjs";
 
 const config = configuration({ API_MCP_URL: "https://mcp.example.test/mcp",
   API_DAB_MCP_URL: "https://dab.example.test/mcp", MCP_PROXY_FULL_ADDRESS: "https://inspector.example.test/proxy" });
@@ -343,4 +343,51 @@ test("telemetry labels fixed routes and never exports OAuth query values", async
   assert.ok(envelopes.every(item => item.tags["ai.cloud.role"] === "mcp-inspector" && !item.data.baseData.url.includes("?")));
   assert.ok(envelopes.some(item => item.tags["ai.operation.id"] === trace));
   assert.ok(!sent[0].init.body.includes("code0") && !sent[0].init.body.includes(state));
+});
+
+test("gateway forwards a real dependency span and preserves W3C parent correlation", async t => {
+  const requests = [], dependencies = [];
+  const f = await fixture(t, { telemetry: {
+    track: record => requests.push(record), dependency: record => dependencies.push(record),
+  } });
+  const cookie = await f.finish(await f.begin());
+  const incoming = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+  assert.equal((await f.call(proxy(0), { cookie, headers: { traceparent: incoming } })).status, 200);
+  await new Promise(resolve => setImmediate(resolve));
+  const entry = requests.find(record => record.pathname === "/proxy/mcp");
+  const dependency = dependencies[0];
+  assert.equal(entry.context.parentId, "b7ad6b7169203331");
+  assert.equal(dependency.context.parentId, entry.context.spanId);
+  assert.equal(dependency.context.traceId, entry.context.traceId);
+  assert.notEqual(dependency.context.spanId, entry.context.spanId);
+  assert.equal(f.requests[0].headers.traceparent, dependency.context.traceparent);
+  assert.equal(dependency.outcome, "completed");
+  for (const invalid of ["00-" + "0".repeat(32) + "-b7ad6b7169203331-01",
+    "00-0af7651916cd43dd8448eb211c80319c-" + "0".repeat(16) + "-01", incoming + "-secret"]) {
+    assert.equal(beginTrace(invalid).parentId, null);
+  }
+});
+
+test("telemetry exporter failures and concurrent flushes are bounded and secret-free", async () => {
+  const diagnostics = [], bodies = [];
+  let sends = 0;
+  const connection = "InstrumentationKey=00000000-0000-0000-0000-000000000001;IngestionEndpoint=https://ingest.example.test/";
+  const telemetry = createTelemetry(connection, { timeoutMs: 10,
+    diagnostic: code => diagnostics.push(code), origin: "https://inspector.example.test/path?secret=marker",
+    send: (_url, options) => { sends++; bodies.push(options.body); return new Promise(() => {}); } });
+  telemetry.track({ method: "GET", pathname: "/oauth/callback?code=marker", status: 403, startedAt: Date.now() });
+  await Promise.all([telemetry.flush(), telemetry.flush()]);
+  assert.equal(sends, 1);
+  assert.deepEqual(diagnostics, ["export_failed"]);
+  assert.ok(!bodies[0].includes("marker"));
+  assert.equal(JSON.parse(bodies[0]).data.baseData.success, false);
+  telemetry.track({ method: "GET", pathname: "/health", status: 200, startedAt: Date.now() });
+  await telemetry.flush();
+  assert.equal(sends, 2);
+  assert.equal(diagnostics.length, 1);
+  const rejected = createTelemetry(connection, { send: async () => new Response("", { status: 206 }),
+    diagnostic: code => diagnostics.push(code) });
+  rejected.track({ method: "GET", pathname: "/health", status: 200, startedAt: Date.now() });
+  await rejected.flush();
+  assert.equal(diagnostics.at(-1), "export_rejected");
 });

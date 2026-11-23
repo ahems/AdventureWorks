@@ -512,6 +512,7 @@ public class WarehouseService
         // Self-reschedule if not yet due
         if (msg.ScheduledCompletionUtc > DateTime.UtcNow.AddSeconds(2))
         {
+            BackgroundWorkTelemetry.Outcome("retrying");
             var delay = msg.ScheduledCompletionUtc - DateTime.UtcNow;
             await EnqueueMessageAsync(msg, visibilityDelay: delay);
             return;
@@ -531,6 +532,7 @@ public class WarehouseService
         // Record damage event and debit bank if damage occurred
         if (isDamaged)
         {
+            BackgroundWorkTelemetry.Outcome(isTotalLoss ? "failed" : "partial");
             double writeOffValue = damagedUnits * msg.ProductStandardCost;
             await RecordDamageEventAsync(msg, damagedUnits, reasonId, reasonName, isTotalLoss, writeOffValue);
 
@@ -645,7 +647,7 @@ public class WarehouseService
     {
         var payload = System.Text.Json.JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 5 });
         var bytes   = System.Text.Encoding.UTF8.GetBytes(payload);
-        await _orderStatusQueueClient.SendMessageAsync(Convert.ToBase64String(bytes));
+        await _orderStatusQueueClient.SendObservedMessageAsync(Convert.ToBase64String(bytes));
         _logger.LogInformation("Warehouse: all picks complete for SalesOrder-{SalesOrderId} — enqueued Status=5", salesOrderId);
     }
 
@@ -1388,7 +1390,7 @@ public class WarehouseService
     {
         string json   = JsonSerializer.Serialize(msg);
         string base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
-        await _queueClient.SendMessageAsync(base64, visibilityTimeout: visibilityDelay);
+        await _queueClient.SendObservedMessageAsync(base64, visibilityTimeout: visibilityDelay);
     }
 
     // ── Private: entity mappers ───────────────────────────────────────────────

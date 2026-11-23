@@ -55,6 +55,7 @@ public class ProcessSalesOrderStatus
     public async Task ProcessSalesOrderStatus_QueueTrigger(
         [QueueTrigger(QueueName, Connection = "AzureWebJobsStorage")] BinaryData queueMessage)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("sales-order-status", queueMessage.ToString());
         SalesOrderStatusMessage? msg;
         try
         {
@@ -68,6 +69,7 @@ public class ProcessSalesOrderStatus
 
         if (msg == null || msg.SalesOrderID <= 0)
         {
+            attempt.SetOutcome("rejected");
             _logger.LogWarning("Invalid queue message: missing or invalid SalesOrderID. Skipping.");
             return;
         }
@@ -84,6 +86,7 @@ public class ProcessSalesOrderStatus
             var current = await _orderService.GetOrderStatusAsync(salesOrderId);
             if (current != 2)
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogInformation(
                     "SalesOrderID={SalesOrderId} is no longer Approved (Status={Current}); skipping warehouse pick.",
                     salesOrderId, current);
@@ -91,6 +94,7 @@ public class ProcessSalesOrderStatus
             }
             _logger.LogInformation("SalesOrderID={SalesOrderId} WarehousePickReady — handing off to warehouse pick", salesOrderId);
             await _warehouse.EnqueueRetrieveOperationsForOrderAsync(salesOrderId);
+            attempt.Complete();
             return; // Warehouse gates shipment — no further re-queuing here
         }
 
@@ -101,6 +105,7 @@ public class ProcessSalesOrderStatus
                 salesOrderId, (byte)status, ExpectedStatusesForTerminal(status));
             if (rows == 0)
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogWarning("Order not found or not in an eligible status for {Status}. SalesOrderID={SalesOrderId}. Stopping processing.", status, salesOrderId);
                 return;
             }
@@ -111,6 +116,7 @@ public class ProcessSalesOrderStatus
             }
             _logger.LogInformation("Terminal status {Status} applied for SalesOrderID={SalesOrderId}", status, salesOrderId);
             await _webPubSub.SendToGroupAsync("orders", new { @event = "order-status-changed", salesOrderId, newStatus = status });
+            if (status == 4) attempt.SetOutcome("rejected"); else attempt.Complete();
             return;
         }
 
@@ -120,6 +126,7 @@ public class ProcessSalesOrderStatus
             var rows = await _orderService.UpdateOrderStatusAsync(salesOrderId, 5, BackorderedOnly);
             if (rows == 0)
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogWarning("Order not found or no longer Backordered. SalesOrderID={SalesOrderId}. Stopping processing.", salesOrderId);
                 return;
             }
@@ -127,6 +134,7 @@ public class ProcessSalesOrderStatus
             await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Backordered order moved to Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
             await _webPubSub.SendToGroupAsync("orders", new { @event = "order-status-changed", salesOrderId, newStatus = 5 });
+            attempt.Complete();
             return;
         }
 
@@ -140,6 +148,7 @@ public class ProcessSalesOrderStatus
             nextStatus = Random.Shared.NextDouble() < 0.10 ? 3 : 5; // 10% Backordered, 90% Shipped
         else
         {
+            attempt.SetOutcome("skipped");
             _logger.LogWarning("Unexpected status {Status} for SalesOrderID={SalesOrderId}. Skipping re-queue.", status, salesOrderId);
             return;
         }
@@ -148,6 +157,7 @@ public class ProcessSalesOrderStatus
             salesOrderId, (byte)nextStatus, status == 1 ? InProcessOnly : ApprovedOnly);
         if (updated == 0)
         {
+            attempt.SetOutcome("skipped");
             _logger.LogWarning("Order not found or already advanced past Status={Status}. SalesOrderID={SalesOrderId}. Stopping processing.", status, salesOrderId);
             return;
         }
@@ -158,11 +168,13 @@ public class ProcessSalesOrderStatus
             await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Order Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
             await _webPubSub.SendToGroupAsync("orders", new { @event = "order-status-changed", salesOrderId, newStatus = 5 });
+            attempt.Complete();
             return;
         }
 
         if (nextStatus == 3)
         {
+            attempt.SetOutcome("retrying");
             var visibilityDays = 2 + (2 * Random.Shared.NextDouble());
             var visibility = TimeSpan.FromDays(visibilityDays);
             await RequeueAsync(salesOrderId, 3, visibility);
@@ -193,6 +205,7 @@ public class ProcessSalesOrderStatus
             _logger.LogInformation("Order Approved for SalesOrderID={SalesOrderId}, re-queued with visibility {Hours:F1} h (config: {Min}-{Max} h)",
                 salesOrderId, visibilityApproved.TotalHours, minHours, maxHours);
         }
+        attempt.SetOutcome(nextStatus == 4 ? "rejected" : "retrying");
     }
 
     private async Task RecordSaleBankCreditAsync(int salesOrderId)
@@ -236,6 +249,7 @@ public class ProcessSalesOrderStatus
         }
         catch (Exception ex)
         {
+            BackgroundWorkTelemetry.Outcome("partial");
             _logger.LogWarning(ex, "[Bank] Non-fatal: failed to record bank credit for SalesOrderID={SalesOrderId}", salesOrderId);
         }
     }
@@ -293,13 +307,13 @@ public class ProcessSalesOrderStatus
             // warehouse != null so it will call EnqueueRetrieveOperationsForOrderAsync
             // and then return without further re-queuing (the warehouse gates status=5).
             var message = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 2, WarehousePickReady = true });
-            await queueClient.SendMessageAsync(message, visibilityTimeout: visibilityTimeout, timeToLive: null);
+            await queueClient.SendObservedMessageAsync(message, visibilityTimeout: visibilityTimeout, timeToLive: null);
             return;
         }
 
         var qc = await GetQueueClientAsync();
         var msg = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = status });
-        await qc.SendMessageAsync(msg, visibilityTimeout: visibilityTimeout, timeToLive: null);
+        await qc.SendObservedMessageAsync(msg, visibilityTimeout: visibilityTimeout, timeToLive: null);
     }
 
     private static async Task<QueueClient> GetQueueClientAsync()

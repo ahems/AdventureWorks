@@ -94,7 +94,7 @@ public class TranslateProductDescriptions
                     // Pass ProductID so name translation is also performed
                     ProductId = product.ProductID > 0 ? product.ProductID : null
                 });
-                await aiJobQueueClient.SendMessageAsync(message);
+                await aiJobQueueClient.SendObservedMessageAsync(message);
                 enqueued++;
             }
 

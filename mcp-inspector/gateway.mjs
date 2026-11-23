@@ -6,7 +6,7 @@ import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
-import { createTelemetry } from "./telemetry.mjs";
+import { beginTrace, createTelemetry } from "./telemetry.mjs";
 
 const CLIENT = "adventureworks-inspector";
 const SESSION_COOKIE = "__Host-aw-inspector";
@@ -167,13 +167,14 @@ export function createGateway(config, authorization, { request = fetch, now = Da
     return url;
   }
   const server = createServer(async (req, res) => {
+    const trace = beginTrace(req.headers.traceparent);
     if (telemetry) {
       const startedAt = Date.now();
       res.once("finish", () => {
         let pathname = "/";
         try { pathname = new URL(req.url, "http://gateway.invalid").pathname; } catch { /* label as asset */ }
         telemetry.track({ method: req.method, pathname, status: res.statusCode, startedAt,
-          traceparent: req.headers.traceparent });
+          traceparent: req.headers.traceparent, context: trace });
       });
     }
     res.setHeader("Cache-Control", "no-store");
@@ -285,6 +286,8 @@ export function createGateway(config, authorization, { request = fetch, now = Da
         if (ids.size >= 16 && !backendSessionId) deny(429, "too_many_mcp_sessions");
         const headers = { Authorization: "Bearer " + token.accessToken, "X-MS-API-ROLE": token.role,
           Origin: new URL(target.url).origin, Accept: "application/json, text/event-stream" };
+        const dependencyTrace = beginTrace(trace.traceparent);
+        headers.traceparent = dependencyTrace.traceparent;
         for (const name of ["mcp-session-id", "mcp-protocol-version", "last-event-id"])
           if (typeof req.headers[name] === "string") headers[name] = req.headers[name];
         let body;
@@ -302,9 +305,12 @@ export function createGateway(config, authorization, { request = fetch, now = Da
         controllers.add(controller);
         const close = () => controller.abort();
         res.once("close", close);
+        const dependencyStartedAt = Date.now();
+        let upstreamStatus = 0, dependencyOutcome = "upstream-failure";
         try {
           const upstream = await request(target.url, { method: req.method, headers, body, redirect: "error",
             signal: AbortSignal.any([controller.signal, session.controller.signal, AbortSignal.timeout(300000)]) });
+          upstreamStatus = upstream.status;
           const returnedId = upstream.headers.get("mcp-session-id");
           if (returnedId) {
             if (returnedId.length > 256 || !/^[\x21-\x7e]+$/.test(returnedId) ||
@@ -332,7 +338,10 @@ export function createGateway(config, authorization, { request = fetch, now = Da
               stream.pipe(res);
             });
           } else res.end();
+          dependencyOutcome = res.writableFinished ? "completed" : "cancelled";
         } finally {
+          telemetry?.dependency?.({ context: dependencyTrace, parent: trace, method: req.method,
+            target: target.url, status: upstreamStatus, startedAt: dependencyStartedAt, outcome: dependencyOutcome });
           controllers.delete(controller);
           res.removeListener("close", close);
           controller.abort();

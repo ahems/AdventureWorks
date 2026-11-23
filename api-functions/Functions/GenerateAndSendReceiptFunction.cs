@@ -172,7 +172,7 @@ public class GenerateAndSendReceiptFunction
             }
         });
 
-        await _receiptQueue.SendMessageAsync(receiptMessage, cancellationToken);
+        await _receiptQueue.SendObservedMessageAsync(receiptMessage, cancellationToken);
         _logger.LogInformation("Enqueued receipt generation for {orderNumber} with email follow-up", salesOrderNumber);
     }
 
@@ -184,6 +184,7 @@ public class GenerateAndSendReceiptFunction
         [QueueTrigger(EMAIL_QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
+        using var attempt = BackgroundWorkTelemetry.Begin("receipt-email", queueMessage.ToString());
         try
         {
             // Parse queue message
@@ -194,6 +195,7 @@ public class GenerateAndSendReceiptFunction
 
             if (string.IsNullOrEmpty(salesOrderNumber))
             {
+                attempt.SetOutcome("rejected");
                 _logger.LogError("Invalid queue message: SalesOrderNumber is null or empty");
                 return;
             }
@@ -216,6 +218,7 @@ public class GenerateAndSendReceiptFunction
 
             if (receiptData == null)
             {
+                attempt.SetOutcome("skipped");
                 _logger.LogWarning("Order not found: {orderNumber}", salesOrderNumber);
                 return;
             }
@@ -258,6 +261,7 @@ Thanks for exploring our demo! Feel free to place more pretend orders. 🛒";
 
             if (emailSuccess)
             {
+                attempt.SetOutcome("completed");
                 _logger.LogInformation(
                     "Successfully sent order confirmation email for {orderNumber}",
                     salesOrderNumber
@@ -265,6 +269,7 @@ Thanks for exploring our demo! Feel free to place more pretend orders. 🛒";
             }
             else
             {
+                attempt.SetOutcome("failed");
                 _logger.LogWarning(
                     "Failed to send order confirmation email for {orderNumber}",
                     salesOrderNumber

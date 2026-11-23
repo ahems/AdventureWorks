@@ -37,6 +37,21 @@ resource appInsightsResource 'Microsoft.Insights/components@2020-02-02' existing
   name: appName
 }
 
+resource workspaceResource 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
+  name: workspaceName
+}
+
+resource workspaceMonitoringReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(identityName)) {
+  name: guid(workspaceResource.id, identityName, '73c42c96-874c-492b-b04d-ab87d138a893')
+  scope: workspaceResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '73c42c96-874c-492b-b04d-ab87d138a893')
+    principalId: azidentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+  dependsOn: [workspace]
+}
+
 // Reference the user-assigned managed identity used by AI Foundry
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = if (!empty(identityName)) {
   name: identityName
@@ -70,3 +85,5 @@ output resourceId string = appInsights.outputs.resourceId
 output instrumentationKey string = appInsights.outputs.instrumentationKey
 output connectionString string = appInsights.outputs.connectionString
 output name string = appInsights.outputs.name
+output workspaceResourceId string = workspace.outputs.resourceId
+output workspaceCustomerId string = workspaceResource.properties.customerId

@@ -58,6 +58,9 @@ async function loadRequest(app, kind, nativeFetch, tokenGate) {
       getApiUrl: () => "https://dab.example.test/graphql",
     },
     "@/config/api": { MANUFACTURING_BASE: "https://functions.example.test" },
+    "@/lib/appInsights": {
+      reportHandledFailure: () => {},
+    },
     "graphql-request": { GraphQLClient },
   };
   const loaded = new Map();

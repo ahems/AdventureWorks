@@ -19,7 +19,10 @@
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Azure.AI.OpenAI" Version="2.8.0-beta.1" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.20.0" />
-    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="3.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../api-functions/Services/GenAiTelemetry.cs" Link="Telemetry/GenAiTelemetry.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />

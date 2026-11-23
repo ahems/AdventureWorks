@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { getWebPubSubNegotiateUrl } from "@/lib/utils";
+import { trackEvent } from "@/lib/appInsights";
 import {
   getFunctionsAccessToken,
   getTabAuthorizationGeneration,
@@ -16,6 +17,7 @@ export function subscribeWebPubSubStatus(listener: () => void) {
   return () => { statusListeners.delete(listener); };
 }
 function publishStatus(status: WebPubSubStatus) {
+  if (connectionStatus !== status) trackEvent("browser.realtime-outcome", { outcome: status });
   connectionStatus = status;
   statusListeners.forEach(listener => listener());
 }
@@ -96,7 +98,8 @@ export function useWebPubSub(
           if (isTabAuthorizationGenerationCurrent(generation)) setStatus("disconnected");
         });
         client.on("rejoin-group-failed", () => {
-          if (!isTabAuthorizationGenerationCurrent(generation)) return;
+          if (cancelled || !isTabAuthorizationGenerationCurrent(generation)) return;
+          trackEvent("browser.realtime-outcome", { outcome: "rejoin-failed" });
           setStatus("failed");
           console.warn("[WebPubSub] Failed to rejoin a subscribed group.");
         });

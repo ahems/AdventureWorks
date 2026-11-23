@@ -43,7 +43,7 @@ public class GenerateProductReviewEmbeddings
             var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
 
             var message = JsonSerializer.Serialize(new AiJobMessage { JobType = "review-embeddings" });
-            await aiJobQueueClient.SendMessageAsync(message);
+            await aiJobQueueClient.SendObservedMessageAsync(message);
 
             _logger.LogInformation("Enqueued review-embeddings job onto {queue}", AI_JOB_QUEUE);
 

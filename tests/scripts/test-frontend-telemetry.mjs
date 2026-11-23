@@ -31,6 +31,15 @@ export function summarizeEnvelopes(envelopes, role) {
            operationIds: [...operations].slice(0, 4) };
 }
 
+export function allSitesVerified(sites) {
+  return sites.length === SITES.length && SITES.every(([role]) => {
+    const matches = sites.filter(site => site.role === role);
+    return matches.length === 1 && !matches[0].error &&
+      matches[0].accepted > 0 && matches[0].accepted === matches[0].items &&
+      matches[0].roleMatches === true;
+  });
+}
+
 async function probe(browser, role, siteUrl) {
   const site = new URL(siteUrl);
   if (site.protocol !== "https:" || site.username || site.password) throw new Error(`${role} URL is not plain https`);
@@ -81,6 +90,10 @@ async function main() {
     await browser.close();
   }
   await writeFile(output, JSON.stringify({ schemaVersion: 1, sites }, null, 2) + "\n");
+  if (!allSitesVerified(sites)) {
+    console.error("Frontend telemetry was not fully accepted and correctly attributed for all three sites.");
+    process.exitCode = 1;
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

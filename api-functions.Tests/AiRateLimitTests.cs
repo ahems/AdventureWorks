@@ -196,7 +196,7 @@ public class AiRateLimitTests
         var limiter = CreateLimiter(store, options ?? new AiRateLimitOptions());
         if (primeClient)
             limiter.CheckAsync("198.51.100.7", AiRateLimitBucket.HelpMe).GetAwaiter().GetResult();
-        var telemetry = new TelemetryClient(new TelemetryConfiguration());
+        var telemetry = new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true });
         return new HelpMeChooseFunctions(NullLogger<HelpMeChooseFunctions>.Instance, null!, telemetry, limiter);
     }
 

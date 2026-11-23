@@ -23,7 +23,7 @@ hosted on **Azure Container Apps** with 0–1 replicas (azd service `mcp-inspect
 | File | Purpose |
 |---|---|
 | `gateway.mjs` | OAuth gateway: PKCE sign-in for the MCP and DAB audiences, shell page, `/proxy/mcp` Streamable HTTP proxy |
-| `telemetry.mjs` | Application Insights request telemetry (cloud role `mcp-inspector`): fixed route labels, no query strings, headers or bodies; operation ID from `traceparent`; flushed every 5 s and on shutdown |
+| `telemetry.mjs` | Application Insights requests and upstream HTTP dependencies (role `mcp-inspector`): valid W3C parent/span links, fixed sanitized URLs, bounded best-effort export; no query strings, headers or bodies |
 | `gateway.test.mjs` | `node --test` suite for the gateway |
 | `nginx.conf` | Public listener on port 80 that forwards to the loopback gateway |
 | `entrypoint.sh` | Starts the gateway, waits for `/health`, then starts nginx |
@@ -41,6 +41,11 @@ from a script instead, use `python3 scripts/utilities/azure-auth.py` (see
 [authenticated scripts](../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md)).
 
 ## Configuration
+
+Telemetry export has a 500-item buffer, one concurrent batch and a two-second send
+deadline. Drop/rejection/network diagnostics contain only fixed codes and are limited
+to once per minute. Requests never await export. Upstream MCP calls receive a child
+`traceparent`; transport success does not prove an MCP tool's logical success.
 
 Required: `API_MCP_URL`, `API_DAB_MCP_URL` and `MCP_PROXY_FULL_ADDRESS` (set by Bicep).
 `scripts/hooks/postdeploy.sh` registers the gateway callback on api-mcp. See

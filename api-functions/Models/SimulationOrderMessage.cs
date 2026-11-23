@@ -14,6 +14,7 @@ namespace api_functions.Models;
 /// </summary>
 public class SimulationOrderMessage
 {
+    public api_functions.Services.QueueTelemetryContext? Telemetry { get; set; }
     /// <summary>
     /// Target customer for the simulated order.
     /// Use <c>0</c> to let the agent pick a random new-customer persona.

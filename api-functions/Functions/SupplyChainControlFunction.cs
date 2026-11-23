@@ -167,7 +167,7 @@ public class SupplyChainControlFunction
         };
         string restockJson    = JsonSerializer.Serialize(restockMsg);
         string restockEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(restockJson));
-        await queueClient.SendMessageAsync(restockEncoded,
+        await queueClient.SendObservedMessageAsync(restockEncoded,
             visibilityTimeout: TimeSpan.FromSeconds(restockSec));
 
         await _webPubSub.SendToGroupAsync("supply-chain", new { @event = "po-created", productId, vendorId, qty });
@@ -440,7 +440,7 @@ public class SupplyChainControlFunction
                     };
                     string restockJson    = JsonSerializer.Serialize(restockMsg);
                     string restockEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(restockJson));
-                    var restockTask = queueClient.SendMessageAsync(restockEncoded,
+                    var restockTask = queueClient.SendObservedMessageAsync(restockEncoded,
                         visibilityTimeout: TimeSpan.FromSeconds(restockSec));
 
                     await Task.WhenAll(transitionTask, restockTask);
@@ -535,7 +535,7 @@ public class SupplyChainControlFunction
         };
         string json = JsonSerializer.Serialize(msg);
         string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
-        await queue.SendMessageAsync(encoded, visibilityTimeout: TimeSpan.FromSeconds(delaySec));
+        await queue.SendObservedMessageAsync(encoded, visibilityTimeout: TimeSpan.FromSeconds(delaySec));
     }
 
     // ── Response helpers ───────────────────────────────────────────────────────

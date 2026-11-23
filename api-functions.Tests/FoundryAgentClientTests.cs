@@ -32,6 +32,140 @@ namespace ApiFunctions.Tests;
 
 public class FoundryAgentClientTests
 {
+    [Fact]
+    public async Task Captured_job_retries_share_field_budget_and_stop_prevents_further_emissions()
+    {
+        using var root = new Activity("job-capture-fixture").SetIdFormat(ActivityIdFormat.W3C).Start();
+        var store = new CaptureFixtureStore("run-1");
+        var capture = new MonitoringCaptureService(store);
+        var exported = new TelemetryTestCapture();
+        using var configuration = exported.CreateConfiguration(privacy: true);
+        var telemetry = new TelemetryClient(configuration);
+        var lease = new api_functions.DTOs.CaptureLease("22222222222222222222222222222222", "job", "run-1", "run-1");
+        var fields = new Dictionary<string, string?> { ["output"] = string.Concat(Enumerable.Repeat("Safe content. ", 320))[..4096] };
+        for (var attempt = 0; attempt < 9; attempt++)
+            await FoundryAgentClient.EmitCapturedFieldsAsync(capture, telemetry, lease, fields, jobId: "run-1");
+        var events = exported.Items.OfType<EventTelemetry>().Where(item => item.Name == "GenAI.Capture").ToArray();
+        Assert.Equal(9, events.Length);
+        Assert.Equal(8, events.Count(item => item.Properties.ContainsKey("aw.capture.output")));
+        Assert.Equal("true", events[^1].Properties["aw.capture.output.omitted"]);
+        Assert.Equal(32768, store.Bytes);
+        Assert.Equal("run-1", Assert.Single(store.Roots));
+        Assert.All(events, item =>
+        {
+            Assert.Equal("run-1", item.Properties["job.id"]);
+            Assert.Equal(root.SpanId.ToHexString(), item.Properties["aw.capture.span_id"]);
+            Assert.Equal(root.TraceId.ToHexString(), item.Properties["otel.trace_id"]);
+        });
+        store.Stopped = true;
+        await FoundryAgentClient.EmitCapturedFieldsAsync(capture, telemetry, lease, fields);
+        Assert.Equal(9, exported.Items.OfType<EventTelemetry>().Count(item => item.Name == "GenAI.Capture"));
+    }
+
+    [Fact]
+    public async Task Capture_emitter_rejects_scope_mismatch_and_isolates_store_failure()
+    {
+        var store = new CaptureFixtureStore("run-1");
+        var exported = new TelemetryTestCapture();
+        using var configuration = exported.CreateConfiguration();
+        var lease = new api_functions.DTOs.CaptureLease("22222222222222222222222222222222", "job", "run-1", "run-1");
+        var fields = new Dictionary<string, string?> { ["input"] = "Safe input" };
+        var capture = new MonitoringCaptureService(store);
+        var telemetry = new TelemetryClient(configuration);
+        await FoundryAgentClient.EmitCapturedFieldsAsync(capture, telemetry, lease, fields, jobId: "foreign-run");
+        Assert.Equal(0, store.Bytes);
+        store.FailActivity = true;
+        await FoundryAgentClient.EmitCapturedFieldsAsync(capture, telemetry, lease, fields);
+        Assert.Empty(exported.Items.OfType<EventTelemetry>().Where(item => item.Name == "GenAI.Capture"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Owned_chat_session_admits_capture_and_requests_only_supported_official_summaries(bool owned)
+    {
+        const string session = "11111111111111111111111111111111";
+        using var root = new Activity("capture-fixture").SetIdFormat(ActivityIdFormat.W3C).Start();
+        var spans = new System.Collections.Concurrent.ConcurrentQueue<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == GenAiTelemetry.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
+                options.Parent.TraceId == root.TraceId ? ActivitySamplingResult.AllDataAndRecorded : ActivitySamplingResult.None,
+            ActivityStopped = span => { if (span.TraceId == root.TraceId) spans.Enqueue(span); }
+        };
+        ActivitySource.AddActivityListener(listener);
+        using var handler = new FoundryHandler
+        {
+            OwnershipResponse = JsonSerializer.Serialize(new
+            {
+                metadata = new { aw_chat_owner = owned ? "owner" : "foreign", aw_chat_agent = "agent", aw_monitoring_session = session }
+            }),
+            CustomResponse = """
+                {"id":"response","status":"completed","output":[
+                  {"type":"reasoning","encrypted_content":"hidden-private-marker","summary":[{"type":"summary_text","text":"Official summary"}]},
+                  {"type":"message","content":[{"type":"output_text","text":"Safe answer"}]}]}
+                """
+        };
+        var store = new CaptureFixtureStore(session);
+        var captured = new TelemetryTestCapture();
+        using var telemetry = captured.CreateConfiguration();
+        var client = new FoundryAgentClient(NullLogger<FoundryAgentClient>.Instance, new TelemetryClient(telemetry),
+            new TestCredential(), "https://foundry.test/api/projects/demo", new TestHttpClientFactory(handler),
+            capture: new MonitoringCaptureService(store), reasoningSummaryDeployments: new HashSet<string> { "chat" });
+        if (!owned)
+        {
+            await Assert.ThrowsAsync<ChatConversationException>(() => client.InvokeAsync("agent", "Input",
+                previousResponseId: "prior", conversationOwner: "owner", toolChoice: "none"));
+            Assert.Equal(0, store.Admissions);
+            Assert.Empty(handler.ResponseRequests);
+            return;
+        }
+        var response = await client.InvokeAsync("agent", "Input", previousResponseId: "prior",
+            conversationOwner: "owner", toolChoice: "none");
+        Assert.Equal(session, response.MonitoringSessionId);
+        Assert.Equal(1, store.Admissions);
+        var request = Assert.Single(handler.ResponseRequests);
+        Assert.Equal("auto", request.GetProperty("reasoning").GetProperty("summary").GetString());
+        Assert.False(request.GetProperty("reasoning").TryGetProperty("effort", out _));
+        Assert.Equal(session, request.GetProperty("metadata").GetProperty("aw_monitoring_session").GetString());
+        var model = Assert.Single(spans, span => span.GetTagItem("gen_ai.operation.name")?.ToString() == "chat");
+        var content = Assert.Single(captured.Items.OfType<EventTelemetry>(), item => item.Name == "GenAI.Capture");
+        Assert.Contains("Official summary", content.Properties["aw.capture.reasoningSummary"]);
+        Assert.Equal(model.SpanId.ToHexString(), content.Properties["aw.capture.span_id"]);
+        Assert.Null(model.GetTagItem("aw.capture.reasoningSummary"));
+        Assert.DoesNotContain("hidden-private-marker", string.Join("|", content.Properties.Values));
+        Assert.DoesNotContain("hidden-private-marker", string.Join("|", spans.SelectMany(span => span.TagObjects).Select(tag => tag.Value)));
+    }
+
+    private sealed class CaptureFixtureStore(string session) : IMonitoringCaptureStore
+    {
+        public int Admissions { get; private set; }
+        public int Bytes { get; private set; }
+        public HashSet<string> Roots { get; } = [];
+        public bool Stopped { get; set; }
+        public bool FailActivity { get; set; }
+        public Task<IReadOnlyList<api_functions.DTOs.CaptureGrant>> ListAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<api_functions.DTOs.CaptureGrant>>([new("22222222222222222222222222222222",
+                "session", session, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(15), 100, 0, "active")]);
+        public Task<api_functions.DTOs.CaptureLease?> AcquireAsync(string id, string type, string scope, string root, CancellationToken ct)
+        {
+            Admissions++;
+            return Task.FromResult<api_functions.DTOs.CaptureLease?>(new(id, type, scope, root));
+        }
+        public Task<bool> ActiveAsync(api_functions.DTOs.CaptureLease lease, CancellationToken ct) =>
+            FailActivity ? throw new InvalidOperationException("Capture store unavailable") : Task.FromResult(!Stopped);
+        public Task<bool> SpendAsync(api_functions.DTOs.CaptureLease lease, int bytes, CancellationToken ct)
+        {
+            Roots.Add(lease.RootOperationId);
+            if (Stopped || Bytes + bytes > 32768) return Task.FromResult(false);
+            Bytes += bytes;
+            return Task.FromResult(true);
+        }
+        public Task<api_functions.DTOs.CaptureGrant> CreateAsync(string type, string id, CancellationToken ct) => throw new NotSupportedException();
+        public Task<api_functions.DTOs.CaptureGrant?> StopAsync(string id, CancellationToken ct) => throw new NotSupportedException();
+    }
+
     [Theory]
     [InlineData("match")]
     [InlineData("mismatch")]
@@ -44,12 +178,8 @@ public class FoundryAgentClientTests
             ? "private.invalid.token"
             : MakeToken(expected == "mismatch" ? Guid.NewGuid() : clientId);
         using var handler = new FoundryHandler();
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = new FoundryAgentClient(NullLogger<FoundryAgentClient>.Instance,
             new TelemetryClient(telemetry), new SequencedCredential(token, token),
             "https://foundry.test/api/projects/demo", new TestHttpClientFactory(handler),
@@ -76,12 +206,8 @@ public class FoundryAgentClientTests
         var selected = MakeToken(clientId);
         var other = MakeToken(Guid.NewGuid());
         using var handler = new FoundryHandler { FirstResponseIsToolOnly = true };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var credential = new SequencedCredential(selected, other, selected);
         var client = new FoundryAgentClient(NullLogger<FoundryAgentClient>.Instance,
             new TelemetryClient(telemetry), credential,
@@ -104,12 +230,8 @@ public class FoundryAgentClientTests
         var clientId = Guid.NewGuid();
         var token = MakeToken(clientId);
         using var handler = new FoundryHandler { ResponseStatus = HttpStatusCode.Forbidden };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = new FoundryAgentClient(NullLogger<FoundryAgentClient>.Instance,
             new TelemetryClient(telemetry), new SequencedCredential(token, token),
             "https://foundry.test/api/projects/demo", new TestHttpClientFactory(handler),
@@ -131,7 +253,7 @@ public class FoundryAgentClientTests
             CustomResponse = """{"error":{"code":"permission_denied","type":"rate limit with spaces","message":"echoed private prompt"}}"""
         };
         var logger = new CapturingLogger<FoundryAgentClient>();
-        var client = new FoundryAgentClient(logger, new TelemetryClient(new TelemetryConfiguration()),
+        var client = new FoundryAgentClient(logger, new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }),
             new TestCredential(), "https://foundry.test/api/projects/demo",
             new TestHttpClientFactory(handler));
 
@@ -155,12 +277,8 @@ public class FoundryAgentClientTests
             DefinitionHasTools = false,
             DefinitionStatus = definitionAvailable ? HttpStatusCode.OK : HttpStatusCode.Forbidden
         };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = CreateClient(handler, telemetry);
 
         await client.InvokeAsync("agent", "Use supplied data", toolChoice: "none");
@@ -183,12 +301,8 @@ public class FoundryAgentClientTests
         {
             CustomResponse = """{"id":"resp-test","status":"completed","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"private reasoning"}]},{"type":"message","content":[{"type":"private text!","text":"hidden"}]}]}"""
         };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = CreateClient(handler, telemetry);
 
         var result = await client.InvokeAsync("agent", "Use supplied data", toolChoice: "none");
@@ -227,12 +341,8 @@ public class FoundryAgentClientTests
                 id = "resp-test", status = "completed", output = new[] { new { type } }
             })
         };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = CreateClient(handler, telemetry);
 
         await Assert.ThrowsAsync<FoundryToolPolicyException>(() =>
@@ -259,12 +369,8 @@ public class FoundryAgentClientTests
                 id = "resp-continuation", status = "completed", output = new[] { new { type } }
             })
         };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var client = CreateClient(handler, telemetry);
 
         await Assert.ThrowsAsync<FoundryToolPolicyException>(() =>
@@ -303,12 +409,8 @@ public class FoundryAgentClientTests
     public async Task Draft_generation_uses_tool_free_definition_without_fallback_augmentation()
     {
         using var handler = new FoundryHandler { DefinitionHasTools = false };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
 
         await CreateClient(handler, telemetry).InvokeAsync(
             "manufacturing-content-agent", "Draft", toolChoice: "none", requireConfiguredDefinition: true);
@@ -1026,13 +1128,8 @@ public class FoundryAgentClientTests
                 _ => """{"subject":"Synthetic subject","body":"Synthetic body"}"""
             }
         };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
-        telemetry.TelemetryInitializers.Add(new OperationCorrelationTelemetryInitializer());
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var telemetryClient = new TelemetryClient(telemetry);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -1063,7 +1160,7 @@ public class FoundryAgentClientTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var completed = Assert.Single(channel.Items.OfType<EventTelemetry>(),
             item => item.Name == "Foundry.Responses.Completed");
-        Assert.Equal(traceId, completed.Context.Operation.Id);
+        Assert.Equal(traceId, completed.Properties["otel.trace_id"]);
         Assert.Same(outer, Activity.Current);
     }
 
@@ -1797,12 +1894,8 @@ public class FoundryAgentClientTests
     public async Task Mutation_services_use_provisioned_tools_and_exact_scopes_before_persistence(string operation)
     {
         using var handler = new FoundryHandler { DefinitionToolsJson = new JsonArray(MutationAgentTool(operation)).ToJsonString() };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var provider = new StubServiceTokenProvider(handler, "https://mcp.test/mcp");
         var client = CreateClient(handler, telemetry, provider, "https://mcp.test/mcp");
         var configuration = MutationAgentConfiguration();
@@ -2102,12 +2195,8 @@ public class FoundryAgentClientTests
     public async Task Customer_chat_delegates_request_scoped_tokens_and_traces_without_caching_them()
     {
         using var handler = new FoundryHandler { DefinitionToolsJson = "[" + CustomerChatTool + "]" };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var provider = new StubServiceTokenProvider(handler, "https://mcp.test/mcp");
         var client = CreateClient(handler, telemetry, provider, "https://mcp.test/mcp");
         var traces = new List<string>();
@@ -2139,12 +2228,8 @@ public class FoundryAgentClientTests
     public async Task Admin_chat_uses_only_delegated_tokens_and_records_guarded_policy()
     {
         using var handler = new FoundryHandler { DefinitionToolsJson = "[" + AdminChatTool + "]" };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var provider = new StubServiceTokenProvider(handler, "https://mcp.test/mcp");
         var client = CreateClient(handler, telemetry, provider, "https://mcp.test/mcp");
         using var activity = new Activity("admin-chat-test").SetIdFormat(ActivityIdFormat.W3C).Start();
@@ -2355,12 +2440,8 @@ public class FoundryAgentClientTests
     public async Task Public_catalog_policy_sends_only_the_validated_definition_with_a_scoped_token()
     {
         using var handler = new FoundryHandler { DefinitionToolsJson = "[" + PublicCatalogTool + "]" };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var provider = new StubServiceTokenProvider(handler, "https://mcp.test/mcp");
         var client = CreateClient(handler, telemetry, provider, "https://mcp.test/mcp");
 
@@ -2414,12 +2495,8 @@ public class FoundryAgentClientTests
             ToolName = "search_products",
             ToolResult = result
         };
-        var channel = new CapturingTelemetryChannel();
-        using var telemetry = new TelemetryConfiguration
-        {
-            ConnectionString = $"InstrumentationKey={Guid.NewGuid()}",
-            TelemetryChannel = channel
-        };
+        var channel = new TelemetryTestCapture();
+        using var telemetry = channel.CreateConfiguration();
         var provider = new StubServiceTokenProvider(handler, "https://mcp.test/mcp");
         var client = CreateClient(handler, telemetry, provider, "https://mcp.test/mcp");
 
@@ -2950,16 +3027,6 @@ public class FoundryAgentClientTests
         public override ValueTask<AccessToken> GetTokenAsync(
             TokenRequestContext requestContext, CancellationToken cancellationToken) =>
             ValueTask.FromResult(GetToken(requestContext, cancellationToken));
-    }
-
-    private sealed class CapturingTelemetryChannel : ITelemetryChannel
-    {
-        public List<ITelemetry> Items { get; } = [];
-        public bool? DeveloperMode { get; set; }
-        public string EndpointAddress { get; set; } = string.Empty;
-        public void Send(ITelemetry item) => Items.Add(item);
-        public void Flush() { }
-        public void Dispose() { }
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

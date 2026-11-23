@@ -410,7 +410,8 @@ test("frontends contain no recurring network polling; only verified display cloc
             assert.ok(!["refetchInterval", "refetchIntervalInBackground"].includes(name), `${url.pathname}: ${name}`);
           }
           if (ts.isCallExpression(node) && /(^|\.)setInterval$/.test(node.expression.getText(source))) {
-            assert.ok(["UtilityStatusPanel.tsx", "HealthCheckPage.tsx"].includes(entry.name),
+            assert.ok(["UtilityStatusPanel.tsx", "HealthCheckPage.tsx"].includes(entry.name) ||
+              url.pathname.endsWith("/app-admin/src/pages/MonitoringPage.tsx"),
               `${url.pathname}: interval is not a display clock`);
             const callback = node.arguments[0];
             assert.ok(callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)));
@@ -440,6 +441,7 @@ async function loadSocket(app, fetchResponse) {
   const clients = [];
   const cleanups = [];
   const requests = [];
+  const telemetry = [];
   let generation = "test-session";
   let sessionGeneration = 0;
   const sessionListeners = new Set();
@@ -486,14 +488,16 @@ async function loadSocket(app, fetchResponse) {
             subscribeEshopSession: listener => { sessionListeners.add(listener); return () => sessionListeners.delete(listener); },
             isTabAuthorizationGenerationCurrent: expected => expected === generation,
           }
-        : { getFunctionsApiUrl: () => "https://functions.example", getWebPubSubNegotiateUrl: () => "https://functions.example/api/webpubsub/negotiate" };
+        : name === "@/lib/appInsights"
+          ? { trackEvent: (name, properties) => telemetry.push({ name, properties }) }
+          : { getFunctionsApiUrl: () => "https://functions.example", getWebPubSubNegotiateUrl: () => "https://functions.example/api/webpubsub/negotiate" };
     return new vm.SyntheticModule(Object.keys(exports), function () {
       for (const [key, value] of Object.entries(exports)) this.setExport(key, value);
     }, { context });
   });
   await module.evaluate();
   const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-  return { api: module.namespace, timers, warnings, clients, cleanups, requests, settle,
+  return { api: module.namespace, timers, warnings, clients, cleanups, requests, telemetry, settle,
     setGeneration: value => { generation = value; }, fetches: () => fetches,
     changeEshopSession: () => { sessionGeneration++; sessionListeners.forEach(listener => listener()); } };
 }
@@ -551,7 +555,7 @@ for (const app of ["app", "app-admin"]) {
   });
 
   test(`${app} socket reports availability, rejects malformed messages and ignores cleanup-time events`, async () => {
-    const env = await loadSocket(app, async () => ({ ok: true, json: async () => ({ url: "wss://socket.example" }) }));
+    const env = await loadSocket(app, async () => ({ ok: true, json: async () => ({ url: "wss://socket.example?access_token=private-marker" }) }));
     const messages = [];
     env.api.useWebPubSub(["orders"], (...args) => messages.push(args));
     await env.settle();
@@ -560,6 +564,7 @@ for (const app of ["app", "app-admin"]) {
     assert.equal(env.requests[0][0], "https://functions.example/api/webpubsub/negotiate");
     assert.equal(env.timers.size, 0);
     const client = env.clients[0];
+    const outcomesBeforeMessages = env.telemetry.length;
     const emit = data => client.handlers["group-message"]({ message: { group: "orders", data } });
     emit("not-json");
     emit("null");
@@ -569,17 +574,23 @@ for (const app of ["app", "app-admin"]) {
     assert.equal(env.warnings.length, 3);
     emit('{"event":"cart-changed"}');
     assert.equal(messages.length, 1);
+    assert.equal(env.telemetry.length, outcomesBeforeMessages, "messages must not create telemetry events");
     client.handlers.disconnected();
     assert.equal(env.api.getWebPubSubStatus(), "disconnected");
     client.handlers.connected();
     assert.equal(env.api.getWebPubSubStatus(), "connected");
     client.handlers["rejoin-group-failed"]();
     assert.equal(env.api.getWebPubSubStatus(), "failed");
+    assert.ok(env.telemetry.some(event => event.properties.outcome === "rejoin-failed"));
+    assert.ok(!JSON.stringify(env.telemetry).includes("private-marker"), "signed negotiate URL must never be telemetry");
+    assert.ok(env.telemetry.every(event => event.name === "browser.realtime-outcome"));
+    const outcomesBeforeCleanup = env.telemetry.length;
     env.cleanups[0]();
     emit('{"event":"cart-changed"}');
     assert.equal(messages.length, 1);
     assert.equal(env.fetches(), 1);
     assert.equal(env.timers.size, 0);
+    assert.equal(env.telemetry.length, outcomesBeforeCleanup, "cleanup-time events must not create telemetry");
   });
 
   test(`${app} negotiation failure/timeout are explicit and never schedule polling`, async () => {

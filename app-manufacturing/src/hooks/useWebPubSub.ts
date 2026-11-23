@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { WEB_PUBSUB_NEGOTIATE_URL } from "@/config/api";
+import { trackEvent } from "@/lib/appInsights";
 import {
   getFunctionsAccessToken,
   getTabAuthorizationGeneration,
@@ -31,6 +32,12 @@ export function useWebPubSub(
     const subscribedGroups = new Set(groupsKey.split(",").filter(Boolean));
     let cancelled = false;
     const abortController = new AbortController();
+    let lastOutcome = "connecting";
+    const reportStatus = (outcome: "connecting" | "live" | "reconnecting" | "unavailable") => {
+      if (outcome !== lastOutcome) trackEvent("browser.realtime-outcome", { outcome });
+      lastOutcome = outcome;
+      setStatus(outcome);
+    };
     setStatus("connecting");
 
     const client = new WebPubSubClient({
@@ -63,17 +70,18 @@ export function useWebPubSub(
 
     client.on("connected", () => {
       if (cancelled || !isTabAuthorizationGenerationCurrent(generation)) return;
-      setStatus("live");
+      reportStatus("live");
       onConnectedRef.current?.();
     });
     client.on("disconnected", () => {
-      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) setStatus("reconnecting");
+      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) reportStatus("reconnecting");
     });
     client.on("stopped", () => {
-      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) setStatus("unavailable");
+      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) reportStatus("unavailable");
     });
     client.on("rejoin-group-failed", () => {
-      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) setStatus("unavailable");
+      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) trackEvent("browser.realtime-outcome", { outcome: "rejoin-failed" });
+      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) reportStatus("unavailable");
     });
     client.on("group-message", (e) => {
       if (cancelled || !isTabAuthorizationGenerationCurrent(generation) || !subscribedGroups.has(e.message.group)) return;
@@ -96,12 +104,12 @@ export function useWebPubSub(
       try {
         await client.start();
         if (!isTabAuthorizationGenerationCurrent(generation)) {
-          setStatus("unavailable");
+          reportStatus("unavailable");
           await client.stop();
         }
       } catch (err) {
         if (cancelled) return;
-        setStatus("unavailable");
+        reportStatus("unavailable");
         console.warn("[WebPubSub] Connection failed — data may be stale.", err);
       }
     }

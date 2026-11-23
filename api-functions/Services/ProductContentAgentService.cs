@@ -62,7 +62,7 @@ public class ProductContentAgentService
         string? previousResponseId = null,
         string? conversationOwner = null)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("ProductContentAgent.Generate");
+        using var operation = _telemetryClient.StartOperation<DependencyTelemetry>("ProductContentAgent.Generate");
         operation.Telemetry.Properties["Category"] = request.Category;
         operation.Telemetry.Properties["Subcategory"] = request.Subcategory;
         operation.Telemetry.Properties["HasPreviousResponse"] = (!string.IsNullOrEmpty(previousResponseId)).ToString();

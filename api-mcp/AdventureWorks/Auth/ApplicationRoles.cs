@@ -106,6 +106,7 @@ public static class ApplicationRoles
             OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
             OAuthScopes.CustomersWrite, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.OrdersRead,
             OAuthScopes.OrdersWrite, OAuthScopes.AdminRead, OAuthScopes.AdminWrite, OAuthScopes.McpAdmin,
+            OAuthScopes.MonitoringRead, OAuthScopes.MonitoringWrite,
         },
         [ManufacturingEngineer] = new[]
         {

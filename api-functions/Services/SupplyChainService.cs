@@ -552,7 +552,7 @@ public class SupplyChainService
             };
             string json    = System.Text.Json.JsonSerializer.Serialize(msg);
             string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
-            await queueClient.SendMessageAsync(encoded,
+            await queueClient.SendObservedMessageAsync(encoded,
                 visibilityTimeout: TimeSpan.FromSeconds(approvalDelaySec));
 
             // Also enqueue vendor restock (supplier knows to replenish when PO is placed)
@@ -573,7 +573,7 @@ public class SupplyChainService
             };
             string restockJson    = System.Text.Json.JsonSerializer.Serialize(restockMsg);
             string restockEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(restockJson));
-            await queueClient.SendMessageAsync(restockEncoded,
+            await queueClient.SendObservedMessageAsync(restockEncoded,
                 visibilityTimeout: TimeSpan.FromSeconds(restockSec));
 
             // Mark this PO as recently injected so subsequent calls within 10 min skip it.

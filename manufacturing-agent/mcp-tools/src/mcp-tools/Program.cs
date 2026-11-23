@@ -20,6 +20,11 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry.Hosting;
 using Microsoft.Extensions.AI;
 using McpTools;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Logs;
 
 // Load .env file if present (for local development)
 Env.NoClobber().TraversePath().Load();
@@ -140,6 +145,8 @@ AIAgent agent = new AIProjectClient(projectEndpoint, credential)
         name: "manufacturing-agent",
         description: "Autonomous manufacturing and supply chain agent triggered when new orders are placed.")
     .AsBuilder()
+    .UseOpenTelemetry(sourceName: "AdventureWorks.ManufacturingAgent",
+        configure: telemetry => telemetry.EnableSensitiveData = false)
     .Use(async (messages, session, options, next, cancellationToken) =>
     {
         var mode = McpServiceAuthentication.GetModeFromMessages(messages.Select(message => message.Text));
@@ -162,6 +169,24 @@ AIAgent agent = new AIProjectClient(projectEndpoint, credential)
     .Build();
 
 var builder = AgentHost.CreateBuilder(args);
+builder.WebApplicationBuilder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+builder.WebApplicationBuilder.Logging.AddFilter("Azure", LogLevel.Warning);
+builder.WebApplicationBuilder.Logging.AddConsole(options =>
+{
+    options.FormatterName = "adventureworks-safe";
+    options.LogToStandardErrorThreshold = LogLevel.Trace;
+}).AddConsoleFormatter<AdventureWorks.Telemetry.SafeConsoleFormatter, Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>();
+// AgentHost already owns export. Extend its provider and the agent pipeline, not a second distro.
+builder.ConfigureTracing(tracing => tracing.AddSource("AdventureWorks.ManufacturingAgent",
+    "Experimental.Microsoft.Extensions.AI", "Microsoft.Extensions.AI*", "Azure.*", "OpenAI*", "Experimental.OpenAI*")
+    .AddProcessor(new AdventureWorks.Telemetry.TelemetryPrivacyProcessor()));
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("manufacturing-agent"))
+    .WithMetrics(metrics => metrics.AddMeter("AdventureWorks.ManufacturingAgent",
+        "Experimental.Microsoft.Extensions.AI", "Microsoft.Extensions.AI*", "AdventureWorks.Telemetry").AddRuntimeInstrumentation());
+builder.Services.ConfigureOpenTelemetryLoggerProvider(logging =>
+    logging.AddProcessor(new AdventureWorks.Telemetry.TelemetryLogPrivacyProcessor()));
+builder.Services.AddHostedService<AdventureWorks.Telemetry.ExporterDiagnostics>();
 builder.Services.AddFoundryResponses(agent);
 builder.RegisterProtocol("responses", endpoints => endpoints.MapFoundryResponses());
 

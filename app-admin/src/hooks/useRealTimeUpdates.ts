@@ -10,6 +10,10 @@ const GROUPS = [
   "reviews",
   "promotions",
   "utilities",
+  "manufacturing-agent",
+  "manufacturing-ops",
+  "supply-chain",
+  "finance",
 ];
 
 const QUERY_KEYS: Record<string, string[][]> = {

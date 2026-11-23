@@ -9,6 +9,7 @@ using Azure.Storage.Queues;
 using Azure.Identity;
 using Microsoft.Data.SqlClient;
 using Dapper;
+using api_functions.Services;
 
 namespace api_functions.Functions;
 
@@ -137,7 +138,7 @@ public class GenerateMissingReceiptsFunction
         foreach (var orderNumber in missing)
         {
             var message = JsonSerializer.Serialize(new { SalesOrderNumber = orderNumber });
-            await queueClient.SendMessageAsync(message);
+            await queueClient.SendObservedMessageAsync(message);
         }
 
         _logger.LogInformation("GenerateMissingReceipts: enqueued {count} receipt generation jobs", missing.Count);

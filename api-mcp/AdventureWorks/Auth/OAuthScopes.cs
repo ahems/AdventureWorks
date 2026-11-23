@@ -62,6 +62,8 @@ public static class OAuthScopes
 
     /// <summary>Security-sensitive / broad MCP administration (e.g. simulator reset).</summary>
     public const string McpAdmin = "mcp.admin";
+    public const string MonitoringRead = "monitoring.read";
+    public const string MonitoringWrite = "monitoring.write";
 
     /// <summary>Human-readable descriptions surfaced in metadata and the inspection UI.</summary>
     public static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
@@ -80,6 +82,8 @@ public static class OAuthScopes
         [AdminRead] = "Read internal administration data",
         [AdminWrite] = "Perform internal administration actions",
         [McpAdmin] = "Administer the MCP server (sensitive operations)",
+        [MonitoringRead] = "Read sanitized application monitoring snapshots",
+        [MonitoringWrite] = "Start and stop bounded session/job diagnostic capture",
     };
 
     /// <summary>All scopes in advertisement order.</summary>
@@ -99,6 +103,8 @@ public static class OAuthScopes
         AdminRead,
         AdminWrite,
         McpAdmin,
+        MonitoringRead,
+        MonitoringWrite,
     };
 
     public static bool IsKnown(string scope) => Descriptions.ContainsKey(scope);
