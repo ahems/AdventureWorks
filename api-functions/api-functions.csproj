@@ -24,6 +24,7 @@
     <Compile Include="../api-mcp/AdventureWorks/Telemetry/TelemetryPrivacyProcessor.cs" Link="Telemetry/TelemetryPrivacyProcessor.cs" />
     <Compile Include="../api-mcp/AdventureWorks/Telemetry/ExporterDiagnostics.cs" Link="Telemetry/ExporterDiagnostics.cs" />
     <Compile Include="../api-mcp/AdventureWorks/Telemetry/SafeConsoleFormatter.cs" Link="Telemetry/SafeConsoleFormatter.cs" />
+    <Compile Include="../api-mcp/AdventureWorks/Telemetry/GenAiTelemetry.cs" Link="Services/GenAiTelemetry.cs" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.2.0-beta.10" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />

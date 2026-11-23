@@ -22,9 +22,6 @@
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="3.2.0" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="../../api-functions/Services/GenAiTelemetry.cs" Link="Telemetry/GenAiTelemetry.cs" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>
