@@ -78,7 +78,6 @@ public sealed class ReviewVoteFunctions(
     {
         var response = request.CreateResponse(status);
         await response.WriteAsJsonAsync(body);
-        response.StatusCode = status;
         return response;
     }
 }

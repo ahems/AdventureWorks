@@ -410,10 +410,13 @@ public class OrderGenerationAgentService
             {
                 OrderPlanValidationException validationEx => validationEx.FailureCode,
                 DuplicateEmailAddressException => OrderPlanFailureCodes.DuplicateCustomerEmail,
+                FoundryCapacityException => OrderPlanFailureCodes.ModelCapacity,
                 JsonException => OrderPlanFailureCodes.InvalidJson,
                 _ => OrderPlanFailureCodes.UnhandledError,
             };
             result.FailureCode = failureCode;
+            if (ex is FoundryCapacityException capacity)
+                result.RetryAfterSeconds = capacity.RetryAfterSeconds;
 
             if (!string.IsNullOrWhiteSpace(rawResponse))
             {
@@ -680,6 +683,8 @@ public class OrderGenerationResult
     public string? ReceiptPdfBase64 { get; set; }
     public string? FailureCode { get; set; }
     public string? ErrorMessage { get; set; }
+    /// <summary>Set when the model deployment was at capacity; the caller can retry after this delay.</summary>
+    public int? RetryAfterSeconds { get; set; }
     public List<OrderGenLogEntry> Log { get; set; } = new();
     /// <summary>
     /// Foundry response ID. Pass back as previousResponseId in subsequent calls to continue
@@ -761,5 +766,6 @@ public static class OrderPlanFailureCodes
     public const string NoValidAiPlannedItems = "no_valid_ai_planned_items";
     public const string DuplicateCustomerEmail = "duplicate_customer_email";
     public const string CheckoutRejected = "checkout_rejected";
+    public const string ModelCapacity = "model_capacity";
     public const string UnhandledError = "unhandled_error";
 }

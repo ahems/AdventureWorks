@@ -141,7 +141,8 @@ All use `unittest`. Run one module with
 | [`test_agent_tools_config.py`](test_agent_tools_config.py) | Foundry agent definition tool lists | Yes |
 | [`test_manufacturing_agent_tools.py`](test_manufacturing_agent_tools.py) | The hosted Manufacturing agent's MCP tool service and its authentication | Yes |
 | [`test_keyvault_firewall.py`](test_keyvault_firewall.py) | Postprovision Key Vault certificate block with mocked `az`. Run directly: `python3 -B tests/scripts/test_keyvault_firewall.py`. A template test also needs the Bicep CLI. | `KeyVaultFirewallTests` only |
-| [`test_localized_catalog_queries.py`](test_localized_catalog_queries.py) | Source guard: SQL returning localized category names must select one culture | No |
+| [`test_localized_catalog_queries.py`](test_localized_catalog_queries.py) | Source guard: SQL joining the localized category or subcategory tables must select one culture or deduplicate | No |
+| [`test_trigger_output_clauses.py`](test_trigger_output_clauses.py) | Source guard: DML on realtime-outbox trigger tables must use `OUTPUT ... INTO` (SQL Server rejects a bare `OUTPUT` there) | No |
 | [`test_github_deployer_setup.py`](test_github_deployer_setup.py), [`test_github_deployment_identity.py`](test_github_deployment_identity.py), [`test_github_deployment_name.py`](test_github_deployment_name.py), [`test_github_oidc_az.py`](test_github_oidc_az.py) | GitHub deployment workflow setup, identity, naming and OIDC renewal with a fake `az` | No |
 | [`test_recover_azd_env.py`](test_recover_azd_env.py) | `scripts/utilities/recover-azd-env.py` with mocked `az`/`azd` | No |
 | [`test_seed_job_execution.py`](test_seed_job_execution.py) | The `scripts/hooks/seed-job-execution.sh` hook helper | No |
@@ -317,7 +318,7 @@ app runs with it `enforced`.
 | `node tests/scripts/test-chat-guardrails.mjs` | Storefront chat refusals and normal answers. Set `API_FUNCTIONS_URL`, `API_MCP_URL`, `CHAT_TEST_EMAIL` and `CHAT_TEST_PASSWORD` to a disposable consumer. | AI cost |
 | `bash tests/scripts/test-product-comparison.sh` | Anonymous DAB GraphQL product reads for the compare page; reads `API_URL` from the selected azd environment unless `API_URL` is set | Read-only |
 | `bash tests/scripts/test-search-suggestions.sh [query]` | Anonymous `/api/search/suggestions`; `API_FUNCTIONS_URL` defaults to the azd value | Read-only |
-| `bash tests/scripts/test-robots-sitemap.sh` | Anonymous robots and sitemap; writes results under `/workspaces/AdventureWorks/test-results` | Read-only |
+| `bash tests/scripts/test-robots-sitemap.sh` | Anonymous robots and sitemap; writes results under the repository's ignored `test-results/` (override with `TEST_RESULTS_DIR`) | Read-only |
 | `bash tests/scripts/test-product-reviews.sh [api-url]` | Anonymous DAB `ProductReview` create and update; deployed DAB grants anonymous `read` only, so the writes are denied | Mutating (local only) |
 | `bash tests/scripts/test-receipt-generation.sh [functions-url]` | Starts the receipt-generation orchestration (admin route; no token sent) | Mutating |
 | `bash tests/scripts/test-send-email.sh` | Sends a customer email (admin route; no token sent) | Email |

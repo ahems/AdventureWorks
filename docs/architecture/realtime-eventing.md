@@ -145,6 +145,11 @@ writes a row to `dbo.RealtimeNotificationOutbox` inside the same transaction. On
 Functions SQL trigger, `DatabaseChanges`, watches the outbox and publishes a coalesced
 `database-changed` event (`{entity, changeTypes}`) to the mapped groups.
 
+Because these tables have triggers, SQL Server rejects `INSERT`/`UPDATE`/`DELETE ... OUTPUT`
+without `INTO` on them. Service SQL must use `OUTPUT ... INTO @table` or read the row back
+afterwards; [`test_trigger_output_clauses.py`](../../tests/scripts/test_trigger_output_clauses.py)
+enforces this.
+
 ```mermaid
 sequenceDiagram
   autonumber

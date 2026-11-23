@@ -18,7 +18,6 @@ public sealed class GetManufacturingPartDocuments(
         {
             var bad = req.CreateResponse(HttpStatusCode.BadRequest);
             await bad.WriteAsJsonAsync(new { error = "A productId between 1 and 99999 is required." }, cancellationToken);
-            bad.StatusCode = HttpStatusCode.BadRequest;
             return bad;
         }
         try
@@ -33,7 +32,6 @@ public sealed class GetManufacturingPartDocuments(
             logger.LogError(ex, "Failed to read documents for part {ProductId}", productId);
             var error = req.CreateResponse(HttpStatusCode.InternalServerError);
             await error.WriteAsJsonAsync(new { error = "Part documents could not be loaded." }, cancellationToken);
-            error.StatusCode = HttpStatusCode.InternalServerError;
             return error;
         }
     }

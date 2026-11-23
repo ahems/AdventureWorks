@@ -1,6 +1,6 @@
 # AdventureWorks E-Commerce - Robots.txt
 # Template: scripts/hooks/predeploy.sh writes app/public/robots.txt from this
-# file, replacing {{APP_URL}} with the deployed storefront origin.
+# file, replacing the APP_URL placeholder with the deployed storefront origin.
 
 # ============================================
 # Major Search Engines

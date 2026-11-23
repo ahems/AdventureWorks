@@ -202,7 +202,21 @@ public sealed class ReviewVoteFunctionsTests
 
     private sealed class Response(FunctionContext context) : HttpResponseData(context)
     {
-        public override HttpStatusCode StatusCode { get; set; }
+        private HttpStatusCode _statusCode;
+
+        // Mirrors the ASP.NET Core host, which rejects status changes once the body has started.
+        public override HttpStatusCode StatusCode
+        {
+            get => _statusCode;
+            set
+            {
+                if (Body.Length > 0)
+                {
+                    throw new InvalidOperationException("StatusCode cannot be set because the response has already started.");
+                }
+                _statusCode = value;
+            }
+        }
         public override HttpHeadersCollection Headers { get; set; } = new();
         public override Stream Body { get; set; } = new MemoryStream();
         public override HttpCookies Cookies => throw new NotSupportedException();

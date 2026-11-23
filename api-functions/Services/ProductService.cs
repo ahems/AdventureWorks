@@ -61,8 +61,8 @@ public class ProductService
                 pd.Description,
                 p.ModifiedDate
             FROM Production.Product p
-            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID AND RTRIM(ps.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
             LEFT JOIN Production.ProductModelProductDescriptionCulture pmpdc ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
             LEFT JOIN Production.ProductDescription pd ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
@@ -254,8 +254,8 @@ public class ProductService
             INNER JOIN Production.ProductModelProductDescriptionCulture pmx
                 ON pd.ProductDescriptionID = pmx.ProductDescriptionID
             LEFT JOIN Production.Product p ON p.ProductModelID = pmx.ProductModelID
-            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID AND RTRIM(ps.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             WHERE pd.DescriptionEmbedding IS NULL
               AND (p.FinishedGoodsFlag = 1 OR p.FinishedGoodsFlag IS NULL)
             GROUP BY pd.ProductDescriptionID, pd.Description, pmx.CultureID, pmx.ProductModelID
@@ -340,8 +340,8 @@ public class ProductService
                 p.Style,
                 COUNT(DISTINCT ppp.ProductPhotoID) AS ExistingPhotoCount
             FROM Production.Product p
-            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID AND RTRIM(ps.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
             LEFT JOIN Production.ProductModelProductDescriptionCulture pmx 
                 ON pm.ProductModelID = pmx.ProductModelID AND pmx.CultureID = 'en'
@@ -373,8 +373,8 @@ public class ProductService
                 p.Style,
                 COUNT(DISTINCT ppp.ProductPhotoID) AS ExistingPhotoCount
             FROM Production.Product p
-            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID AND RTRIM(ps.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
             LEFT JOIN Production.ProductModelProductDescriptionCulture pmx 
                 ON pm.ProductModelID = pmx.ProductModelID AND pmx.CultureID = 'en'

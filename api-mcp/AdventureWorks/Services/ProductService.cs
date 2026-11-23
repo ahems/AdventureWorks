@@ -57,8 +57,8 @@ public class ProductService
                 pd.Description,
                 p.ModifiedDate
             FROM Production.Product p
-            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID AND RTRIM(ps.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
             LEFT JOIN Production.ProductModelProductDescriptionCulture pmpdc ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
             LEFT JOIN Production.ProductDescription pd ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
@@ -475,8 +475,8 @@ public class ProductService
                 ON pm.ProductModelID = pmpdc.ProductModelID
             INNER JOIN Production.ProductDescription pd 
                 ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
-            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID AND RTRIM(ps.CultureID) = 'en'
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID AND RTRIM(pc.CultureID) = 'en'
             WHERE p.FinishedGoodsFlag = 1
               AND pd.DescriptionEmbedding IS NOT NULL
               AND pmpdc.CultureID = @CultureId

@@ -121,7 +121,7 @@ public class ReportingService
             FROM Sales.SalesOrderDetail od
             INNER JOIN Sales.SalesOrderHeader soh ON od.SalesOrderID = soh.SalesOrderID
             INNER JOIN Production.Product p ON od.ProductID = p.ProductID
-            INNER JOIN Production.ProductSubcategory sc ON p.ProductSubcategoryID = sc.ProductSubcategoryID
+            INNER JOIN Production.ProductSubcategory sc ON p.ProductSubcategoryID = sc.ProductSubcategoryID AND RTRIM(sc.CultureID) = 'en'
             INNER JOIN Production.ProductCategory pc ON sc.ProductCategoryID = pc.ProductCategoryID
                 AND RTRIM(pc.CultureID) = 'en'
             WHERE (@ChannelFlag IS NULL OR soh.OnlineOrderFlag = @ChannelFlag)
@@ -217,7 +217,7 @@ public class ReportingService
                 COUNT(DISTINCT p.ProductID) AS ProductCount
             FROM Production.ProductInventory pi
             INNER JOIN Production.Product p ON pi.ProductID = p.ProductID
-            INNER JOIN Production.ProductSubcategory sc ON p.ProductSubcategoryID = sc.ProductSubcategoryID
+            INNER JOIN Production.ProductSubcategory sc ON p.ProductSubcategoryID = sc.ProductSubcategoryID AND RTRIM(sc.CultureID) = 'en'
             INNER JOIN Production.ProductCategory pc ON sc.ProductCategoryID = pc.ProductCategoryID
                 AND RTRIM(pc.CultureID) = 'en'
             GROUP BY pc.ProductCategoryID, pc.Name
@@ -329,6 +329,7 @@ public class ReportingService
                AND (@ChannelFlag IS NULL OR soh.OnlineOrderFlag = @ChannelFlag)
             LEFT JOIN Production.ProductSubcategory sc
                 ON p.ProductSubcategoryID = sc.ProductSubcategoryID
+                AND RTRIM(sc.CultureID) = 'en'
             LEFT JOIN Production.ProductCategory pc
                 ON sc.ProductCategoryID = pc.ProductCategoryID
                AND RTRIM(pc.CultureID) = 'en'
@@ -358,7 +359,7 @@ public class ReportingService
             FROM Sales.SalesOrderDetail od
             INNER JOIN Sales.SalesOrderHeader soh ON od.SalesOrderID = soh.SalesOrderID
             INNER JOIN Production.Product p ON od.ProductID = p.ProductID
-            INNER JOIN Production.ProductSubcategory sc ON p.ProductSubcategoryID = sc.ProductSubcategoryID
+            INNER JOIN Production.ProductSubcategory sc ON p.ProductSubcategoryID = sc.ProductSubcategoryID AND RTRIM(sc.CultureID) = 'en'
             INNER JOIN Production.ProductCategory pc ON sc.ProductCategoryID = pc.ProductCategoryID
                 AND RTRIM(pc.CultureID) = 'en'
             WHERE soh.Status NOT IN (4, 6)
@@ -461,6 +462,7 @@ public class ReportingService
             LEFT JOIN AllSales als           ON p.ProductID = als.ProductID
             LEFT JOIN Production.ProductSubcategory sc
                 ON p.ProductSubcategoryID = sc.ProductSubcategoryID
+                AND RTRIM(sc.CultureID) = 'en'
             LEFT JOIN Production.ProductCategory pc
                 ON sc.ProductCategoryID = pc.ProductCategoryID
                AND RTRIM(pc.CultureID) = 'en'

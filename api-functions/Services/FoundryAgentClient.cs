@@ -538,6 +538,8 @@ public class FoundryAgentClient
                     SerializedBytes(requestBody.Input),
                     SerializedBytes(requestBody.Tools),
                     SerializedBytes(requestBody.StructuredInputs));
+                if ((int)httpResponse.StatusCode == 429)
+                    throw new FoundryCapacityException(httpResponse.Headers.RetryAfter?.Delta);
                 throw new InvalidOperationException(
                     $"Foundry Responses API failed ({(int)httpResponse.StatusCode})");
             }
@@ -1539,6 +1541,13 @@ internal sealed class FoundryResponsesRequest
 }
 
 public sealed class FoundryGuardrailException() : Exception("Foundry blocked this content under the configured safety policy.");
+
+/// <summary>Foundry still returned 429 after any transient retries: the model deployment is at capacity.</summary>
+public sealed class FoundryCapacityException(TimeSpan? retryAfter)
+    : InvalidOperationException("Foundry Responses API failed (429)")
+{
+    public int RetryAfterSeconds { get; } = (int)Math.Clamp(retryAfter?.TotalSeconds ?? 30, 1, 120);
+}
 
 public sealed class ChatConversationException() : Exception("This conversation is not available to the signed-in user.");
 

@@ -75,19 +75,20 @@ public sealed class SqlReviewVoteStore(string connectionString) : IReviewVoteSto
         var votes = review.HelpfulVotes;
         if (changed == 1)
         {
+            // ProductReview has a realtime-outbox trigger, so SQL Server rejects UPDATE ... OUTPUT without INTO.
             votes = await connection.ExecuteScalarAsync<int>(
                 add
                     ? """
                       UPDATE Production.ProductReview
                       SET HelpfulVotes = HelpfulVotes + 1
-                      OUTPUT inserted.HelpfulVotes
-                      WHERE ProductReviewID = @productReviewId
+                      WHERE ProductReviewID = @productReviewId;
+                      SELECT HelpfulVotes FROM Production.ProductReview WHERE ProductReviewID = @productReviewId;
                       """
                     : """
                       UPDATE Production.ProductReview
                       SET HelpfulVotes = CASE WHEN HelpfulVotes > 0 THEN HelpfulVotes - 1 ELSE 0 END
-                      OUTPUT inserted.HelpfulVotes
-                      WHERE ProductReviewID = @productReviewId
+                      WHERE ProductReviewID = @productReviewId;
+                      SELECT HelpfulVotes FROM Production.ProductReview WHERE ProductReviewID = @productReviewId;
                       """, args, transaction);
         }
 

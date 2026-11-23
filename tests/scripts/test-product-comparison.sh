@@ -113,7 +113,6 @@ QUERY2="query {
       SellStartDate
       SellEndDate
       ProductSubcategoryID
-      StandardCost
     }
   }
 }"
@@ -214,7 +213,6 @@ QUERY5="query {
       ProductID
       LocationID
       Quantity
-      Bin
     }
   }
 }"

@@ -76,11 +76,17 @@ public class GenerateOrderWithAIFunction
                 previousResponseId: request.PreviousThreadId,
                 conversationOwner: caller.SubjectId);
 
+            // Model throttling is a retryable capacity condition, not a server fault.
+            var status = result.Success ? HttpStatusCode.OK
+                : result.FailureCode == OrderPlanFailureCodes.ModelCapacity ? HttpStatusCode.ServiceUnavailable
+                : HttpStatusCode.InternalServerError;
             var duration = DateTimeOffset.UtcNow - requestStartTime;
             _telemetryClient.TrackRequest("GenerateOrderWithAI", requestStartTime, duration,
-                result.Success ? "200" : "500", result.Success);
+                ((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture), result.Success);
 
-            var response = req.CreateResponse(result.Success ? HttpStatusCode.OK : HttpStatusCode.InternalServerError);
+            var response = req.CreateResponse(status);
+            if (result.RetryAfterSeconds is int retryAfter)
+                response.Headers.Add("Retry-After", retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture));
             await response.WriteAsJsonAsync(result);
             return response;
         }

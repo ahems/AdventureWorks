@@ -57,7 +57,9 @@ param skipLocalDevRoleAssignments bool = false
 @allowed([ 'User', 'ServicePrincipal' ])
 param deployerPrincipalType string = 'User'
 
-var chatGptDeploymentCapacity = availableChatGptDeploymentCapacity / 10
+// Agent tool loops resend their growing context every round, so one order-generation run can
+// exceed 45K TPM on its own. Keep the 10% share but give chat a 150K TPM floor, capped at quota.
+var chatGptDeploymentCapacity = min(availableChatGptDeploymentCapacity, max(availableChatGptDeploymentCapacity / 10, 150))
 var embeddingDeploymentCapacity = availableEmbeddingDeploymentCapacity / 10
 var imageDeploymentCapacity = availableImageDeploymentCapacity > 0 ? availableImageDeploymentCapacity / 10 : 0
 

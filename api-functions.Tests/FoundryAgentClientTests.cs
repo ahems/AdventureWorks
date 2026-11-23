@@ -1878,6 +1878,38 @@ public class FoundryAgentClientTests
     }
 
     [Fact]
+    public async Task Order_generation_reports_model_throttling_as_retryable_503()
+    {
+        using var handler = new FoundryHandler
+        {
+            DefinitionToolsJson = new JsonArray(MutationAgentTool("order")).ToJsonString(),
+            ResponseStatus = (HttpStatusCode)429,
+            RetryAfter = TimeSpan.FromSeconds(1)
+        };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var telemetryClient = new TelemetryClient(telemetry);
+        var provider = new StubServiceTokenProvider(handler, "https://mcp.test/mcp");
+        var service = new OrderGenerationAgentService(NullLogger<OrderGenerationAgentService>.Instance,
+            MutationAgentConfiguration(), telemetryClient,
+            new OrderGenerationService("unused", NullLogger<OrderGenerationService>.Instance),
+            new ReceiptService("unused"), new PdfReceiptGenerator(NullLogger<PdfReceiptGenerator>.Instance),
+            CreateClient(handler, telemetry, provider, "https://mcp.test/mcp"));
+        var function = new GenerateOrderWithAIFunction(
+            NullLogger<GenerateOrderWithAIFunction>.Instance, service, telemetryClient);
+
+        using var caller = new AgentRequestContext("owner-A", true);
+        var response = await function.GenerateOrderWithAI(
+            new AgentRequest(caller, """{"personaType":"newbie-male"}"""));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("1", Assert.Single(response.Headers.GetValues("Retry-After")));
+        Assert.Equal(3, handler.ResponseRequests.Count);
+        response.Body.Position = 0;
+        using var body = JsonDocument.Parse(response.Body);
+        Assert.Equal(OrderPlanFailureCodes.ModelCapacity, body.RootElement.GetProperty("failureCode").GetString());
+    }
+
+    [Fact]
     public async Task Order_generation_failures_do_not_log_the_agent_response_body()
     {
         const string privateValue = "synthetic-private-password";
@@ -3175,6 +3207,7 @@ public class FoundryAgentClientTests
         public List<JsonElement> ResponseRequests { get; } = [];
         public List<string?> MemoryUserIds { get; } = [];
         public HttpStatusCode ResponseStatus { get; init; } = HttpStatusCode.OK;
+        public TimeSpan? RetryAfter { get; init; }
         public bool FirstResponseIsToolOnly { get; init; }
         public bool FirstResponseNeedsApproval { get; init; }
         public string ApprovalToolName { get; init; } = "get_customer_orders";
@@ -3266,7 +3299,10 @@ public class FoundryAgentClientTests
 
             if (ResponseStatus != HttpStatusCode.OK)
             {
-                return JsonResponse(ResponseStatus, """{"error":{"message":"tool_user_error enumerating tools"}}""");
+                var failure = JsonResponse(ResponseStatus, """{"error":{"message":"tool_user_error enumerating tools"}}""");
+                if (RetryAfter is TimeSpan retryAfter)
+                    failure.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(retryAfter);
+                return failure;
             }
             if (FirstResponseNeedsApproval && ResponseRequests.Count == 1)
                 return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new

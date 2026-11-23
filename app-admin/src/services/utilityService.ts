@@ -755,6 +755,12 @@ export const generateOrderWithAI = async (
       previousThreadId,
     }),
   });
+  if (res.status === 503) {
+    const retryAfter = res.headers.get("Retry-After");
+    throw new Error(
+      `The AI model is at capacity. Try again${retryAfter ? ` in ${retryAfter} seconds` : " shortly"}.`,
+    );
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(

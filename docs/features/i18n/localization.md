@@ -64,7 +64,7 @@ Data-driven text comes from DAB GraphQL:
 - `CurrencyContext` maps each language to a currency code and converts prices with `currencyRates`.
 - Product descriptions are read from `productModelProductDescriptionCultures` and their descriptions for the selected culture.
 
-`Production.ProductCategory` and `Production.ProductSubcategory` hold one row per culture; their primary key is the ID plus `CultureID`, which defaults to `en`. Server-side SQL in Functions and api-mcp that reads category or subcategory names (the order, Help Me Choose, warehouse, product and promotion queries) filters `CultureID = 'en'`, so each category appears once instead of once per language. [`tests/scripts/test_localized_catalog_queries.py`](../../../tests/scripts/test_localized_catalog_queries.py) checks that new queries keep this filter.
+`Production.ProductCategory` and `Production.ProductSubcategory` hold one row per culture; their primary key is the ID plus `CultureID`, which defaults to `en`. Server-side SQL in Functions and api-mcp that joins either table (the order, Help Me Choose, warehouse, product, sitemap, reporting and promotion queries) filters `CultureID = 'en'` or deduplicates with `SELECT DISTINCT` / `MIN(Name)`, so each product or category appears once instead of once per language and totals are not multiplied. [`tests/scripts/test_localized_catalog_queries.py`](../../../tests/scripts/test_localized_catalog_queries.py) checks that new queries keep this rule.
 
 ### Language-file translation (Durable Functions)
 

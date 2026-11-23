@@ -86,7 +86,7 @@ flowchart LR
 
 `GET shopping-simulator/results?limit=` (1–100, default 50) returns the latest results. A failed plan is saved with a failure code:
 
-`empty_response`, `invalid_json`, `missing_customer_mode`, `invalid_customer_mode`, `unexpected_customer_mode`, `missing_customer_identity`, `both_customer_modes_present`, `seed_customer_mismatch`, `existing_customer_not_found`, `invalid_new_customer_payload`, `invalid_store_customer_payload`, `no_planned_items`, `no_valid_ai_planned_items`, `duplicate_customer_email` (a generated new customer's email already belongs to another person), `checkout_rejected` (server-side checkout refused the order, for example a customer without a person record), `unhandled_error`, and `processing-exception` for errors in the queue trigger.
+`empty_response`, `invalid_json`, `missing_customer_mode`, `invalid_customer_mode`, `unexpected_customer_mode`, `missing_customer_identity`, `both_customer_modes_present`, `seed_customer_mismatch`, `existing_customer_not_found`, `invalid_new_customer_payload`, `invalid_store_customer_payload`, `no_planned_items`, `no_valid_ai_planned_items`, `duplicate_customer_email` (a generated new customer's email already belongs to another person), `checkout_rejected` (server-side checkout refused the order, for example a customer without a person record), `model_capacity` (the Foundry model deployment was still throttling after retries; the admin `GenerateOrderWithAI` route returns 503 with `Retry-After`), `unhandled_error`, and `processing-exception` for errors in the queue trigger.
 
 Unhandled queue exceptions are rethrown so the Functions runtime retries them and eventually moves them to the poison queue.
 

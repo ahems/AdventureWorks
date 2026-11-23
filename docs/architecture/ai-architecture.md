@@ -72,7 +72,9 @@ flowchart LR
   The runtime managed identity has OpenAI User and AI Developer roles.
 - Deployments are named by purpose, not model: **`chat`**, **`embedding`** and an optional
   **`gpt-image-2`** image deployment (created only when that model has quota).
-  Each deployment uses one tenth of the available quota.
+  Each deployment uses one tenth of the available quota, except that `chat` gets at least
+  150K tokens per minute (capped at the available quota): an agent's tool loop resends its
+  growing context every round, so a single order-generation run can exceed a smaller budget.
 
 ### Model and quota selection (preup)
 

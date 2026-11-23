@@ -251,7 +251,7 @@ echo "Robot compliance: ✓ Ready for search engine crawling"
 echo ""
 
 # Save test results to file
-TEST_RESULTS_DIR="/workspaces/AdventureWorks/test-results"
+TEST_RESULTS_DIR="${TEST_RESULTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/test-results}"
 mkdir -p "$TEST_RESULTS_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 RESULTS_FILE="$TEST_RESULTS_DIR/robots-sitemap-test-$TIMESTAMP.txt"
