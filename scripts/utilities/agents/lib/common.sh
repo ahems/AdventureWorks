@@ -56,6 +56,10 @@ DAB_MCP_URL="${API_URL%/graphql/}/mcp"
 # Foundry data-plane API version
 API_VERSION="v1"
 
+# A newly provisioned Foundry endpoint can briefly fail name resolution or connections.
+# curl retries only transient failures (DNS, timeouts, refused connections, 408/429/5xx).
+FOUNDRY_CURL_OPTS=(--connect-timeout 20 --max-time 120 --retry 6 --retry-delay 10 --retry-connrefused)
+
 # ── Validate required values ──────────────────────────────────────────────────
 if [ -z "$PROJECT_ENDPOINT" ]; then
     error "AI_FOUNDRY_PROJECT_ENDPOINT is not set. Run 'azd provision' first."
@@ -127,7 +131,7 @@ print(json.dumps(d))
 
     local resp_file="$AGENT_TEMP_DIR/memory-store.json"
     local http_code
-    http_code=$(curl -s -o "$resp_file" -w "%{http_code}" -X POST \
+    http_code=$(curl "${FOUNDRY_CURL_OPTS[@]}" -s -o "$resp_file" -w "%{http_code}" -X POST \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
         -H "Foundry-Features: MemoryStores=V1Preview" \
@@ -161,7 +165,7 @@ print(json.dumps(d))
 
     # Try to read the existing store by name as a last resort
     local get_code
-    get_code=$(curl -s -o "$resp_file" -w "%{http_code}" \
+    get_code=$(curl "${FOUNDRY_CURL_OPTS[@]}" -s -o "$resp_file" -w "%{http_code}" \
         -H "Authorization: Bearer $token" \
         -H "Foundry-Features: MemoryStores=V1Preview" \
         "${PROJECT_ENDPOINT}/memory_stores/${name}?api-version=${API_VERSION}" 2>/dev/null)
@@ -296,7 +300,7 @@ print(json.dumps(d))
 
     # ── Check whether the agent already exists ────────────────────────────────
     local get_status
-    get_status=$(curl -s -o "$AGENT_TEMP_DIR/agent-get.json" -w "%{http_code}" \
+    get_status=$(curl "${FOUNDRY_CURL_OPTS[@]}" -s -o "$AGENT_TEMP_DIR/agent-get.json" -w "%{http_code}" \
         -H "Authorization: Bearer $token" \
         "${PROJECT_ENDPOINT}/agents/${name}?api-version=${API_VERSION}" 2>/dev/null)
 
@@ -307,14 +311,14 @@ print(json.dumps(d))
         update_body=$(echo "$body" | python3 -c \
             "import json,sys; d=json.load(sys.stdin); d.pop('name',None); print(json.dumps(d))")
 
-        http_code=$(curl -s -o "$resp_file" -w "%{http_code}" -X POST \
+        http_code=$(curl "${FOUNDRY_CURL_OPTS[@]}" -s -o "$resp_file" -w "%{http_code}" -X POST \
             -H "Authorization: Bearer $token" \
             -H "Content-Type: application/json" \
             -d "$update_body" \
             "${PROJECT_ENDPOINT}/agents/${name}?api-version=${API_VERSION}" 2>/dev/null)
     else
         # ── Create: POST /agents ──────────────────────────────────────────────
-        http_code=$(curl -s -o "$resp_file" -w "%{http_code}" -X POST \
+        http_code=$(curl "${FOUNDRY_CURL_OPTS[@]}" -s -o "$resp_file" -w "%{http_code}" -X POST \
             -H "Authorization: Bearer $token" \
             -H "Content-Type: application/json" \
             -d "$body" \
