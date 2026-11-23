@@ -346,6 +346,21 @@ sleep() { :; }
 
 @unittest.skipUnless(shutil.which("az"), "Azure CLI and an installed Bicep compiler are required")
 class KeyVaultPrivateLinkTemplateTests(unittest.TestCase):
+    def test_workspace_customer_id_waits_for_workspace_module_completion(self):
+        result = subprocess.run(
+            ["az", "bicep", "build", "--file",
+             str(ROOT / "infra/modules/applicationinsights.bicep"), "--stdout"],
+            capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        template = json.loads(result.stdout)
+        self.assertEqual(
+            template["outputs"]["workspaceCustomerId"]["value"],
+            "[reference('workspace').outputs.logAnalyticsWorkspaceId.value]",
+        )
+        workspace = template["resources"]["workspace"]["properties"]["template"]
+        self.assertIn("customerId", workspace["outputs"]["logAnalyticsWorkspaceId"]["value"])
+
     def test_compiled_vault_uses_existing_vnet_private_endpoint_dns_and_rbac(self):
         version = subprocess.run(["az", "bicep", "version"], capture_output=True, text=True, timeout=30)
         if version.returncode:

@@ -86,4 +86,4 @@ output instrumentationKey string = appInsights.outputs.instrumentationKey
 output connectionString string = appInsights.outputs.connectionString
 output name string = appInsights.outputs.name
 output workspaceResourceId string = workspace.outputs.resourceId
-output workspaceCustomerId string = workspaceResource.properties.customerId
+output workspaceCustomerId string = workspace.outputs.logAnalyticsWorkspaceId
