@@ -17,10 +17,5 @@
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.20.0" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="../../../../api-mcp/AdventureWorks/Telemetry/TelemetryPrivacyProcessor.cs" Link="Telemetry/TelemetryPrivacyProcessor.cs" />
-    <Compile Include="../../../../api-mcp/AdventureWorks/Telemetry/ExporterDiagnostics.cs" Link="Telemetry/ExporterDiagnostics.cs" />
-    <Compile Include="../../../../api-mcp/AdventureWorks/Telemetry/SafeConsoleFormatter.cs" Link="Telemetry/SafeConsoleFormatter.cs" />
-  </ItemGroup>
 
 </Project>
