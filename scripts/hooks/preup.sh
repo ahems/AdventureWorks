@@ -78,7 +78,10 @@ ensure_foundry_account() {
   fi
   
   # Check if account exists
-  if az cognitiveservices account show -n "$acct" -g "$rg" --subscription "$sub_id" &>/dev/null; then
+  local state
+  state=$(az cognitiveservices account show -n "$acct" -g "$rg" --subscription "$sub_id" \
+    --query properties.provisioningState -o tsv 2>/dev/null || true)
+  if [[ -n "$state" && "$state" != "Failed" ]]; then
     local existing_loc
     existing_loc=$(az cognitiveservices account show -n "$acct" -g "$rg" --subscription "$sub_id" --query location -o tsv)
     if [[ "$existing_loc" != "$loc" ]]; then
@@ -101,20 +104,39 @@ ensure_foundry_account() {
     fi
   else
     color_green "Creating Microsoft Foundry account '$acct' in $loc..."
-    # --allow-project-management enables the new Microsoft Foundry portal experience
-    # (the "New Foundry" toggle defaults to on). Without this flag the account is created
-    # in classic mode and the toggle defaults to off.
-    az cognitiveservices account create \
-      --name "$acct" \
-      --resource-group "$rg" \
-      --subscription "$sub_id" \
-      --kind AIServices \
-      --sku S0 \
-      --location "$loc" \
-      --custom-domain "$acct" \
-      --allow-project-management \
-      --yes \
-      >/dev/null
+    # Account creation can fail with a transient service error (for example HTTP 500) and
+    # leave the account in the Failed state. Create is an idempotent PUT, so resend it a
+    # bounded number of times until the account reports Succeeded.
+    local attempt
+    for attempt in 1 2 3; do
+      # --allow-project-management enables the new Microsoft Foundry portal experience
+      # (the "New Foundry" toggle defaults to on). Without this flag the account is created
+      # in classic mode and the toggle defaults to off.
+      if az cognitiveservices account create \
+        --name "$acct" \
+        --resource-group "$rg" \
+        --subscription "$sub_id" \
+        --kind AIServices \
+        --sku S0 \
+        --location "$loc" \
+        --custom-domain "$acct" \
+        --allow-project-management \
+        --yes \
+        >/dev/null; then
+        return 0
+      fi
+      state=$(az cognitiveservices account show -n "$acct" -g "$rg" --subscription "$sub_id" \
+        --query properties.provisioningState -o tsv 2>/dev/null || true)
+      if [[ "$state" == "Succeeded" ]]; then
+        return 0
+      fi
+      if (( attempt < 3 )); then
+        color_yellow "Foundry account create attempt $attempt failed (state: ${state:-absent}); retrying in ${FOUNDRY_CREATE_RETRY_DELAY:-30}s..."
+        sleep "${FOUNDRY_CREATE_RETRY_DELAY:-30}"
+      fi
+    done
+    color_red "Error: Could not create Microsoft Foundry account '$acct' after 3 attempts."
+    exit 1
   fi
 }
 
