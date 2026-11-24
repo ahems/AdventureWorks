@@ -72,6 +72,13 @@ function Get-SeedStageExpression {
     return "s.[$($Column.Name)]"
 }
 
+function Get-SeedStageSelectExpression {
+    param([hashtable] $Column)
+    if ($Column.Type -eq 'vector') { return "CAST(NULL AS nvarchar(max)) AS [$($Column.Name)]" }
+    if ($Column.Type -eq 'xml') { return "CAST(NULL AS xml) AS [$($Column.Name)]" }
+    return "[$($Column.Name)]"
+}
+
 <#
 Set-based idempotent load: bulk-copies the parsed rows into a temp table, then (optionally) updates existing
 rows by primary key and inserts only missing keys. Same outcome as the row-by-row INSERT ... WHERE NOT EXISTS
@@ -103,9 +110,7 @@ function Invoke-SeedStagedUpsert {
         $hasIdentity = ($null -ne $identityName -and $identityName -isnot [DBNull] -and [string]$identityName -in $loadNames)
     }
     finally { $command.Dispose() }
-    $stageSelect = ($loadColumns | ForEach-Object {
-        if ($_.Type -eq 'vector') { "CAST(NULL AS nvarchar(max)) AS [$($_.Name)]" } else { "[$($_.Name)]" }
-    }) -join ', '
+    $stageSelect = ($loadColumns | ForEach-Object { Get-SeedStageSelectExpression $_ }) -join ', '
     $keyJoin = ($KeyColumns | ForEach-Object { "t.[$_] = s.[$_]" }) -join ' AND '
     $keyList = ($KeyColumns | ForEach-Object { "[$_]" }) -join ', '
 

@@ -6,6 +6,14 @@ function Assert($Condition, [string] $Message) {
     if (-not $Condition) { throw "Assertion failed: $Message" }
 }
 
+$seedDataFilesModule = Get-Module SeedDataFiles
+Assert ((& $seedDataFilesModule { Get-SeedStageSelectExpression @{ Name = 'Demographics'; Type = 'xml' } }) -ceq 'CAST(NULL AS xml) AS [Demographics]') `
+    'XML staging columns use untyped XML so tempdb does not require the target schema collection'
+Assert ((& $seedDataFilesModule { Get-SeedStageSelectExpression @{ Name = 'Embedding'; Type = 'vector' } }) -ceq 'CAST(NULL AS nvarchar(max)) AS [Embedding]') `
+    'Vector staging columns use text compatible with bulk copy'
+Assert ((& $seedDataFilesModule { Get-SeedStageSelectExpression @{ Name = 'Name'; Type = 'nvarchar' } }) -ceq '[Name]') `
+    'Ordinary staging columns retain their target type'
+
 function Write-Gzip([string] $Path, [byte[]] $Bytes) {
     $file = [System.IO.File]::Create($Path)
     try {
