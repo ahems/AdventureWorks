@@ -47,6 +47,7 @@ export function sanitizeTelemetry(value: unknown, key = "", seen = new WeakSet<o
       .slice(0, 1024);
   }
   if (!value || typeof value !== "object") return value;
+  if (value instanceof Date) return value;
   if (seen.has(value)) return "[circular]";
   seen.add(value);
   if (value instanceof Error) return { name: value.name, message: "[redacted]" };

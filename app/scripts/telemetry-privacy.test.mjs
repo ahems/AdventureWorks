@@ -131,5 +131,9 @@ for (const root of ["app", "app-admin", "app-manufacturing"]) {
     assert.equal(Object.getPrototypeOf(safeTags), Array.prototype);
     assert.equal(safeTags.__proto__.password, "[redacted]");
     assert.equal(safeTags[0]["ai.operation.name"], "/api/orders/:id");
+    const startTime = new Date("2026-01-01T00:00:00.000Z");
+    const safeDependency = sanitizeTelemetry({ baseData: { startTime } });
+    assert.ok(safeDependency.baseData.startTime instanceof Date);
+    assert.equal(safeDependency.baseData.startTime.toISOString(), startTime.toISOString());
   });
 }
