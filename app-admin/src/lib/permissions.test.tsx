@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 const auth = vi.hoisted(() => ({
-  getCurrentClaims: vi.fn(),
+  getSessionClaims: vi.fn(),
 }));
 vi.mock("@/services/dabAuth", () => auth);
 
@@ -17,7 +17,7 @@ import { useCan } from "@/hooks/useCan";
 
 const signIn = (scope: string) => {
   authContext.useAuth.mockReturnValue({ user: { email: "e@x", appRole: "r" } });
-  auth.getCurrentClaims.mockReturnValue({ scope });
+  auth.getSessionClaims.mockReturnValue({ scope });
 };
 
 const GatedButton = ({ scope }: { scope: string }) => {
@@ -35,8 +35,8 @@ describe("scope gating", () => {
     expect(scopesFromClaims(null).size).toBe(0);
   });
 
-  it("hasScope reads the current token claims", () => {
-    auth.getCurrentClaims.mockReturnValue({ scope: "orders.read admin.read" });
+  it("hasScope reads the session token claims", () => {
+    auth.getSessionClaims.mockReturnValue({ scope: "orders.read admin.read" });
     expect(hasScope(Scopes.OrdersRead)).toBe(true);
     expect(hasScope(Scopes.OrdersWrite)).toBe(false);
   });

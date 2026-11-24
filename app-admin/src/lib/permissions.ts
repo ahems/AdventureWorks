@@ -1,4 +1,4 @@
-import { getCurrentClaims, type DabTokenClaims } from "@/services/dabAuth";
+import { getSessionClaims, type DabTokenClaims } from "@/services/dabAuth";
 
 /**
  * OAuth scopes the admin portal gates UI actions on. They mirror the api-mcp role →
@@ -38,9 +38,9 @@ export function scopesFromClaims(claims: DabTokenClaims | null | undefined): Set
   return granted;
 }
 
-/** Scopes granted to the signed-in employee's current access token. */
+/** Scopes granted to the signed-in employee's (unexpired or renewable) session token. */
 export function getGrantedScopes(): Set<string> {
-  return scopesFromClaims(getCurrentClaims());
+  return scopesFromClaims(getSessionClaims());
 }
 
 export function hasScope(scope: string): boolean {

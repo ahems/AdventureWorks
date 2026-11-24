@@ -660,6 +660,16 @@ export function getCurrentClaims(): DabTokenClaims | null {
 }
 
 /**
+ * Claims of the session's DAB token while it is unexpired or renewable. The DAB token
+ * is only renewed by DAB calls, so pages that call only Functions would otherwise lose
+ * their role-derived scopes once the ~10 minute access token expires.
+ */
+export function getSessionClaims(): DabTokenClaims | null {
+  const t = readSession();
+  return t && hasSession() ? decodeTokenClaims(t.accessToken) : null;
+}
+
+/**
  * The application role to send in the DAB `X-MS-API-ROLE` header. DAB validates
  * this against the caller's `roles` claim and applies that role's per-entity
  * permissions. Falls back to `role` (singular) then `category`. Returns null
