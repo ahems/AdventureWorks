@@ -4,10 +4,10 @@
 #
 # These 4 records (ProductReviewID 1-4) ship with hex-encoded UTF-16LE Comments and no
 # CommentsEmbedding. All other reviews (~1393 AI-generated rows) already carry embeddings
-# in ProductReview-ai.csv. This script fills the gap so that all reviews are searchable.
+# in ProductReview-ai.csv.gz. This script fills the gap so that all reviews are searchable.
 #
 # The output CSV is consumed by seed-database.ps1 as a post-load UPDATE pass (similar to
-# how ProductDescription-ai-embeddings.csv is applied for ProductDescription rows).
+# how ProductDescription-ai-embeddings.csv.gz is applied for ProductDescription rows).
 #
 # Prerequisites:
 #   az login (or Managed Identity)    -- for Azure access token

@@ -22,9 +22,9 @@ Files named `*-ai*.csv` are generated or augmented. The original AdventureWorks 
 
 | Area | Files |
 | --- | --- |
-| Translations and cultures | `ProductDescription-ai-translations.csv`, `ProductModelProductDescriptionCulture-ai.csv`, `ProductNames-ai.csv`, `Culture-ai.csv`, `Currency-ai.csv`, `CountryRegionCurrency-ai.csv`, `StateProvince-ai.csv`, `SalesTaxRate-ai.csv` |
-| Embeddings | `ProductDescription-ai-embeddings.csv`, `ProductReview-ai-Embeddings.csv` |
-| Products and reviews | `Product-ai.csv`, `ProductDescription-ai.csv`, `ProductProductPhoto-ai.csv`, `ProductCostHistory-ai.csv`, `ProductReview-ai.csv`, `ProductReview-ai-UserID.csv` |
+| Translations and cultures | `ProductDescription-ai-translations.csv`, `ProductModelProductDescriptionCulture-ai.csv`, `ProductNames-ai.csv.gz`, `Culture-ai.csv`, `Currency-ai.csv`, `CountryRegionCurrency-ai.csv`, `StateProvince-ai.csv`, `SalesTaxRate-ai.csv` |
+| Embeddings | `ProductDescription-ai-embeddings.csv.gz`, `ProductReview-ai-Embeddings.csv` |
+| Products and reviews | `Product-ai.csv`, `ProductDescription-ai.csv.gz`, `ProductProductPhoto-ai.csv`, `ProductCostHistory-ai.csv`, `ProductReview-ai.csv.gz`, `ProductReview-ai-UserID.csv` |
 | Manufacturing content | `Illustration-ai.csv`, `ProductModelIllustration-ai.csv`, `ProductModelInstructions-ai.csv`, `Document-ai.csv`, `ProductDocument-ai.csv`, `BillOfMaterials-ai.csv` |
 | Warehouse staff | `BusinessEntity-warehouse-ai.csv`, `Person-warehouse-ai.csv`, `Employee-warehouse-ai.csv`, `EmployeeDepartmentHistory-warehouse-ai.csv`, `EmployeePayHistory-warehouse-ai.csv` |
 
@@ -57,8 +57,8 @@ These scripts call Azure OpenAI or deployed APIs, which can incur cost. Run them
 | --- | --- | --- |
 | `translations` | `ProductModelProductDescriptionCulture-ai.csv` | Model/description/culture mappings for non-base cultures |
 | `descriptions` | `ProductDescription-ai-translations.csv` | AI-only (translated) description text |
-| `description-embeddings` | `ProductDescription-ai-embeddings.csv` | Description embeddings |
-| `review-embeddings` | `ProductReview-ai.csv` | Reviews with embeddings |
+| `description-embeddings` | `ProductDescription-ai-embeddings.csv.gz` | Description embeddings |
+| `review-embeddings` | `ProductReview-ai.csv.gz` | Reviews with embeddings |
 
 ```bash
 python3 scripts/data-management/export-ai-seed-data.py --output-dir seed-export translations review-embeddings
@@ -71,7 +71,7 @@ The related utility `scripts/utilities/generate-product-review-userids.js` build
 ## Refreshing seed data
 
 1. Regenerate or export the files offline and review the diff, paying particular attention to row counts, delimiters and encoding.
-2. Commit the CSVs. Large files are stored in Git LFS.
+2. Commit the CSVs. Files ending in `.csv.gz` (written as deterministic gzip by the producer scripts) and the product PNGs are stored in Git LFS; see the [seed data catalog](../../seed-job/sql/README.md#conventions).
 3. Ask the user to [recreate the environment](deployment.md#recreating-the-environment). The seed job runs only during provisioning and uses `SEED_SKIP_EXISTING=true`, so `azd deploy` does not reload data.
 
 ## Related

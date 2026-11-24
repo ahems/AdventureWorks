@@ -14,7 +14,8 @@ This folder contains the SQL scripts and CSV data used to build the AdventureWor
 
 - `*.csv` files without an `-ai` suffix are **original AdventureWorks seed data**, exported from the sample database.
 - `*-ai*.csv` files are **additional or modified datasets created for this project** (embellished descriptions, synthetic reviews, translations, embeddings, warehouse staff, manufacturing content and more).
-- Most CSVs are tab-delimited UTF-8 with LF line endings; the delimiter per file is defined in `seed-database.ps1`. Large files are stored with Git LFS.
+- Most CSVs are tab-delimited UTF-8 with LF line endings; the delimiter per file is defined in `seed-database.ps1`.
+- The four largest AI datasets (`ProductNames-ai`, `ProductDescription-ai`, `ProductDescription-ai-embeddings`, `ProductReview-ai`) are stored as gzip-compressed `<name>.csv.gz` in Git LFS (about 267 MB raw, 90 MB compressed). The loader resolves the logical `<name>.csv` to `<name>.csv.gz` and decompresses in memory, so a plain `<name>.csv` (if present) takes precedence. Inspect one with `zcat ProductReview-ai.csv.gz | head`. Regenerate them with the producer scripts, which write deterministic gzip (`gzip -n -9`); never commit both a plain and a compressed copy.
 
 ## SQL scripts
 
@@ -75,13 +76,13 @@ Unless otherwise noted, a CSV without `-ai` in its name is the original Adventur
 
 - `Product.csv` – Core product catalog.
 - `Product-ai.csv` – Additional and updated product rows (upserted over the base catalog).
-- `ProductNames-ai.csv` – Localized product names with `ProductNameEmbedding` vectors (`Production.ProductName`; stored with Git LFS).
+- `ProductNames-ai.csv.gz` – Localized product names with `ProductNameEmbedding` vectors (`Production.ProductName`; gzip, Git LFS).
 - `ProductCategory.csv` – High-level product categories.
 - `ProductCostHistory.csv` – Historical cost data for products.
 - `ProductCostHistory-ai.csv` – Additional cost history for generated products.
 - `ProductDescription.csv` – Base product descriptions.
-- `ProductDescription-ai.csv` – AI-generated/enhanced product descriptions used for content and embeddings demos.
-- `ProductDescription-ai-embeddings.csv` – Optional embedding updates for base descriptions, applied after import.
+- `ProductDescription-ai.csv.gz` – AI-generated/enhanced product descriptions used for content and embeddings demos (gzip, Git LFS).
+- `ProductDescription-ai-embeddings.csv.gz` – Optional embedding updates for base descriptions, applied after import (gzip, Git LFS).
 - `ProductDescription-ai-translations.csv` – AI-generated translations of product descriptions for multi-language scenarios.
 - `ProductDocument.csv` – Links products to documents.
 - `ProductInventory.csv` – Current inventory levels per product/location.
@@ -99,7 +100,7 @@ Unless otherwise noted, a CSV without `-ai` in its name is the original Adventur
 **ProductPhoto and image files (source of truth: filesystem):** The seed job (1) **scans** `seed-job/images/` for files matching `product_<ProductID>_photo_<2|3|4>_small.png` (or `_thumb.png`) with a matching large `.png`; (2) **generates** `ProductProductPhoto-ai.csv` from that list (sorted by ProductID, photo number) and assigns **ProductPhotoID** 1000, 1001, 1002, … in that order; (3) loads the base **ProductPhoto.csv** and **ProductProductPhoto.csv**; (4) loads the generated **ProductProductPhoto-ai.csv**; (5) **PNG upload** inserts each image into `[Production].[ProductPhoto]` with the same ProductPhotoID from the generated CSV. So the list of image files is the source of truth; the CSV is derived from it each run. **Note:** Image filenames in the repo only include product IDs **680–999** (e.g. `product_877_photo_2.png`). Products 1–679 have no AI-generated images in the filesystem unless you add them or pull them from another deployment (e.g. via `scripts/utilities/download-large-images.ps1`).
 
 - `ProductReview.csv` – Base product reviews.
-- `ProductReview-ai.csv` – AI-generated product reviews used to demonstrate review generation and embeddings.
+- `ProductReview-ai.csv.gz` – AI-generated product reviews used to demonstrate review generation and embeddings (gzip, Git LFS).
 - `ProductReview-ai-Embeddings.csv` – Review embedding updates applied after the review CSVs load.
 - `ProductReview-ai-UserID.csv` – ProductReviewID and UserID (Person.BusinessEntityID, PersonType IN) per row; used by the seed-job to update `Production.ProductReview.UserID` after the other review CSVs are loaded. Generate with `node scripts/utilities/generate-product-review-userids.js` (requires `API_URL` or `VITE_API_URL` pointing at the DAB API).
 - `ProductSubcategory.csv` – Product subcategories.

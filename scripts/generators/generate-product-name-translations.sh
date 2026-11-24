@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generates translated product names and vector embeddings for all 23 cultures
-# and writes them to seed-job/sql/ProductNames-ai.csv for use by the seed job.
+# and writes them to seed-job/sql/ProductNames-ai.csv.gz (gzip, stored in Git LFS) for use by the seed job.
 #
 # Only products with FinishedGoodsFlag = 1 (in Product.csv) get translations and
 # embeddings. All other products get one row per culture with the original English
@@ -47,7 +47,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 INPUT_CSV="$REPO_ROOT/seed-job/sql/Product.csv"
-OUTPUT_CSV="$REPO_ROOT/seed-job/sql/ProductNames-ai.csv"
+OUTPUT_GZ="$REPO_ROOT/seed-job/sql/ProductNames-ai.csv.gz"
 
 if [ ! -f "$INPUT_CSV" ]; then
     echo "Error: Input file not found: $INPUT_CSV" >&2
@@ -55,7 +55,7 @@ if [ ! -f "$INPUT_CSV" ]; then
 fi
 
 echo "Input:  $INPUT_CSV"
-echo "Output: $OUTPUT_CSV"
+echo "Output: $OUTPUT_GZ"
 echo ""
 
 # ── Azure OpenAI config ───────────────────────────────────────────────────────────
@@ -102,8 +102,10 @@ PRODUCTS_JSON_FILE=$(mktemp /tmp/aw_products_XXXXXX.json)
 ENGLISH_NAMES_FILE=$(mktemp /tmp/aw_en_names_XXXXXX.json)
 TRANSLATED_NAMES_FILE=$(mktemp /tmp/aw_translated_names_XXXXXX.json)
 EMBEDDINGS_FILE=$(mktemp /tmp/aw_embeddings_XXXXXX.json)
+# Rows are appended per culture to a plain temp file, then gzipped once at the end.
+OUTPUT_CSV=$(mktemp /tmp/aw_product_names_XXXXXX.csv)
 
-trap 'rm -f "$PRODUCTS_JSON_FILE" "$ENGLISH_NAMES_FILE" "$TRANSLATED_NAMES_FILE" "$EMBEDDINGS_FILE"' EXIT
+trap 'rm -f "$PRODUCTS_JSON_FILE" "$ENGLISH_NAMES_FILE" "$TRANSLATED_NAMES_FILE" "$EMBEDDINGS_FILE" "$OUTPUT_CSV"' EXIT
 
 # ── Read all products from Product.csv ───────────────────────────────────────────
 # Product.csv: tab-delimited, no header. Col 1 = ProductID, Col 2 = Name, Col 5 = FinishedGoodsFlag (1 = true).
@@ -376,7 +378,9 @@ echo "==============================================="
 if [ "$TOTAL_FAILED" -gt 0 ]; then
     echo "Warning: $TOTAL_FAILED row(s) had issues (fell back to English or were skipped)."
 fi
+# -n omits name/timestamp so identical content produces an identical archive.
+gzip -n -9 -c "$OUTPUT_CSV" > "$OUTPUT_GZ"
 echo "Wrote $TOTAL_ROWS rows to:"
-echo "  $OUTPUT_CSV"
+echo "  $OUTPUT_GZ"
 echo ""
 echo "The seed job will load this file into Production.ProductName."

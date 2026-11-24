@@ -9,14 +9,15 @@ direct database access. Review the resulting git diff before committing.
 Targets (default: all):
   translations           ProductModelProductDescriptionCulture-ai.csv (AI cultures)
   descriptions           ProductDescription-ai-translations.csv (AI-only descriptions)
-  description-embeddings ProductDescription-ai-embeddings.csv
-  review-embeddings      ProductReview-ai.csv (reviews with CommentsEmbedding)
+  description-embeddings ProductDescription-ai-embeddings.csv.gz
+  review-embeddings      ProductReview-ai.csv.gz (reviews with CommentsEmbedding)
 
 Usage:
   python3 scripts/data-management/export-ai-seed-data.py [target ...]
       [--environment NAME] [--output-dir seed-job/sql]
 """
 import argparse
+import gzip
 import json
 import subprocess
 import sys
@@ -91,7 +92,13 @@ def single_line(text):
 
 
 def write(path, lines):
-    path.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+    data = "".join(line + "\n" for line in lines).encode("utf-8")
+    if path.suffix == ".gz":
+        # Deterministic gzip (no name, mtime 0) so unchanged data produces no diff.
+        with open(path, "wb") as raw, gzip.GzipFile(filename="", mode="wb", compresslevel=9, fileobj=raw, mtime=0) as gz:
+            gz.write(data)
+    else:
+        path.write_bytes(data)
     print(f"  wrote {len(lines)} rows to {path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path}")
 
 
@@ -123,7 +130,7 @@ def export_description_embeddings(client, out):
                                           ["ProductDescriptionID", "DescriptionEmbedding", "ModifiedDate"])
                    if r.get("DescriptionEmbedding") is not None and r.get("ProductDescriptionID")),
                   key=lambda r: r["ProductDescriptionID"])
-    write(out / "ProductDescription-ai-embeddings.csv",
+    write(out / "ProductDescription-ai-embeddings.csv.gz",
           ["ProductDescriptionID\tDescriptionEmbedding\tModifiedDate"] + [
               f'{r["ProductDescriptionID"]}\t{vector(r["DescriptionEmbedding"])}\t{r.get("ModifiedDate") or ""}'
               for r in rows])
@@ -141,7 +148,7 @@ def export_review_embeddings(client, out):
             str(r["ProductReviewID"]), str(r["ProductID"]), r["ReviewerName"], iso_datetime(r["ReviewDate"]),
             r["EmailAddress"], str(r["Rating"]), f'"{comments}"', iso_datetime(r["ModifiedDate"]),
             vector(r["CommentsEmbedding"])]))
-    write(out / "ProductReview-ai.csv", lines)
+    write(out / "ProductReview-ai.csv.gz", lines)
 
 
 def main():

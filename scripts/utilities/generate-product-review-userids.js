@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fetches all PersonType IN (Individual) BusinessEntityIDs from the DAB API,
- * collects all ProductReviewIDs from ProductReview.csv and ProductReview-ai.csv,
+ * collects all ProductReviewIDs from ProductReview.csv and ProductReview-ai.csv.gz,
  * and writes ProductReview-ai-UserID.csv with ProductReviewID and a random UserID
  * for each. The seed-job uses this CSV to update Production.ProductReview.UserID
  * after loading the other review CSVs.
@@ -14,6 +14,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 const https = require("https");
 const { randomInt } = require("crypto");
 const { execFileSync } = require("child_process");
@@ -34,7 +35,7 @@ const dabToken = execFileSync(
 ).trim();
 const sqlDir = path.join(repoRoot, "seed-job", "sql");
 const productReviewCsv = path.join(sqlDir, "ProductReview.csv");
-const productReviewAiCsv = path.join(sqlDir, "ProductReview-ai.csv");
+const productReviewAiCsv = path.join(sqlDir, "ProductReview-ai.csv.gz");
 const outputCsv = path.join(sqlDir, "ProductReview-ai-UserID.csv");
 
 function makeGraphQLRequest(query) {
@@ -105,7 +106,8 @@ async function fetchAllINBusinessEntityIDs() {
 
 function getProductReviewIdsFromCsv(filePath, delimiter = "\t") {
   if (!fs.existsSync(filePath)) return [];
-  const content = fs.readFileSync(filePath, "utf8");
+  const raw = fs.readFileSync(filePath);
+  const content = (raw[0] === 0x1f && raw[1] === 0x8b ? zlib.gunzipSync(raw) : raw).toString("utf8");
   const lines = content.split(/\r?\n/).filter((line) => line.trim());
   const ids = [];
   for (let i = 0; i < lines.length; i++) {
@@ -133,7 +135,7 @@ function main() {
       fromBase.length,
       "from ProductReview.csv +",
       fromAi.length,
-      "from ProductReview-ai.csv =>",
+      "from ProductReview-ai.csv.gz =>",
       allReviewIds.length,
       "unique",
     );

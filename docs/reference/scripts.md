@@ -77,7 +77,7 @@ See [Foundry agents](../features/ai/foundry-agents.md) for what each agent does.
 
 | Script | Purpose | How it runs |
 |---|---|---|
-| `generate-category-translations.sh`, `generate-subcategory-translations.sh`, `generate-product-name-translations.sh`, `generate-special-offer-translations.sh` | Produce translation seed CSVs with an Azure OpenAI deployment | One-off |
+| `generate-category-translations.sh`, `generate-subcategory-translations.sh`, `generate-product-name-translations.sh`, `generate-special-offer-translations.sh` | Produce translation seed CSVs with an Azure OpenAI deployment (product names as gzip `ProductNames-ai.csv.gz`) | One-off |
 | `generate-original-review-embeddings.sh` | Embeddings for the original AdventureWorks reviews | One-off |
 | `generate-reviews-with-embeddings.sh` | Queues AI review generation on the deployed Functions API (admin token from `azure-auth.py`); review embeddings follow automatically | One-off |
 | `generate-component-costs.js` | Computes material and labor component costs from the seed CSVs | One-off |
@@ -86,7 +86,7 @@ See [Foundry agents](../features/ai/foundry-agents.md) for what each agent does.
 
 | Script | Purpose | How it runs |
 |---|---|---|
-| `export-ai-seed-data.py` | Exports AI translations, AI-only descriptions, description embeddings and review embeddings to seed CSVs through authenticated DAB REST (`azure-auth.py`, `executive-admin`) | One-off |
+| `export-ai-seed-data.py` | Exports AI translations, AI-only descriptions, description embeddings and review embeddings to seed CSVs (embeddings and reviews as gzip `.csv.gz`) through authenticated DAB REST (`azure-auth.py`, `executive-admin`) | One-off |
 | `generate-manufacturing-drafts.py` | Exports draft manufacturing instructions from the protected Functions API | Manufacturing content pipeline |
 | `generate-manufacturing-diagrams.py` | Generates diagram drafts for an approved instruction review bundle | Manufacturing content pipeline |
 | `populate-manufacturing-content.py` | Generates, validates and optionally publishes missing manufacturing documents | Manufacturing content pipeline |

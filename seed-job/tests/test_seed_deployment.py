@@ -123,7 +123,21 @@ start_seed_job seed-job test-rg
         self.assertLess(hook.index("az acr build"), hook.index("az containerapp job update"))
         self.assertIn("COPY ManufacturingOverlays.psm1 /app/ManufacturingOverlays.psm1", dockerfile)
         self.assertIn("COPY SeedTelemetry.psm1 /app/SeedTelemetry.psm1", dockerfile)
+        self.assertIn("COPY SeedDataFiles.psm1 /app/SeedDataFiles.psm1", dockerfile)
         self.assertIn("COPY sql/ /app/sql/", dockerfile)
+
+    def test_large_ai_seed_csvs_are_gzipped_and_stored_in_lfs(self):
+        sql_dir = ROOT / "seed-job/sql"
+        attributes = (ROOT / ".gitattributes").read_text()
+        self.assertIn("seed-job/sql/*.csv.gz filter=lfs diff=lfs merge=lfs -text", attributes)
+        self.assertIn("seed-job/images/*.png filter=lfs diff=lfs merge=lfs -text", attributes)
+        for name in ("ProductNames-ai", "ProductDescription-ai", "ProductDescription-ai-embeddings", "ProductReview-ai"):
+            with self.subTest(name=name):
+                # A plain copy would win in Resolve-SeedDataFile and silently bypass the compressed file.
+                self.assertFalse((sql_dir / f"{name}.csv").exists())
+                self.assertTrue((sql_dir / f"{name}.csv.gz").exists())
+        script = (ROOT / "seed-job/seed-database.ps1").read_text()
+        self.assertIn("Import-Module (Join-Path $PSScriptRoot 'SeedDataFiles.psm1')", script)
 
     def test_final_status_does_not_claim_seed_completion(self):
         hook = (ROOT / "scripts/hooks/postup.sh").read_text()

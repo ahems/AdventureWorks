@@ -548,6 +548,7 @@ try {
     }
 
     Import-Module (Join-Path $PSScriptRoot 'ManufacturingOverlays.psm1') -Force -ErrorAction Stop
+    Import-Module (Join-Path $PSScriptRoot 'SeedDataFiles.psm1') -Force -ErrorAction Stop
     # Validate all shipped artifacts before either importing or resetting a fresh database.
     $null = Read-ManufacturingOverlays -SqlFolder (Join-Path $PSScriptRoot 'sql')
     if ($ManufacturingOverlaysOnly) {
@@ -1037,6 +1038,22 @@ EXEC sp_executesql @sql;
                 return $result
             }
             
+            # Images are stored in Git LFS; a build without `git lfs pull` copies text pointers, which must not be stored as photos.
+            $pngSignature = [byte[]](0x89, 0x50, 0x4E, 0x47)
+            $notPng = @($pngFiles | Where-Object {
+                $stream = [System.IO.File]::OpenRead($_.FullName)
+                try {
+                    $head = [byte[]]::new(4)
+                    $read = $stream.Read($head, 0, 4)
+                    $read -lt 4 -or [System.Linq.Enumerable]::SequenceEqual($head, $pngSignature) -eq $false
+                } finally { $stream.Dispose() }
+            })
+            if ($notPng.Count -gt 0) {
+                $result.NotPngCount = $notPng.Count
+                $result.NotPngSample = ($notPng | Select-Object -First 3 | ForEach-Object { $_.Name }) -join ', '
+                return $result
+            }
+
             $result.ThumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
             
             # Pre-process: create image pairs. Only product_<ProductID>_photo_<2|3|4> files are uploaded (no other filenames).
@@ -1325,10 +1342,11 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
             continue
         }
-        $csvPath = Join-Path $csvFolder $config.File
+        # Large generated files ship as <File>.gz (Git LFS); the resolver accepts either form.
+        $csvPath = Resolve-SeedDataFile -Folder $csvFolder -FileName $config.File
         
-        if (-not (Test-Path $csvPath)) {
-            Write-Log "  ⚠ CSV file not found: $csvPath - Skipping"
+        if (-not $csvPath) {
+            Write-Log "  ⚠ CSV file not found: $(Join-Path $csvFolder $config.File) (or .gz) - Skipping"
             $csvLoadSkipped++
             continue
         }
@@ -1352,10 +1370,10 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             # Schema script drops tables if they exist before create; we assume empty tables for CSV load.
             # Read CSV with proper encoding
             $encoding = if ($config.IsWideChar) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::UTF8 }
-            $csvContent = [System.IO.File]::ReadAllText($csvPath, $encoding)
+            $csvContent = Read-SeedDataText -Path $csvPath -Encoding $encoding
             
             # Detect Git LFS pointer: file was not pulled, so we cannot load real data
-            if ($csvContent -match '^\s*version\s+https://git-lfs\.github\.com') {
+            if (Test-GitLfsPointerText $csvContent) {
                 Write-Log "    ⚠ File appears to be a Git LFS pointer (actual CSV not present). Run 'git lfs pull' before building the seed-job image, then rebuild and re-run the seed job to load this file."
                 $csvLoadSkipped++
                 continue
@@ -1372,13 +1390,13 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             else {
                 $rows = $csvContent -split [regex]::Escape($config.RowTerminator)
             }
-            $rows = $rows | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            $rows = $rows.Where({ -not [string]::IsNullOrWhiteSpace($_) })
             
             # Handle multi-line CSVs where text fields contain embedded newlines.
             # Join continuation lines with the previous row until each row has the expected field count.
             if ($config.MultiLineJoin) {
                 $delimiter = $config.Delimiter
-                $joinedRows = @()
+                $joinedRows = [System.Collections.Generic.List[string]]::new()
                 $currentRow = $null
                 foreach ($row in $rows) {
                     if ($null -eq $currentRow) {
@@ -1388,7 +1406,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
                         # Check if this line starts a new logical row (first field is a numeric ID)
                         $firstField = ($row -split [regex]::Escape($delimiter))[0]
                         if ($firstField -match '^\d+$') {
-                            $joinedRows += $currentRow
+                            $joinedRows.Add($currentRow)
                             $currentRow = $row
                         }
                         else {
@@ -1397,7 +1415,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
                         }
                     }
                 }
-                if ($null -ne $currentRow) { $joinedRows += $currentRow }
+                if ($null -ne $currentRow) { $joinedRows.Add($currentRow) }
                 $rows = $joinedRows
             }
             
@@ -1534,6 +1552,8 @@ ORDER BY c.ORDINAL_POSITION
                 Write-Log "    Filtering to ProductIDs present in Production.Product ($($validProductIds.Count) products)"
             }
             
+            # Hoisted out of the row loop: avoids a pipeline per row on large files.
+            $columnNames = [string[]]@($columns | ForEach-Object { $_.Name })
             foreach ($row in $rows) {
                 if ([string]::IsNullOrWhiteSpace($row)) { continue }
                 
@@ -1788,7 +1808,7 @@ ORDER BY c.ORDINAL_POSITION
                 }
                 # Skip placeholder/invalid row: Production.ProductDescription must not have ProductDescriptionID 0
                 if ($schemaName -eq 'Production' -and $tableName -eq 'ProductDescription') {
-                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductDescriptionID')
+                    $pidx = [array]::IndexOf($columnNames, 'ProductDescriptionID')
                     if ($pidx -ge 0) {
                         $pkVal = $dataRow[$pidx]
                         if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
@@ -1796,7 +1816,7 @@ ORDER BY c.ORDINAL_POSITION
                 }
                 # Skip placeholder/invalid row: Production.ProductReview must not have ProductReviewID 0
                 if ($schemaName -eq 'Production' -and $tableName -eq 'ProductReview') {
-                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductReviewID')
+                    $pidx = [array]::IndexOf($columnNames, 'ProductReviewID')
                     if ($pidx -ge 0) {
                         $pkVal = $dataRow[$pidx]
                         if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
@@ -1804,7 +1824,7 @@ ORDER BY c.ORDINAL_POSITION
                 }
                 # Skip ProductName rows whose ProductID is not in Production.Product (FK)
                 if ($null -ne $validProductIds) {
-                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductID')
+                    $pidx = [array]::IndexOf($columnNames, 'ProductID')
                     if ($pidx -ge 0) {
                         $pidVal = $dataRow[$pidx]
                         if ($null -eq $pidVal -or -not $validProductIds.Contains([int]$pidVal)) { continue }
@@ -1827,6 +1847,43 @@ ORDER BY c.ORDINAL_POSITION
             # - Identity columns, special columns (hierarchyid, geography, etc.)
             # - AI CSV files (use INSERT...SELECT WHERE NOT EXISTS for idempotent load; no IF batch to avoid PowerShell parse errors)
             if ($hasSpecialColumns -or $hasIdentityColumn -or $isAiCsv) {
+                # AI CSVs: try one bulk-staged, set-based upsert first (a few round trips instead of one per row).
+                # Binary/spatial columns stay on the row path; any failure rolls back and falls back to it.
+                $stagedEligible = $isAiCsv -and -not $config.HexColumns -and -not $config.Base64Columns -and
+                    @($loadedColumns | Where-Object { $_.Type -in @('hierarchyid', 'geography', 'geometry', 'varbinary') }).Count -eq 0
+                if ($stagedEligible) {
+                    $cmd.Transaction = $null
+                    $cmd.CommandText = @"
+SELECT kcu.COLUMN_NAME
+FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+  ON kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+WHERE tc.TABLE_SCHEMA = '$schemaName' AND tc.TABLE_NAME = '$tableName' AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+ORDER BY kcu.ORDINAL_POSITION
+"@
+                    $stagedKeys = [System.Collections.Generic.List[string]]::new()
+                    $keyReader = $cmd.ExecuteReader()
+                    try { while ($keyReader.Read()) { $stagedKeys.Add([string]$keyReader['COLUMN_NAME']) } }
+                    finally { $keyReader.Close() }
+                    if ($stagedKeys.Count -gt 0) {
+                        try {
+                            $stagedUpdate = ($config.UpdateIfExists -eq $true) -or ($config.File -eq 'ProductDescription-ai-translations.csv')
+                            $staged = Invoke-SeedStagedUpsert -Connection $conn -Schema $schemaName -Table $tableName -Data $dataTable `
+                                -Columns $loadedColumns -KeyColumns $stagedKeys.ToArray() -UpdateIfExists $stagedUpdate
+                            $msg = "Successfully loaded $($staged.Inserted + $staged.Updated) rows set-based ($($staged.Inserted) inserted, $($staged.Updated) updated)"
+                            if ($staged.Skipped -gt 0) { $msg += " ($($staged.Skipped) existing skipped)" }
+                            Write-Log "    $msg"
+                            $csvLoadSuccess++
+                            $dataTable.Dispose()
+                            continue
+                        }
+                        catch {
+                            Write-Log "    Set-based load not possible ($($_.Exception.Message)); falling back to row-by-row INSERT"
+                            $cmd.Transaction = $null
+                        }
+                    }
+                }
+                
                 # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
                 Write-Log "    Inserting $rowCount rows using batched INSERT (special columns)..."
                 
@@ -2235,134 +2292,115 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
         Write-Log "  ✗ Failed: $csvLoadFailed tables"
     }
 
-    # Apply ProductDescription embeddings from source API CSV (updates existing rows only).
-    # Build the CSV with: scripts/data-management/export-ai-seed-data.py description-embeddings
-    $embeddingsFromSourcePath = Join-Path $csvFolder 'ProductDescription-ai-embeddings.csv'
-    if (Test-Path $embeddingsFromSourcePath) {
-        $elapsed = (Get-Date) - $scriptStartTime
-        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductDescription embeddings from source API CSV..."
-        $updateEmbeddingSql = "UPDATE Production.ProductDescription SET DescriptionEmbedding = CAST(@emb AS VECTOR(1536)), ModifiedDate = @mod WHERE ProductDescriptionID = @id"
+    # Post-load updates from generated CSVs: each file is parsed into a de-duplicated table (last row per key
+    # wins, matching the former row-by-row order), applied with one staged set-based UPDATE, and falls back to
+    # per-row parameterized UPDATEs if the set-based statement cannot run.
+    function Invoke-SeedFileUpdate {
+        param(
+            [string] $FileName, [string] $Label, [string] $KeyColumn,
+            [System.Data.DataTable] $Data, [string] $StageDefinition, [string] $StagedSql, [string] $RowSql,
+            [switch] $QuietRowErrors
+        )
+        if ($Data.Rows.Count -eq 0) { Write-Log "  No rows found in $FileName"; return }
+        try {
+            $applied = Invoke-SeedStagedUpdate -Connection $conn -Data $Data -StageDefinition $StageDefinition -UpdateSql $StagedSql
+            Write-Log "  Applied $applied $Label updates from $FileName (set-based)"
+            return
+        }
+        catch {
+            Write-Log "  Set-based $Label update not possible ($($_.Exception.Message)); applying row by row"
+        }
         $cmd.Transaction = $null
-        $cmd.CommandText = $updateEmbeddingSql
-        $lines = Get-Content -Path $embeddingsFromSourcePath -Encoding UTF8
+        $cmd.CommandText = $RowSql
         $applied = 0
-        $batchSize = 100
-        for ($i = 1; $i -lt $lines.Count; $i++) {
-            $line = $lines[$i]
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            $parts = $line -split "`t", 3
-            if ($parts.Count -lt 2) { continue }
-            $id = [int]::Parse($parts[0].Trim())
-            if ($id -eq 0) { continue }
-            $embJson = $parts[1].Trim()
-            $modStr = if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim() } else { $null }
+        foreach ($row in $Data.Rows) {
             $cmd.Parameters.Clear()
-            $null = $cmd.Parameters.AddWithValue('@id', $id)
-            $null = $cmd.Parameters.AddWithValue('@emb', $embJson)
-            if ($null -ne $modStr) {
-                try {
-                    $modDate = [DateTime]::Parse($modStr)
-                    $null = $cmd.Parameters.AddWithValue('@mod', $modDate)
-                } catch {
-                    $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
-                }
-            } else {
-                $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
-            }
+            foreach ($column in $Data.Columns) { $null = $cmd.Parameters.AddWithValue("@$($column.ColumnName)", $row[$column]) }
             try {
-                $n = $cmd.ExecuteNonQuery()
-                if ($n -gt 0) { $applied++ }
+                if ($cmd.ExecuteNonQuery() -gt 0) { $applied++ }
             } catch {
-                Write-Log "  Warning: Update failed for ProductDescriptionID $id : $($_.Exception.Message)"
-            }
-            if ($applied -gt 0 -and $applied % $batchSize -eq 0) {
-                Write-Log "  ...applied $applied embedding updates"
+                if (-not $QuietRowErrors) { Write-Log "  Warning: $Label update failed for $KeyColumn $($row[$KeyColumn]) : $($_.Exception.Message)" }
             }
         }
-        Write-Log "  Applied $applied ProductDescription embedding updates from ProductDescription-ai-embeddings.csv"
+        $cmd.Parameters.Clear()
+        Write-Log "  Applied $applied $Label updates from $FileName"
+    }
+
+    # Parses "<int id>\t<embedding json>[\t<modified date>]" rows (header skipped) into Id/Emb/Mod.
+    function Read-SeedEmbeddingTable {
+        param([string] $Path)
+        $byId = [System.Collections.Generic.Dictionary[int, object[]]]::new()
+        $lines = (Read-SeedDataText -Path $Path) -split '\r?\n'
+        for ($i = 1; $i -lt $lines.Count; $i++) {
+            if ([string]::IsNullOrWhiteSpace($lines[$i])) { continue }
+            $parts = $lines[$i] -split "`t", 3
+            $id = 0
+            if ($parts.Count -lt 2 -or -not [int]::TryParse($parts[0].Trim(), [ref]$id) -or $id -eq 0) { continue }
+            $mod = [DateTime]::UtcNow
+            if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) {
+                $parsedMod = [DateTime]::MinValue
+                if ([DateTime]::TryParse($parts[2].Trim(), [ref]$parsedMod)) { $mod = $parsedMod }
+            }
+            $byId[$id] = @($id, $parts[1].Trim(), $mod)
+        }
+        $table = [System.Data.DataTable]::new()
+        $null = $table.Columns.Add('Id', [int]); $null = $table.Columns.Add('Emb', [string]); $null = $table.Columns.Add('Mod', [datetime])
+        foreach ($values in $byId.Values) { $null = $table.Rows.Add($values) }
+        return ,$table
+    }
+
+    # Apply ProductDescription embeddings from source API CSV (updates existing rows only).
+    # Build the CSV with: scripts/data-management/export-ai-seed-data.py description-embeddings
+    $embeddingsFromSourcePath = Resolve-SeedDataFile -Folder $csvFolder -FileName 'ProductDescription-ai-embeddings.csv'
+    if ($embeddingsFromSourcePath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductDescription embeddings from source API CSV..."
+        Invoke-SeedFileUpdate -FileName 'ProductDescription-ai-embeddings.csv' -Label 'ProductDescription embedding' -KeyColumn 'Id' `
+            -Data (Read-SeedEmbeddingTable -Path $embeddingsFromSourcePath) `
+            -StageDefinition '[Id] int NOT NULL PRIMARY KEY, [Emb] nvarchar(max) NOT NULL, [Mod] datetime NOT NULL' `
+            -StagedSql 'UPDATE d SET DescriptionEmbedding = CAST(s.Emb AS VECTOR(1536)), ModifiedDate = s.Mod FROM Production.ProductDescription d INNER JOIN #seed_update_stage s ON d.ProductDescriptionID = s.Id' `
+            -RowSql 'UPDATE Production.ProductDescription SET DescriptionEmbedding = CAST(@Emb AS VECTOR(1536)), ModifiedDate = @Mod WHERE ProductDescriptionID = @Id'
     }
 
     # Apply ProductReview UserID from ProductReview-ai-UserID.csv (assigns random Individual Person IDs to reviews).
     # Generate with: node scripts/utilities/generate-product-review-userids.js (requires API_URL pointing at DAB).
-    $productReviewUserIDPath = Join-Path $csvFolder 'ProductReview-ai-UserID.csv'
-    if (Test-Path $productReviewUserIDPath) {
+    $productReviewUserIDPath = Resolve-SeedDataFile -Folder $csvFolder -FileName 'ProductReview-ai-UserID.csv'
+    if ($productReviewUserIDPath) {
         $elapsed = (Get-Date) - $scriptStartTime
         Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductReview UserID from ProductReview-ai-UserID.csv..."
-        $updateUserIDSql = "UPDATE Production.ProductReview SET UserID = @uid, ModifiedDate = GETDATE() WHERE ProductReviewID = @rid"
-        $cmd.Transaction = $null
-        $cmd.CommandText = $updateUserIDSql
-        $lines = Get-Content -Path $productReviewUserIDPath -Encoding UTF8
-        $applied = 0
-        $batchSize = 500
+        $userByReview = [System.Collections.Generic.Dictionary[int, int]]::new()
+        $lines = (Read-SeedDataText -Path $productReviewUserIDPath) -split '\r?\n'
         for ($i = 1; $i -lt $lines.Count; $i++) {
-            $line = $lines[$i]
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            $parts = $line -split "`t", 2
-            if ($parts.Count -lt 2) { continue }
-            $rid = [int]::Parse($parts[0].Trim())
-            $uid = [int]::Parse($parts[1].Trim())
-            $cmd.Parameters.Clear()
-            $null = $cmd.Parameters.AddWithValue('@rid', $rid)
-            $null = $cmd.Parameters.AddWithValue('@uid', $uid)
-            try {
-                $n = $cmd.ExecuteNonQuery()
-                if ($n -gt 0) { $applied++ }
-            } catch {
-                # With full Person data loaded, FK violations should not occur.
-                # Silently skip any remaining mismatches (Person records that weren't in the seed CSVs).
-                $null = $null
-            }
-            if ($applied -gt 0 -and $applied % $batchSize -eq 0) {
-                Write-Log "  ...applied $applied UserID updates"
-            }
+            if ([string]::IsNullOrWhiteSpace($lines[$i])) { continue }
+            $parts = $lines[$i] -split "`t", 2
+            $rid = 0; $uid = 0
+            if ($parts.Count -lt 2 -or -not [int]::TryParse($parts[0].Trim(), [ref]$rid) -or -not [int]::TryParse($parts[1].Trim(), [ref]$uid)) { continue }
+            $userByReview[$rid] = $uid
         }
-        Write-Log "  Applied $applied ProductReview UserID updates from ProductReview-ai-UserID.csv"
+        $userTable = [System.Data.DataTable]::new()
+        $null = $userTable.Columns.Add('Rid', [int]); $null = $userTable.Columns.Add('Uid', [int])
+        foreach ($pair in $userByReview.GetEnumerator()) { $null = $userTable.Rows.Add($pair.Key, $pair.Value) }
+        # Reviews whose person is not seeded are left unassigned (the FK would reject them), as before.
+        Invoke-SeedFileUpdate -FileName 'ProductReview-ai-UserID.csv' -Label 'ProductReview UserID' -KeyColumn 'Rid' -QuietRowErrors `
+            -Data $userTable `
+            -StageDefinition '[Rid] int NOT NULL PRIMARY KEY, [Uid] int NOT NULL' `
+            -StagedSql 'UPDATE r SET UserID = s.Uid, ModifiedDate = GETDATE() FROM Production.ProductReview r INNER JOIN #seed_update_stage s ON r.ProductReviewID = s.Rid WHERE EXISTS (SELECT 1 FROM Person.Person p WHERE p.BusinessEntityID = s.Uid)' `
+            -RowSql 'UPDATE Production.ProductReview SET UserID = @Uid, ModifiedDate = GETDATE() WHERE ProductReviewID = @Rid'
     }
 
     # Apply CommentsEmbedding for the 4 original AdventureWorks ProductReview records.
     # These rows are seeded from ProductReview.csv with CommentsEmbedding left NULL because
     # the hex-encoded comments cannot be embedded at bulk-insert time.
     # Generate this file with: scripts/generators/generate-original-review-embeddings.sh
-    $reviewEmbeddingsPath = Join-Path $csvFolder 'ProductReview-ai-Embeddings.csv'
-    if (Test-Path $reviewEmbeddingsPath) {
+    $reviewEmbeddingsPath = Resolve-SeedDataFile -Folder $csvFolder -FileName 'ProductReview-ai-Embeddings.csv'
+    if ($reviewEmbeddingsPath) {
         $elapsed = (Get-Date) - $scriptStartTime
         Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductReview embeddings from ProductReview-ai-Embeddings.csv..."
-        $updateReviewEmbSql = "UPDATE Production.ProductReview SET CommentsEmbedding = CAST(@emb AS VECTOR(1536)), ModifiedDate = @mod WHERE ProductReviewID = @rid AND CommentsEmbedding IS NULL"
-        $cmd.Transaction = $null
-        $cmd.CommandText = $updateReviewEmbSql
-        $lines = Get-Content -Path $reviewEmbeddingsPath -Encoding UTF8
-        $applied = 0
-        $batchSize = 10
-        for ($i = 1; $i -lt $lines.Count; $i++) {
-            $line = $lines[$i]
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            $parts = $line -split "`t", 3
-            if ($parts.Count -lt 2) { continue }
-            $rid = [int]::Parse($parts[0].Trim())
-            if ($rid -eq 0) { continue }
-            $embJson = $parts[1].Trim()
-            $modStr = if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim() } else { $null }
-            $cmd.Parameters.Clear()
-            $null = $cmd.Parameters.AddWithValue('@rid', $rid)
-            $null = $cmd.Parameters.AddWithValue('@emb', $embJson)
-            if ($null -ne $modStr) {
-                try {
-                    $modDate = [DateTime]::Parse($modStr)
-                    $null = $cmd.Parameters.AddWithValue('@mod', $modDate)
-                } catch {
-                    $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
-                }
-            } else {
-                $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
-            }
-            try {
-                $n = $cmd.ExecuteNonQuery()
-                if ($n -gt 0) { $applied++ }
-            } catch {
-                Write-Log "  Warning: Embedding update failed for ProductReviewID $rid : $($_.Exception.Message)"
-            }
-        }
-        Write-Log "  Applied $applied ProductReview embedding updates from ProductReview-ai-Embeddings.csv"
+        Invoke-SeedFileUpdate -FileName 'ProductReview-ai-Embeddings.csv' -Label 'ProductReview embedding' -KeyColumn 'Id' `
+            -Data (Read-SeedEmbeddingTable -Path $reviewEmbeddingsPath) `
+            -StageDefinition '[Id] int NOT NULL PRIMARY KEY, [Emb] nvarchar(max) NOT NULL, [Mod] datetime NOT NULL' `
+            -StagedSql 'UPDATE r SET CommentsEmbedding = CAST(s.Emb AS VECTOR(1536)), ModifiedDate = s.Mod FROM Production.ProductReview r INNER JOIN #seed_update_stage s ON r.ProductReviewID = s.Id WHERE r.CommentsEmbedding IS NULL' `
+            -RowSql 'UPDATE Production.ProductReview SET CommentsEmbedding = CAST(@Emb AS VECTOR(1536)), ModifiedDate = @Mod WHERE ProductReviewID = @Id AND CommentsEmbedding IS NULL'
     }
 
     # Remove any stray ProductDescriptionID 0 row (placeholder from malformed CSV or parse fallback)
@@ -2628,6 +2666,9 @@ WHERE e.EmailAddress = 'demo.admin@adventureworks.com';
     }
     elseif ($true -eq $pngResult.NoFiles) {
         Write-Log "  No PNG files found in images directory"
+    }
+    elseif ([int]$pngResult.NotPngCount -gt 0) {
+        Write-Log "  ERROR: $($pngResult.NotPngCount) image file(s) are not PNG data (likely Git LFS pointers; run 'git lfs pull' before building the seed image). Skipping upload. Examples: $($pngResult.NotPngSample)"
     }
     elseif ($pngResult.Failed -eq -1) {
         Write-Log "  PNG upload job failed: $($pngResult.Error)"

@@ -104,7 +104,7 @@ See [health diagnostics](../features/monitoring/HEALTH_DIAGNOSTICS.md) and [moni
 
 ## Changing seed data
 
-- Edit the SQL or CSV files in `seed-job/sql/`, or the image set in `seed-job/images/`. Large files (such as `ProductNames-ai.csv`) are stored with Git LFS, which `postprovision.sh` pulls before building the image.
+- Edit the SQL or CSV files in `seed-job/sql/`, or the image set in `seed-job/images/`. The product PNGs and the four large AI datasets (gzip-compressed `*.csv.gz`, such as `ProductNames-ai.csv.gz`) are stored with Git LFS, which `postprovision.sh` pulls before building the image. The loader reads `.csv.gz` transparently, and AI CSVs are loaded with one staged set-based upsert per file (falling back to row-by-row inserts if that fails). An image build from an un-pulled clone logs that the PNGs are LFS pointers and skips the upload instead of storing them.
 - Many CSV files are produced by one-off scripts; see [seed data generation](../operations/seed-data-generation.md) and the [scripts reference](../reference/scripts.md).
 - Seed changes take effect in a new environment. Ask the environment owner to recreate the demo; do not run seed or grant repairs against a deployed database.
 

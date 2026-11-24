@@ -76,7 +76,7 @@ trap cleanup_postprovision EXIT
 prepare_seed_job() {
     local acr_name="${ACR_ENDPOINT%%.*}"
 
-    # Ensure Git LFS files (e.g. seed-job/sql/ProductNames-ai.csv) are present
+    # Ensure Git LFS files (seed-job/sql/*.csv.gz and seed-job/images/*.png) are present
     # so the build context contains real assets, not pointer files.
     local repo_root
     repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
