@@ -41,8 +41,8 @@ The workflow uses Node.js 20 and Python 3.12 and needs no Azure credentials. It 
 | Input | Default | Notes |
 | --- | --- | --- |
 | `environment_name` | Random `adventureworks001`–`999` | Optional; must be a new environment |
-| `azure_location` | `eastus2` | Region for the main resources |
-| `foundry_location` | `swedencentral` | Region for Microsoft Foundry |
+| `azure_location` | `polandcentral` | Region for the main resources |
+| `foundry_location` | `polandcentral` | Region for Microsoft Foundry |
 | `validate_auth_infra` | `false` | Runs the read-only `validate-auth.sh --infra` profile after readiness |
 
 **Configuration.** The deploy job uses the GitHub Environment `adventureworks-demo`. That environment holds the variables `DEPLOYER_CLIENT_ID`, `DEPLOYER_OBJECT_ID`, `DEPLOYER_TENANT_ID` and `DEPLOYER_SUBSCRIPTION_ID`, plus the optional `CHAT_MODEL_NAME_REGEX`. The service principal needs the permissions described in [Deployer permissions](../AZD_DEPLOYER_PERMISSIONS.md#deploying-with-a-service-principal-github-actions).

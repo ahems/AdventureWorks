@@ -367,7 +367,7 @@ lookup or an identity mismatch stops deployment.
 1. In the fork, open **Actions** and select **Deploy demo with service principal
    (azd up)**.
 2. Choose **Run workflow**. Optionally provide a new azd environment name and
-   change the default regions (`eastus2`, `swedencentral`). If no name is
+   change the default regions (both `polandcentral`). If no name is
    provided, the workflow randomly selects `adventureworks001` through
    `adventureworks999` and logs the selected name.
 3. The workflow derives the resource group as `rg-<environment-name>`. Use a

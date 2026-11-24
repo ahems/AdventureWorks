@@ -10,12 +10,12 @@ on:
       azure_location:
         description: "Azure region for main resources"
         required: false
-        default: "eastus2"
+        default: "polandcentral"
         type: string
       foundry_location:
         description: "Azure region for Microsoft Foundry"
         required: false
-        default: "swedencentral"
+        default: "polandcentral"
         type: string
       validate_auth_infra:
         description: "After readiness, run the read-only authentication infrastructure assurance as this service principal"
