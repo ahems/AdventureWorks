@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import GenerateVerifiedReviewsWizardDialog from "@/components/GenerateVerifiedReviewsWizardDialog";
 import { Can } from "@/components/Can";
 import { Scopes } from "@/lib/permissions";
+import { useAuth } from "@/context/AuthContext";
 
 import {
   Bot,
@@ -19,10 +20,12 @@ import {
   FolderPlus,
   Clock,
   Star,
+  Activity,
 } from "lucide-react";
 import { buildInspectorUrl, getApiMcpUrl, getDabMcpUrl } from "@/lib/utils";
 
 const UtilitiesPage: React.FC = () => {
+  const { user } = useAuth();
   return (
     <div className="min-h-screen bg-doodle-bg">
       <AdminHeader />
@@ -136,9 +139,18 @@ const UtilitiesPage: React.FC = () => {
 
         {/* Tools & Inspectors */}
         <h2 className="font-doodle text-xl font-semibold text-doodle-text mb-4 mt-8">
-          Tools &amp; Inspectors
+          Tools, Inspectors &amp; Monitoring
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
+          {user?.appRole === "executive-admin" && <Can scope={Scopes.MonitoringRead}>
+            <Link to="/monitoring" className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
+              <Activity className="w-8 h-8 text-doodle-green shrink-0" />
+              <div>
+                <p className="font-doodle font-semibold text-doodle-text">Application Monitoring</p>
+                <p className="font-doodle text-sm text-doodle-text/60">Inspect application performance, agent traces and resource pressure</p>
+              </div>
+            </Link>
+          </Can>}
           <Can scope={Scopes.CustomersRead}>
             <Link
               to="/stale-carts"

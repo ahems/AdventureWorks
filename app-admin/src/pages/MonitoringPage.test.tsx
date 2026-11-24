@@ -1,6 +1,6 @@
 import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MonitoringPage from "./MonitoringPage";
 vi.mock("recharts", () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -33,8 +33,11 @@ const mount = () => {
   const result = render(<QueryClientProvider client={client}><MonitoringPage /></QueryClientProvider>);
   return { ...result, client };
 };
+const scrollIntoView = vi.fn();
+Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { value: scrollIntoView, configurable: true });
 
 describe("protected live monitoring", () => {
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.role = "executive-admin"; mocks.read = true; mocks.write = true;
@@ -124,6 +127,64 @@ describe("protected live monitoring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Inspect trace" }));
     expect(screen.getByRole("alert")).toHaveTextContent("32-character hexadecimal");
     expect(mocks.trace).not.toHaveBeenCalled();
+  });
+
+  it("formats dates/numbers and rounds snapshot age to the nearest half minute without inventing thresholds", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-23T03:04:16Z"));
+    const timestamp = "2026-11-23T02:58:02.4316129+00:00";
+    mocks.summary.mockResolvedValue({ ...snapshot, sources: [
+      { ...snapshot.sources[0], rows: [{ service: "api-mcp", observedRequests: 12345, p95Ms: 123.456, lastSeen: timestamp }] },
+      { id: "resources", status: "available", asOf: snapshot.asOf, reason: null,
+        rows: [{ resource: "sql-cpu", maximum: 90.123, configuredLimit: 100, unit: "percent" }] },
+    ] });
+    mount();
+    expect(await screen.findByText("api-mcp")).toBeInTheDocument();
+    expect(screen.getByText((12345).toLocaleString())).toBeInTheDocument();
+    expect(screen.getByText((123.5).toLocaleString())).not.toHaveClass("text-destructive");
+    expect(screen.getByText((90.1).toLocaleString())).toHaveClass("text-primary");
+    expect(screen.getByText(new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(timestamp)))).toBeInTheDocument();
+    expect(screen.getAllByText("As of 4.5 minutes ago").length).toBeGreaterThan(0);
+    expect(screen.queryByText(timestamp)).not.toBeInTheDocument();
+  });
+
+  it("explains network failures and missing outcome measurements without claiming a specific cause", async () => {
+    mocks.summary.mockResolvedValue({ ...snapshot, sources: [
+      { id: "browser", status: "available", asOf: snapshot.asOf, reason: null, rows: [
+        { service: "app-admin", operation: "browser.http-outcome", outcome: "network-failure", route: "/api/health", p75: null, metric: "" },
+      ] },
+      { id: "monitoringHealth", status: "no-data", asOf: snapshot.asOf, reason: null, rows: [] },
+    ] });
+    mount();
+    const failure = await screen.findByText("Network failure");
+    expect(failure).toHaveClass("text-destructive");
+    fireEvent.focus(failure.parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("does not identify which cause occurred");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Route: /api/health");
+    fireEvent.blur(failure.parentElement!);
+    const missing = screen.getAllByText("Unavailable").find(element => element.closest("td"));
+    expect(missing).toBeDefined();
+    fireEvent.focus(missing!.parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("not a numeric Web Vital");
+    expect(screen.getByText(/No SDK\/exporter warnings or daily-cap events/)).toHaveTextContent("not a heartbeat");
+  });
+
+  it("scrolls and focuses trace detail when a recent trace is selected, including repeated selections", async () => {
+    const id = "a".repeat(32);
+    mocks.summary.mockResolvedValue({ ...snapshot, sources: [
+      { id: "recentTraces", status: "available", asOf: snapshot.asOf, reason: null, rows: [{ traceId: id }] },
+    ] });
+    mocks.trace.mockResolvedValue({ traceId: id, asOf: snapshot.asOf, status: "no-data",
+      source: { id: "trace", status: "no-data", asOf: snapshot.asOf, reason: null, rows: [] }, richContent: [] });
+    mount();
+    const link = await screen.findByRole("link", { name: id });
+    expect(link).toHaveAttribute("href", "#trace-detail");
+    fireEvent.click(link);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(document.getElementById("trace-detail")).toHaveFocus();
+    await waitFor(() => expect(mocks.trace).toHaveBeenCalledWith(id, expect.any(AbortSignal)));
+    fireEvent.click(link);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
   });
 
   it("invalidates capture status on generic persisted-control push without refetching unrelated panels", async () => {

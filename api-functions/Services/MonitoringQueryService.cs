@@ -9,11 +9,12 @@ using Azure.Identity;
 using Azure.Storage.Queues;
 using api_functions.DTOs;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace api_functions.Services;
 
 public sealed class MonitoringQueryService(IConfiguration configuration, DefaultAzureCredential credential,
-    IHttpClientFactory clients)
+    IHttpClientFactory clients, ILogger<MonitoringQueryService> logger)
 {
     private readonly SemaphoreSlim _sources = new(4, 4);
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new();
@@ -199,36 +200,79 @@ public sealed class MonitoringQueryService(IConfiguration configuration, Default
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
             if (body is not null) request.Content = JsonContent.Create(body);
             using var response = await clients.CreateClient("monitoring").SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-            if (!response.IsSuccessStatusCode)
-                return Failure(id, response.StatusCode switch
-                {
-                    HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized => "forbidden",
-                    HttpStatusCode.TooManyRequests => "throttled", _ => "unavailable"
-                }, $"Azure Monitor returned HTTP {(int)response.StatusCode}.");
+            var failureStatus = response.StatusCode switch
+            {
+                HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized => "forbidden",
+                HttpStatusCode.TooManyRequests => "throttled", _ => "unavailable"
+            };
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var bytes = new MemoryStream();
             var buffer = new byte[8192];
             int read;
             while ((read = await stream.ReadAsync(buffer, ct)) != 0)
             {
-                if (bytes.Length + read > 1024 * 1024) return Failure(id, "unavailable", "Query response exceeds the safety limit.");
+                if (bytes.Length + read > (response.IsSuccessStatusCode ? 1024 * 1024 : 8192))
+                {
+                    logger.LogWarning("Monitoring source {Source} response exceeded the safety limit; HTTP {Status}", id, (int)response.StatusCode);
+                    return response.IsSuccessStatusCode
+                        ? Failure(id, "unavailable", "Query response exceeds the safety limit.")
+                        : Failure(id, failureStatus, $"Azure Monitor returned HTTP {(int)response.StatusCode}; error metadata exceeds the safety limit.");
+                }
                 bytes.Write(buffer, 0, read);
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                var codes = "";
+                try
+                {
+                    using var error = JsonDocument.Parse(bytes.ToArray());
+                    if (error.RootElement.ValueKind == JsonValueKind.Object && error.RootElement.TryGetProperty("error", out var detail))
+                    {
+                        var safeCodes = new List<string>();
+                        for (var depth = 0; depth < 4 && detail.ValueKind == JsonValueKind.Object; depth++)
+                        {
+                            if (detail.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String
+                                && System.Text.RegularExpressions.Regex.IsMatch(code.GetString()!,
+                                    "^(BadArgumentError|SyntaxError|SemanticError|PartialError|InsufficientAccessError|ThrottledError|AuthorizationFailed|BadRequest|InvalidAuthenticationToken|[A-Z]{3}[0-9]{4})$"))
+                                safeCodes.Add(code.GetString()!);
+                            if (!detail.TryGetProperty("innererror", out detail)) break;
+                        }
+                        codes = string.Join(" / ", safeCodes);
+                    }
+                }
+                catch (JsonException)
+                {
+                    logger.LogWarning("Monitoring source {Source} returned non-JSON error metadata; detail omitted", id);
+                }
+                logger.LogWarning("Monitoring source {Source} query failed; HTTP {Status}; codes {Codes}; payload omitted",
+                    id, (int)response.StatusCode, codes);
+                return Failure(id, failureStatus, $"Azure Monitor returned HTTP {(int)response.StatusCode}{(codes.Length > 0 ? $" ({codes})" : "")}.");
             }
             using var document = JsonDocument.Parse(bytes.ToArray());
             var rows = parse(document.RootElement);
             var partial = document.RootElement.TryGetProperty("error", out _);
             if (id == "monitoringHealth" && rows.Count > 0)
                 return new(id, "stale", DateTimeOffset.UtcNow,
-                    "Workspace reported OverQuota within 24 hours; coverage may be incomplete. Reset is workspace-specific.", rows);
+                    "OpenTelemetry SDK/exporter warnings or workspace daily-cap events were observed within 24 hours; telemetry coverage may be incomplete.", rows);
             return new MonitoringSource(id, partial ? rows.Count > 0 ? "stale" : "unavailable"
                 : rows.Count == 0 ? "no-data" : "available",
                 DateTimeOffset.UtcNow, partial ? rows.Count > 0 ? "Azure Monitor returned partial data."
-                    : "Azure Monitor returned an error without verified data." : null, rows);
+                    : "Azure Monitor returned an error without verified data."
+                    : id == "monitoringHealth" && rows.Count == 0
+                        ? "No SDK/exporter warnings or workspace daily-cap events were observed in the last 24 hours. This is a problem-signal query, not a heartbeat; absence does not verify exporter health."
+                        : null, rows);
         }
-        catch (OperationCanceledException) { return Failure(id, "unavailable", "Azure Monitor query exceeded the 10-second budget."); }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning("Monitoring source {Source} query exceeded the 10-second budget", id);
+            return Failure(id, "unavailable", "Azure Monitor query exceeded the 10-second budget.");
+        }
         catch (Exception e) when (e is HttpRequestException or JsonException or Azure.RequestFailedException or AuthenticationFailedException
             or InvalidOperationException or KeyNotFoundException or FormatException)
-        { return Failure(id, "unavailable", "Azure Monitor could not return verified data."); }
+        {
+            logger.LogWarning("Monitoring source {Source} query failed with {ErrorType}; detail omitted", id, e.GetType().Name);
+            return Failure(id, "unavailable", "Azure Monitor could not return verified data.");
+        }
         finally { if (entered) _sources.Release(); }
     }
 

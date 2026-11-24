@@ -58,14 +58,20 @@ public static class MonitoringQueries
             | summarize observedEvents=count(),lastSeen=max(TimeGenerated),
                 p75=percentile(todouble(Properties["value"]),75)
                 by service=AppRoleName,operation=Name,metric=tostring(Properties["metric"]),
-                outcome=tostring(Properties["outcome"]),availability=tostring(Properties["availability"])
+                outcome=tostring(Properties["outcome"]),availability=tostring(Properties["availability"]),
+                route=tostring(Properties["operation"]),httpStatus=toint(Properties["status"])
             | take 50
             """,
         ["monitoringHealth"] = """
-            _LogOperation
-            | where Category =~ "Ingestion" and Detail contains "OverQuota"
-            | project timestamp=TimeGenerated,signal="daily-cap-reached",status="stale"
-            | take 10
+            union (_LogOperation
+                | where Category =~ "Ingestion" and Detail contains "OverQuota"
+                | project timestamp=TimeGenerated,signal="daily-cap-reached",status="stale",service="workspace",exporter="",eventId=int(null)),
+                (AppTraces
+                | where Message startswith "Telemetry exporter diagnostic:"
+                | project timestamp=TimeGenerated,signal="telemetry-warning",status="warning",service=AppRoleName,
+                    exporter=extract("source ([A-Za-z0-9.-]+),",1,Message),
+                    eventId=toint(extract("event ([0-9]+)",1,Message)))
+            | top 20 by timestamp desc
             """
     };
 
@@ -74,12 +80,12 @@ public static class MonitoringQueries
         if (!System.Text.RegularExpressions.Regex.IsMatch(traceId, "^[a-f0-9]{32}$") || traceId.All(c => c == '0'))
             throw new ArgumentException("A lower-case 32-character W3C trace ID is required.");
         return $$"""
-            union (AppRequests | extend kind="request"),(AppDependencies | extend kind="dependency"),
+            union (AppRequests | extend ['kind']="request"),(AppDependencies | extend ['kind']="dependency"),
                 (AppEvents | where Name == "GenAI.Capture"
-                    | extend kind="capture-content",Id=strcat("capture:",tostring(Properties["aw.capture.span_id"])),
+                    | extend ['kind']="capture-content",Id=strcat("capture:",tostring(Properties["aw.capture.span_id"])),
                         DurationMs=real(null),Success=bool(null),ResultCode="")
             | where OperationId == "{{traceId}}"
-            | project timestamp=TimeGenerated,spanId=Id,parentSpanId=ParentId,kind,
+            | project timestamp=TimeGenerated,spanId=Id,parentSpanId=ParentId,['kind'],
                 service=AppRoleName,durationMs=DurationMs,success=Success,resultCode=ResultCode,
                 operation=tostring(Properties["gen_ai.operation.name"]),
                 model=tostring(Properties["gen_ai.request.model"]),

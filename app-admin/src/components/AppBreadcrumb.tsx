@@ -62,6 +62,7 @@ const AppBreadcrumb: React.FC = () => {
     if (path === "/orders") segments.push({ label: "Orders" });
     if (path === "/reviews") segments.push({ label: "Reviews" });
     if (path === "/utilities") segments.push({ label: "AI Tools" });
+    if (path === "/monitoring") segments.push({ label: "Utilities", href: "/utilities" }, { label: "Monitoring" });
     if (path === "/promotions") segments.push({ label: "Promotions" });
     if (path === "/cultures") segments.push({ label: "Cultures" });
     if (path === "/currencies") segments.push({ label: "Currencies" });

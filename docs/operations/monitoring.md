@@ -80,6 +80,28 @@ background outcomes, worker termination, ingestion and cap evidence. IaC injects
 workspace identity and links to standard native metrics. Operator portal links
 require separate Entra permissions; seeded admin OAuth is not portal authorization.
 
+The admin monitoring page is under **Utilities > Tools, Inspectors & Monitoring**.
+It formats dates and times using the browser locale, rounds displayed numbers to at
+most one decimal, and shows snapshot ages rounded to 30 seconds. Its freshness clock
+is display-only; it does not poll. Hover or focus outcome/availability values for
+privacy-safe explanations. Green denotes available data or successful outcomes,
+orange denotes warnings/missing measurements, and red denotes failures. Comparable
+percentage metrics turn orange at 80% of their configured limit and red at the limit;
+cross-replica container rollups and latency without a configured threshold are not
+assigned invented health thresholds.
+
+**Monitoring self-diagnostics** queries exporter warning logs and workspace daily-cap
+events over 24 hours, not a continuous heartbeat. Empty results mean no such signals
+were observed; they do not verify exporter health. `ExporterDiagnostics` does not log
+OpenTelemetry event 33 (`MetricInstrumentIgnored`) for the two by-design reasons:
+another MeterProvider (for example Statsbeat) doesn't subscribe to the meter, or an
+Azure Monitor view drops the instrument. Every other event 33 is logged with its
+instrument, meter and reason. Error text, SQL text, headers and
+private payloads are not exposed in tooltips. Azure query failures expose only HTTP
+status and validated error codes. Trace selection scrolls to the trace detail panel.
+The trace KQL must escape the reserved column name `kind` as `['kind']`; an unescaped
+name produces HTTP 400 (`SyntaxError` / `SYN0002`) rather than an empty trace.
+
 [`infra/monitoring/grafana.json`](../../infra/monitoring/grafana.json) is reusable
 Azure Monitor dashboard content with a viewer-selected Azure Monitor datasource.
 `ENABLE_MONITORING_GRAFANA=false` by default. Opt-in creates native

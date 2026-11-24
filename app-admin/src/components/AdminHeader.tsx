@@ -25,7 +25,6 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import AppBreadcrumb from "@/components/AppBreadcrumb";
 import AdminLogo from "@/components/AdminLogo";
-import { useCan } from "@/hooks/useCan";
 
 const SALES_NAV_ITEMS = [
   {
@@ -62,7 +61,6 @@ const secondaryNavGroups = [
 
 const AdminHeader: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
-  const canMonitor = useCan("monitoring.read") && user?.appRole === "executive-admin";
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -137,7 +135,6 @@ const AdminHeader: React.FC = () => {
             </Link>
 
             {/* Desktop Navigation - Only show when authenticated */}
-            {canMonitor && <Link to="/monitoring" className="font-doodle text-sm underline">Monitoring</Link>}
             {isAuthenticated && (
               <nav className="hidden md:flex items-center gap-5 mx-6 self-stretch">
                 <Link
@@ -223,7 +220,7 @@ const AdminHeader: React.FC = () => {
                 </Link>
                 <Link
                   to="/utilities"
-                  className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/utilities") ? "squiggle" : ""}`}
+                  className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/utilities") || location.pathname.startsWith("/monitoring") ? "squiggle" : ""}`}
                 >
                   <Wrench className="w-4 h-4" />
                   Utilities

@@ -73,6 +73,41 @@ public sealed class MonitoringTests
     }
 
     [Fact]
+    public async Task Query_errors_expose_only_safe_codes_not_provider_messages()
+    {
+        var result = await QueryService(new MonitorHandler(HttpStatusCode.BadRequest,
+            """{"error":{"code":"BadArgumentError","message":"password=markerSecret","innererror":{"code":"SyntaxError","message":"query private content","innererror":{"code":"SYN0002"}}}}"""))
+            .TraceAsync(new string('a', 32));
+        Assert.Equal("unavailable", result.Status);
+        Assert.Contains("HTTP 400 (BadArgumentError / SyntaxError / SYN0002)", result.Source.Reason);
+        Assert.DoesNotContain("markerSecret", result.Source.Reason);
+        Assert.DoesNotContain("private content", result.Source.Reason);
+        Assert.Empty(result.Source.Rows);
+    }
+
+    [Theory]
+    [InlineData("[1]")]
+    [InlineData("""{"error":{"code":"markerCredential","message":"private payload"}}""")]
+    public async Task Unexpected_error_metadata_keeps_http_failure_without_exposing_content(string body)
+    {
+        var result = await QueryService(new MonitorHandler(HttpStatusCode.Forbidden, body)).TraceAsync(new string('a', 32));
+        Assert.Equal("forbidden", result.Status);
+        Assert.Equal("Azure Monitor returned HTTP 403.", result.Source.Reason);
+    }
+
+    [Fact]
+    public async Task Empty_self_diagnostics_are_explained_as_problem_signals_not_a_heartbeat()
+    {
+        var result = await QueryService(new MonitorHandler(HttpStatusCode.OK,
+            """{"tables":[{"columns":[],"rows":[]}]}""")).SummaryAsync("1h");
+        var source = result.Sources.Single(s => s.Id == "monitoringHealth");
+        Assert.Equal("no-data", source.Status);
+        Assert.Contains("not a heartbeat", source.Reason);
+        Assert.Contains("24 hours", source.Reason);
+        Assert.Empty(source.Rows);
+    }
+
+    [Fact]
     public async Task Partial_results_and_no_data_are_distinct()
     {
         var partial = await QueryService(new MonitorHandler(HttpStatusCode.OK,
@@ -300,7 +335,7 @@ public sealed class MonitoringTests
     private static MonitoringQueryService QueryService(MonitorHandler handler, string? metrics = null) => new(
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         { ["MONITORING_WORKSPACE_ID"] = Guid.NewGuid().ToString(), ["MONITORING_METRIC_RESOURCES"] = metrics }).Build(),
-        new FakeCredential(), new ClientFactory(handler));
+        new FakeCredential(), new ClientFactory(handler), NullLogger<MonitoringQueryService>.Instance);
     private sealed class FakeCredential : DefaultAzureCredential
     {
         public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext context, CancellationToken ct = default) =>
